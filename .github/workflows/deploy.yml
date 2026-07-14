@@ -1,0 +1,134 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: sameerv
+  REGION: asia-south1
+  REPO: asia-south1-docker.pkg.dev/sameerv/extraction
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      ai_backend: ${{ steps.filter.outputs.ai_backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+            ai_backend:
+              - 'invoice-generator-backend/**'
+
+  deploy-ai-backend:
+    needs: changes
+    if: needs.changes.outputs.ai_backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/ai-backend:${{ github.sha }}"
+          docker build -t "$IMG" ./invoice-generator-backend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-ai-backend \
+            --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --allow-unauthenticated \
+            --memory=2Gi --cpu=2 --timeout=600 \
+            --set-env-vars=GCS_BUCKET=sameerv-docflow-invoices \
+            --set-secrets=GEMINI_API_KEY=ai-backend-gemini-api-key:latest,MONGODB_URI=ai-backend-mongodb-uri:latest,APP_USER=ai-backend-app-user:latest,APP_PASSWORD=ai-backend-app-password:latest
+
+  deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Look up the AI backend's and frontend's current URLs
+        id: urls
+        run: |
+          AI_URL=$(gcloud run services describe docflow-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(status.url)')
+          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(status.url)')
+          echo "ai_url=$AI_URL" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/backend:${{ github.sha }}"
+          docker build -t "$IMG" ./backend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-backend \
+            --image="${{ env.REPO }}/backend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --service-account=backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --allow-unauthenticated \
+            --memory=512Mi --cpu=1 \
+            --set-env-vars=NODE_ENV=production,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
+            --set-secrets=MONGODB_URI=backend-mongodb-uri:latest,JWT_ACCESS_SECRET=backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=backend-jwt-refresh-secret:latest,SMTP_USER=backend-smtp-user:latest,SMTP_PASSWORD=backend-smtp-password:latest,INVOICE_GENERATOR_APP_USER=backend-invoice-generator-app-user:latest,INVOICE_GENERATOR_APP_PASSWORD=backend-invoice-generator-app-password:latest
+
+  deploy-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Look up the backend's current URL
+        id: urls
+        run: |
+          BACKEND_URL=$(gcloud run services describe docflow-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(status.url)')
+          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/frontend:${{ github.sha }}"
+          docker build -t "$IMG" --build-arg VITE_API_BASE_URL="${{ steps.urls.outputs.backend_url }}/api" ./frontend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-frontend \
+            --image="${{ env.REPO }}/frontend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --memory=256Mi --cpu=1
+
+  update-cors:
+    needs: [changes, deploy-frontend]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Point the backend's CORS at the frontend's URL
+        run: |
+          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(status.url)')
+          gcloud run services update docflow-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL

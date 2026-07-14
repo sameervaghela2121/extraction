@@ -1,0 +1,7 @@
+venv
+storage
+.env
+.env.*
+__pycache__
+*.pyc
+frontend
