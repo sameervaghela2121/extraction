@@ -31,5 +31,11 @@ export const documentsApi = {
   bulkVerify: (ids: string[]) => api.post("/documents/bulk/verify", { ids }).then((r) => r.data),
   bulkReject: (ids: string[]) => api.post("/documents/bulk/reject", { ids }).then((r) => r.data),
   bulkArchive: (ids: string[]) => api.post("/documents/bulk/archive", { ids }).then((r) => r.data),
-  fileUrl: (id: string) => `/api/documents/${id}/file`,
+  /** Fetches the original file as an authenticated blob and returns a local object URL
+   * for it — a plain <iframe src="/api/..."> can't carry the JWT header, so this is
+   * needed here for the same reason exportApi.download() fetches as a blob. */
+  async getFilePreviewUrl(id: string): Promise<string> {
+    const res = await api.get(`/documents/${id}/file`, { responseType: "blob" });
+    return URL.createObjectURL(res.data as Blob);
+  },
 };

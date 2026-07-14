@@ -181,6 +181,22 @@ textarea {
   background: var(--surface-2);
   color: var(--text-faint);
 }
+.pill-processing {
+  background: var(--warn-soft);
+  color: oklch(45% 0.13 70);
+}
+.pill-done {
+  background: var(--success-soft);
+  color: oklch(38% 0.12 150);
+}
+.pill-failed {
+  background: var(--danger-soft);
+  color: oklch(40% 0.16 25);
+}
+.pill-unknown {
+  background: var(--surface-2);
+  color: var(--text-faint);
+}
 .dot {
   width: 8px;
   height: 8px;

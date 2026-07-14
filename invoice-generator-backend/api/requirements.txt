@@ -8,3 +8,4 @@ opencv-python-headless
 numpy
 pymongo
 pypdf
+google-cloud-storage

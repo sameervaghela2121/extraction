@@ -111,14 +111,21 @@ export const documentsService = {
       DocumentModel.countDocuments(filter),
     ]);
 
-    // Join each document's first extracted invoice for amount/vendor/confidence display.
+    // Join each document's first extracted invoice for amount/vendor/confidence display,
+    // and its Files record for the live extraction-progress status (separate from the
+    // portal's own review-workflow `status` field).
     const fileIds = docs.map((d) => d.fileId);
-    const invoices = await SharedInvoice.find({ file_id: { $in: fileIds } }).lean();
+    const [invoices, files] = await Promise.all([
+      SharedInvoice.find({ file_id: { $in: fileIds } }).lean(),
+      SharedFile.find({ _id: { $in: fileIds } }).select("status").lean(),
+    ]);
     const invoiceByFile = new Map<string, ISharedInvoice>();
     for (const inv of invoices) {
       const key = inv.file_id?.toString();
       if (key && !invoiceByFile.has(key)) invoiceByFile.set(key, inv as ISharedInvoice);
     }
+    const statusByFile = new Map<string, string>();
+    for (const f of files) statusByFile.set(f._id.toString(), f.status);
 
     const items = docs.map((d) => {
       const inv = invoiceByFile.get(d.fileId.toString());
@@ -133,6 +140,7 @@ export const documentsService = {
         amount: invoiceAmount(inv),
         vendor: invoiceVendor(inv),
         confidence: confidenceFromValidation(inv?.validation),
+        extractionStatus: statusByFile.get(d.fileId.toString()) ?? "unknown",
       };
     });
 

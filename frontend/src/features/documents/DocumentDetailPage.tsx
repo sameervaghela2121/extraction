@@ -15,6 +15,7 @@ export default function DocumentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,6 +33,24 @@ export default function DocumentDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The iframe can't carry the JWT header itself, so fetch the file as an authenticated
+  // blob and point the iframe at the resulting local object URL instead. Keyed on id +
+  // extractionStatus (not the whole `doc`) so saving a field doesn't re-fetch the PDF.
+  useEffect(() => {
+    if (!doc || doc.extractionStatus === "failed") return;
+    let objectUrl: string | null = null;
+    documentsApi
+      .getFilePreviewUrl(doc.id)
+      .then((url) => {
+        objectUrl = url;
+        setPreviewUrl(url);
+      })
+      .catch((err) => notify(apiErrorMessage(err), "error"));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc?.id, doc?.extractionStatus, notify]);
 
   const saveFields = async () => {
     if (Object.keys(edits).length === 0) return;
@@ -82,18 +101,20 @@ export default function DocumentDetailPage() {
 
       <div className="detail-grid">
         {/* Preview */}
-        <div className="card" style={{ padding: 12, overflow: "hidden", minHeight: 420 }}>
+        <div className="card" style={{ padding: 12, overflow: "hidden", minHeight: 820 }}>
           {doc.extractionStatus === "failed" ? (
             <div className="stack" style={{ padding: 24, gap: 8 }}>
               <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
               <span className="muted" style={{ fontSize: 13 }}>{doc.extractionError}</span>
             </div>
-          ) : (
+          ) : previewUrl ? (
             <iframe
               title="Document preview"
-              src={documentsApi.fileUrl(doc.id)}
-              style={{ width: "100%", height: 480, border: "none", borderRadius: 8 }}
+              src={previewUrl}
+              style={{ width: "100%", height: 800, border: "none", borderRadius: 8 }}
             />
+          ) : (
+            <Spinner label="Loading preview…" />
           )}
         </div>
 
@@ -189,7 +210,7 @@ export default function DocumentDetailPage() {
       </div>
 
       <style>{`
-        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+        .detail-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; }
         @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
       `}</style>
     </div>

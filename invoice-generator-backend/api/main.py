@@ -65,8 +65,27 @@ MAX_INVOICES_PER_CALL = int(os.environ.get("MAX_INVOICES_PER_CALL", "5"))
 # Where the uploaded PDFs/photos are kept so the library can show them again later.
 # Must be a persistent volume in production, or files vanish on redeploy.
 STORAGE_DIR = Path(os.environ.get("STORAGE_DIR", "storage")).resolve()
+# New uploads go to this private GCS bucket instead of local disk (files uploaded before
+# this change stay on STORAGE_DIR and keep working via the local-disk path below). The
+# bucket has no public access — /files/{fid}/raw streams bytes through this service, so
+# viewing still requires a valid portal login, same as before.
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "sameerv-docflow-invoices")
+GCS_PREFIX = "gcs://"
+# Only these are ever accepted for upload — anything else (text/html, image/svg+xml, etc.)
+# is stored as inert bytes so a malicious upload can never be served back as active content.
+ALLOWED_UPLOAD_MIMES = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
 
 _mongo_client = None
+_gcs_bucket_handle = None
+
+
+def _gcs_bucket():
+    """Lazy singleton GCS bucket handle (picks up ambient/service-account credentials)."""
+    global _gcs_bucket_handle
+    if _gcs_bucket_handle is None:
+        from google.cloud import storage
+        _gcs_bucket_handle = storage.Client().bucket(GCS_BUCKET)
+    return _gcs_bucket_handle
 
 
 def _mongo_collection(name: str = None):
@@ -80,17 +99,21 @@ def _mongo_collection(name: str = None):
     return _mongo_client[MONGO_DB][name or MONGO_COLLECTION]
 
 
-def store_file(jid: str, idx: int, filename: str, data: bytes) -> str:
-    """Write an upload to STORAGE_DIR/<job>/<idx>_<name> and return the path.
+def store_file(jid: str, idx: int, filename: str, data: bytes, mime: str = "application/octet-stream") -> str:
+    """Upload to the private GCS bucket under <job>/<idx>_<name> and return a "gcs://<object>"
+    reference (never a public URL — the bucket has no public access; see get_file_raw).
 
     The idx prefix keeps two uploads with the same name from colliding, and the
-    name is stripped of anything that could climb out of the directory.
+    name is stripped of anything that could climb out of the directory. The stored
+    content-type is forced to a safe value unless it's one we actually expect, so a
+    malicious upload can never be served back as active content (e.g. text/html).
     """
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename or "file").name) or "file"
-    dest = STORAGE_DIR / jid / f"{idx}_{safe}"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return str(dest)
+    object_name = f"{jid}/{idx}_{safe}"
+    safe_mime = mime if mime in ALLOWED_UPLOAD_MIMES else "application/octet-stream"
+    blob = _gcs_bucket().blob(object_name)
+    blob.upload_from_string(data, content_type=safe_mime)
+    return f"{GCS_PREFIX}{object_name}"
 
 
 def invoice_title(invoices: list[dict]) -> str:
@@ -696,8 +719,11 @@ async def _process_chunk(client, chunk, concurrency, total, attempt, on_file_pro
                     attempts_by_idx.get(i, 2))
             log.info("[%d/%d] OK %s (%d rows) in %.1fs", i, total, name, len(result),
                      time.perf_counter() - file_start)
-            if on_file_progress:
-                on_file_progress(i, "done")
+            # Don't report "done" here — the reconciliation re-read and the final DB
+            # save still have to happen. Files.status should only ever become "done"
+            # from save_invoices_to_db(), once there's an actual Invoice record to show
+            # for it; a premature "done" here defeats resume_interrupted_jobs() (which
+            # only looks for processing/queued/retrying) if the process dies in between.
             return ("ok", i, name, data, mime, (result, usage))
         except Exception as exc:
             if _is_rate_limit(exc):
@@ -1166,7 +1192,7 @@ async def extract(files: list[UploadFile] = File(...), custom_fields: str = Form
             continue
         chunk.append((i, f.filename, data, mime))
         # keep the bytes Gemini actually saw — that's what the library previews
-        path = await asyncio.to_thread(store_file, jid, i, f.filename, data)
+        path = await asyncio.to_thread(store_file, jid, i, f.filename, data, mime)
         stored.append({"idx": i, "filename": f.filename, "title": title,
                        "mime": mime, "size": len(data), "path": path})
 
@@ -1376,9 +1402,24 @@ def get_file(fid: str):
 
 @app.get("/files/{fid}/raw", dependencies=[Depends(require_token)])
 def get_file_raw(fid: str):
-    """Stream the original upload back for the preview pane."""
+    """Stream the original upload back for the preview pane.
+
+    Newer uploads live in the private GCS bucket — this endpoint downloads the bytes
+    server-side (the bucket itself has no public access) and streams them back, so
+    viewing still requires a valid portal login via require_token, same as before.
+    Older uploads (from before this change) still sit on local disk and are streamed
+    exactly as before.
+    """
     doc = _file_or_404(fid)
-    path = Path(doc.get("path", "")).resolve()
+    raw_path = doc.get("path", "")
+    if raw_path.startswith(GCS_PREFIX):
+        object_name = raw_path[len(GCS_PREFIX):]
+        blob = _gcs_bucket().blob(object_name)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="file is no longer in storage")
+        data = blob.download_as_bytes()
+        return StreamingResponse(io.BytesIO(data), media_type=doc.get("mime") or "application/octet-stream")
+    path = Path(raw_path).resolve()
     # the path comes from the DB, so treat it as untrusted: it must stay inside STORAGE_DIR
     if not path.is_relative_to(STORAGE_DIR) or not path.is_file():
         raise HTTPException(status_code=404, detail="file is no longer on disk")

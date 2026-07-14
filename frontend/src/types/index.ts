@@ -27,6 +27,7 @@ export interface DocumentListItem {
   amount: number | null;
   vendor: string | null;
   confidence: Confidence;
+  extractionStatus: string;
 }
 
 export interface DocumentListResponse {

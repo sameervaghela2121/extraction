@@ -4,7 +4,7 @@ import { documentsApi, type DocumentQuery } from "../../api/documents.api";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
-import { PageHeader, StatusPill, ConfidenceBadge, Spinner, EmptyState } from "../../components/ui";
+import { PageHeader, StatusPill, ConfidenceBadge, ExtractionStatusPill, Spinner, EmptyState } from "../../components/ui";
 import type { DocumentListItem, DocumentListResponse } from "../../types";
 
 export default function DocumentsListPage() {
@@ -37,6 +37,18 @@ export default function DocumentsListPage() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
+
+  // While any row is still extracting, poll for updates every 10s; once every row has
+  // reached a terminal extraction status ("done"/"failed"), this stops scheduling itself.
+  useEffect(() => {
+    if (!data) return;
+    const stillExtracting = data.items.some(
+      (d) => d.extractionStatus !== "done" && d.extractionStatus !== "failed",
+    );
+    if (!stillExtracting) return;
+    const t = setTimeout(load, 10_000);
+    return () => clearTimeout(t);
+  }, [data, load]);
 
   const toggleSort = (field: "date" | "title") => {
     if (sort === field) setOrder(order === "asc" ? "desc" : "asc");
@@ -129,6 +141,7 @@ export default function DocumentsListPage() {
                 <th>Amount</th>
                 <th>Confidence</th>
                 <th>Status</th>
+                <th>Extraction status</th>
               </tr>
             </thead>
             <tbody>
@@ -146,6 +159,7 @@ export default function DocumentsListPage() {
                   <td>{d.amount != null ? `₹${d.amount.toLocaleString()}` : "—"}</td>
                   <td><ConfidenceBadge confidence={d.confidence} /></td>
                   <td><StatusPill status={d.status} /></td>
+                  <td><ExtractionStatusPill status={d.extractionStatus} /></td>
                 </tr>
               ))}
             </tbody>

@@ -6,6 +6,22 @@ export function StatusPill({ status }: { status: DocumentStatus }) {
   return <span className={`pill pill-${status}`}>{label}</span>;
 }
 
+/** Extraction progress, from the shared Files collection — distinct from the portal's
+ * own review-workflow `status` (pending/verified/archived) shown by StatusPill. */
+export function ExtractionStatusPill({ status }: { status: string }) {
+  const cls =
+    status === "done" ? "pill-done"
+    : status === "failed" ? "pill-failed"
+    : status === "processing" || status === "retrying" ? "pill-processing"
+    : "pill-unknown";
+  const label =
+    status === "done" ? "Extracted"
+    : status === "failed" ? "Failed"
+    : status === "processing" || status === "retrying" ? "Processing"
+    : "Unknown";
+  return <span className={`pill ${cls}`}>{label}</span>;
+}
+
 export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
   const high = confidence === "high";
   return (
