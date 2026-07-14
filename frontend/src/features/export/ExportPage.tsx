@@ -57,11 +57,19 @@ export default function ExportPage() {
       });
       setHistory((h) => [job, ...h]);
       notify("Export generated");
-      window.open(exportApi.downloadUrl(job.id), "_blank");
+      await exportApi.download(job.id, job.filename);
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const download = async (item: ExportHistoryItem) => {
+    try {
+      await exportApi.download(item.id, item.filename);
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
     }
   };
 
@@ -137,13 +145,22 @@ export default function ExportPage() {
           ) : (
             <div className="stack" style={{ gap: 10 }}>
               {history.map((h) => (
-                <a
+                <button
                   key={h.id}
-                  href={exportApi.downloadUrl(h.id)}
-                  target="_blank"
-                  rel="noreferrer"
+                  onClick={() => download(h)}
                   className="row gap-8"
-                  style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", textDecoration: "none", color: "var(--text)" }}
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: "1px solid var(--border)",
+                    background: "none",
+                    border: "none",
+                    borderBottomWidth: 1,
+                    borderBottomStyle: "solid",
+                    borderBottomColor: "var(--border)",
+                    color: "var(--text)",
+                    width: "100%",
+                    textAlign: "left",
+                  }}
                 >
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{h.filename}</div>
@@ -153,7 +170,7 @@ export default function ExportPage() {
                   </div>
                   <div className="spacer" />
                   <span className="pill pill-archived" style={{ textTransform: "uppercase" }}>{h.format}</span>
-                </a>
+                </button>
               ))}
             </div>
           )}

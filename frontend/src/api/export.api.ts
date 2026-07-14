@@ -18,5 +18,15 @@ export const exportApi = {
   generate: (input: GenerateExportInput) =>
     api.post<ExportHistoryItem>("/export", input).then((r) => r.data),
   history: () => api.get<ExportHistoryItem[]>("/export/history").then((r) => r.data),
-  downloadUrl: (id: string) => `/api/export/${id}/download`,
+  async download(id: string, filename: string) {
+    const res = await api.get(`/export/${id}/download`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data as Blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
 };
