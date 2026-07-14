@@ -1,0 +1,10 @@
+.claude
+.remember
+files
+.env
+api/venv
+api/__pycache__
+Original
+*.xlsx
+*.pdf
+api/storage

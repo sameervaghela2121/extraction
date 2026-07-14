@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: 'Public Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+    input, select, button { font-family: inherit; }
+    ::placeholder { color: oklch(62% 0.02 260); }
+    @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    a { color: oklch(50% 0.16 260); text-decoration: none; }
+    a:hover { color: oklch(42% 0.17 260); text-decoration: underline; }
+  </style>
+</helmet>
+
+<div style="display:flex; width:100%; min-height:100vh; background:oklch(98% 0.004 260); color:oklch(24% 0.02 260);">
+
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div></div>
+  </sc-if>
+
+  <!-- Desktop sidebar -->
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+    <div style="width:248px; flex-shrink:0; background:#ffffff; border-right:1px solid oklch(92% 0.008 260); display:flex; flex-direction:column; padding:20px 16px; gap:22px;">
+      <div style="display:flex; align-items:center; gap:10px; padding:4px 6px;">
+        <div style="width:34px; height:34px; border-radius:9px; background:oklch(55% 0.16 260); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17H6z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg>
+        </div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:16px; letter-spacing:-0.01em;">DocFlow</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px; background:oklch(96% 0.006 260); border-radius:10px; padding:4px;">
+        <div style="font-size:11px; font-weight:600; color:oklch(52% 0.02 260); padding:6px 8px 2px; text-transform:uppercase; letter-spacing:0.04em;">Viewing as</div>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <button onClick="{{ selectStaff }}" style="{{ roleBtnStaffStyle }}">Staff</button>
+          <button onClick="{{ selectAdmin }}" style="{{ roleBtnAdminStyle }}">Admin</button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <sc-if value="{{ showUploadNav }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ goUpload }}" style="{{ navUploadStyle }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"></path><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>
+            Upload &amp; Scan
+          </button>
+        </sc-if>
+        <button onClick="{{ goDocuments }}" style="{{ navDocumentsStyle }}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-2-1-2 1-2-1-2 1-2-1-2 1-2-1-2 1V3z"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg>
+          Documents
+          <sc-if value="{{ needsReviewCount }}" hint-placeholder-val="{{ 0 }}">
+            <span style="margin-left:auto; background:oklch(70% 0.16 60); color:#fff; font-size:11px; font-weight:700; border-radius:999px; padding:1px 7px;">{{ needsReviewCount }}</span>
+          </sc-if>
+        </button>
+        <sc-if value="{{ showExportNav }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ goExport }}" style="{{ navExportStyle }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M12 15l-4-4M12 15l4-4"></path><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
+            Export
+          </button>
+        </sc-if>
+        <sc-if value="{{ showSettingsNav }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ goSettings }}" style="{{ navSettingsStyle }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            Extraction settings
+          </button>
+        </sc-if>
+        <sc-if value="{{ showUsersNav }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ goUsers }}" style="{{ navUsersStyle }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            User management
+          </button>
+        </sc-if>
+      </div>
+
+      <div style="margin-top:auto; display:flex; align-items:center; gap:10px; padding:10px 8px; border-top:1px solid oklch(93% 0.008 260);">
+        <div style="width:30px; height:30px; border-radius:999px; background:oklch(88% 0.03 260); display:flex; align-items:center; justify-content:center; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; color:oklch(38% 0.05 260);">{{ userInitials }}</div>
+        <div style="min-width:0;">
+          <div style="font-size:13px; font-weight:600; line-height:1.2;">{{ userName }}</div>
+          <div style="font-size:11.5px; color:oklch(52% 0.02 260); line-height:1.3;">{{ roleLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Main column -->
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column; {{ mainPaddingBottomStyle }}">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:{{ topbarPadding }}; background:#ffffff; border-bottom:1px solid oklch(92% 0.008 260); position:sticky; top:0; z-index:5;">
+      <div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:20px; letter-spacing:-0.01em;">{{ screenTitle }}</div>
+        <div style="font-size:13px; color:oklch(52% 0.02 260); margin-top:1px;">{{ screenSubtitle }}</div>
+      </div>
+      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="font-size:11px; font-weight:700; color:oklch(50% 0.16 260); background:oklch(94% 0.03 260); padding:5px 10px; border-radius:999px;">{{ roleLabel }}</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1; padding:{{ contentPadding }}; overflow-y:auto;">
+
+      <!-- UPLOAD & SCAN -->
+      <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:18px; max-width:920px;">
+          <div style="display:flex; gap:6px; background:oklch(96% 0.006 260); border-radius:10px; padding:4px; width:fit-content;">
+            <button onClick="{{ setUploadTabFile }}" style="{{ uploadTabFileStyle }}">Upload file</button>
+            <button onClick="{{ setUploadTabScan }}" style="{{ uploadTabScanStyle }}">Scan via mobile</button>
+            <button onClick="{{ setUploadTabEmail }}" style="{{ uploadTabEmailStyle }}">Email-in</button>
+          </div>
+
+          <sc-if value="{{ isUploadTabFile }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:18px;">
+              <div>
+                <div style="font-size:13px; font-weight:700; margin-bottom:8px;">Document type</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button onClick="{{ setTypeInvoice }}" style="{{ typePillInvoiceStyle }}">Invoice</button>
+                  <button onClick="{{ setTypeExpense }}" style="{{ typePillExpenseStyle }}">Expense</button>
+                  <button onClick="{{ setTypeBank }}" style="{{ typePillBankStyle }}">Bank statement</button>
+                  <button onClick="{{ setTypeAuto }}" style="{{ typePillAutoStyle }}">Auto-detect</button>
+                </div>
+              </div>
+
+              <sc-if value="{{ showSettingsNav }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:12.5px; color:oklch(52% 0.02 260);">Extracting {{ activeUploadFieldSummary }} for this type. <a href="#" onClick="{{ goSettingsPreventDefault }}">Change what's extracted</a></div>
+              </sc-if>
+
+              <div onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="{{ dropZoneStyle }}">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.16 260)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"></path><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>
+                <div style="font-size:14.5px; font-weight:700; margin-top:12px;">Drag &amp; drop files here</div>
+                <div style="font-size:12.5px; color:oklch(52% 0.02 260); margin-top:3px;">PDF, JPG or PNG — up to 20MB</div>
+                <button onClick="{{ simulateFileSelect }}" style="margin-top:14px; background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:9px 18px; font-size:13px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">Browse files</button>
+              </div>
+
+              <sc-if value="{{ hasUploadedFiles }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <sc-for list="{{ uploadedFiles }}" as="file" hint-placeholder-count="1">
+                    <div style="display:flex; align-items:center; gap:12px; border:1px solid oklch(92% 0.008 260); border-radius:10px; padding:10px 12px;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(45% 0.02 260)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17H6z"></path></svg>
+                      <div style="flex:1; min-width:0;">
+                        <div style="font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ file.name }}</div>
+                        <div style="height:5px; background:oklch(93% 0.008 260); border-radius:999px; margin-top:6px; overflow:hidden;">
+                          <div style="height:100%; border-radius:999px; background:{{ file.barColor }}; width:{{ file.progressWidth }};"></div>
+                        </div>
+                      </div>
+                      <div style="font-size:11.5px; font-weight:700; color:{{ file.statusColor }}; white-space:nowrap;">{{ file.statusLabel }}</div>
+                      <button onClick="{{ file.onRemove }}" style="background:none; border:none; cursor:pointer; color:oklch(55% 0.02 260); font-size:16px; line-height:1; padding:2px;">×</button>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isUploadTabScan }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:16px; padding:24px; display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;">
+              <div style="flex:1; min-width:260px; display:flex; flex-direction:column; gap:12px;">
+                <div style="font-family:'Manrope',sans-serif; font-weight:700; font-size:16px;">Scan from your phone</div>
+                <div style="font-size:13.5px; color:oklch(40% 0.02 260); line-height:1.6;">Open the camera scanner on your phone to capture paper invoices, receipts and statements. Pages are auto-cropped and enhanced, then queued here for review — no app install required.</div>
+                <div style="border:1px dashed oklch(80% 0.02 260); border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px; background:oklch(97% 0.008 260);">
+                  <div style="width:44px; height:44px; border-radius:9px; background:#fff; border:1px solid oklch(88% 0.01 260); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="oklch(30% 0.02 260)" stroke-width="1.6"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="3" height="3"></rect><rect x="18" y="14" width="3" height="3"></rect><rect x="14" y="18" width="3" height="3"></rect><rect x="18" y="18" width="3" height="3"></rect></svg>
+                  </div>
+                  <div>
+                    <div style="font-size:13px; font-weight:700;">Scan a QR code, or visit</div>
+                    <div style="font-size:13px; color:oklch(50% 0.16 260); font-weight:600;">scan.docflow.app/{{ scanToken }}</div>
+                  </div>
+                </div>
+                <div style="font-size:12px; color:oklch(55% 0.02 260);">Link expires in 10 minutes and is tied to your account for this session.</div>
+              </div>
+              <div style="flex-shrink:0;">
+                <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="Scan" hint-size="260,540">
+
+                  <sc-if value="{{ isScanCapture }}" hint-placeholder-val="{{ true }}">
+                    <div style="height:100%; background:#0c0c10; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:18px 14px 26px;">
+                      <div style="color:#fff; font-size:12px; font-weight:600; opacity:0.8; text-align:center;">{{ scanCaptureHint }}</div>
+                      <div style="width:100%; aspect-ratio:3/4; border:2.5px solid #fff; border-radius:14px; position:relative;">
+                        <div style="position:absolute; inset:10px; background:#ffffff12; border-radius:8px;"></div>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:24px;">
+                        <div style="width:34px; height:34px; border-radius:999px; background:#ffffff22;"></div>
+                        <button onClick="{{ capturePage }}" style="width:60px; height:60px; border-radius:999px; background:#fff; border:4px solid #ffffff55; cursor:pointer; padding:0;"></button>
+                        <div style="width:34px; height:34px; border-radius:999px; background:#ffffff22; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700;">{{ scanPageBadge }}</div>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ isScanPreview }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:100%; background:#151519; display:flex; flex-direction:column; padding:18px 14px 22px; gap:12px;">
+                      <div style="color:#fff; font-size:13px; font-weight:700;">{{ scanPageCount }} page(s) captured</div>
+                      <div style="flex:1; display:flex; flex-direction:column; gap:8px; overflow-y:auto;">
+                        <sc-for list="{{ scanPages }}" as="pg" hint-placeholder-count="1">
+                          <div style="display:flex; align-items:center; gap:10px; background:#ffffff10; border-radius:10px; padding:8px 10px;">
+                            <div style="width:34px; height:44px; background:#ffffff22; border-radius:5px; flex-shrink:0;"></div>
+                            <div style="color:#fff; font-size:12.5px; font-weight:600; flex:1;">Page {{ pg.n }}</div>
+                            <button onClick="{{ pg.onRemove }}" style="background:none; border:none; color:#ffffff88; font-size:15px; cursor:pointer;">×</button>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <div style="display:flex; flex-direction:column; gap:8px;">
+                        <button onClick="{{ addAnotherPage }}" style="background:#ffffff18; color:#fff; border:none; border-radius:9px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer;">+ Add another page</button>
+                        <button onClick="{{ useScannedPages }}" style="background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer;">Use {{ scanPageCount }} page(s)</button>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ isScanUploading }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:100%; background:#0c0c10; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;">
+                      <div style="width:36px; height:36px; border-radius:999px; border:3px solid #ffffff33; border-top-color:#fff; animation:spin 0.8s linear infinite;"></div>
+                      <div style="color:#fff; font-size:13px; font-weight:600;">Uploading &amp; extracting…</div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ isScanSuccess }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:100%; background:#0c0c10; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:0 24px; text-align:center;">
+                      <div style="width:52px; height:52px; border-radius:999px; background:oklch(60% 0.14 150); display:flex; align-items:center; justify-content:center;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+                      </div>
+                      <div style="color:#fff; font-size:14px; font-weight:700;">Queued for review</div>
+                      <div style="color:#ffffffaa; font-size:12px;">Sent to Documents as a {{ scanUploadTypeLabel }}</div>
+                      <button onClick="{{ scanAnother }}" style="margin-top:6px; background:#ffffff18; color:#fff; border:none; border-radius:9px; padding:10px 18px; font-size:12.5px; font-weight:700; cursor:pointer;">Scan another</button>
+                    </div>
+                  </sc-if>
+
+                </x-import>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isUploadTabEmail }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:16px; max-width:560px;">
+              <div style="font-family:'Manrope',sans-serif; font-weight:700; font-size:16px;">Forward documents by email</div>
+              <div style="font-size:13.5px; color:oklch(40% 0.02 260); line-height:1.6;">Forward invoices, receipts or statements to your dedicated inbox — attachments are picked up automatically and queued for extraction.</div>
+              <div style="display:flex; align-items:center; gap:10px; background:oklch(97% 0.008 260); border:1px solid oklch(90% 0.01 260); border-radius:10px; padding:12px 14px;">
+                <div style="flex:1; font-size:14px; font-weight:700; font-family:monospace;">{{ inboundEmail }}</div>
+                <button onClick="{{ copyEmail }}" style="background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">Copy</button>
+              </div>
+              <ul style="margin:0; padding-left:18px; font-size:13px; color:oklch(40% 0.02 260); line-height:1.8;">
+                <li>Attach one document per email for best results</li>
+                <li>PDF, JPG and PNG attachments are supported</li>
+                <li>You'll see forwarded items appear in Documents within a minute</li>
+              </ul>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- DOCUMENTS QUEUE -->
+      <sc-if value="{{ isDocuments }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px;">
+            <div style="position:relative; min-width:220px; flex:1; max-width:320px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.02 260)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute; left:11px; top:50%; transform:translateY(-50%);"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+              <input value="{{ docSearch }}" onChange="{{ onDocSearchChange }}" placeholder="Search by title or uploader" style="width:100%; border:1px solid oklch(88% 0.01 260); border-radius:9px; padding:9px 12px 9px 32px; font-size:13px; background:#fff;"></input>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <sc-for list="{{ docTypeFiltersList }}" as="tf" hint-placeholder-count="3">
+                <button onClick="{{ tf.onToggle }}" style="{{ tf.style }}">{{ tf.label }}</button>
+              </sc-for>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:oklch(45% 0.02 260); cursor:pointer; padding-left:6px;">
+                <input type="checkbox" checked="{{ showArchived }}" onChange="{{ toggleShowArchived }}"></input>
+                Show archived ({{ archivedCount }})
+              </label>
+            </div>
+            <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:center; gap:10px; background:oklch(96% 0.03 260); border:1px solid oklch(85% 0.06 260); border-radius:10px; padding:7px 12px;">
+                <span style="font-size:12.5px; font-weight:700; color:oklch(38% 0.16 260);">{{ selectedCount }} selected</span>
+                <button onClick="{{ bulkApprove }}" style="background:oklch(60% 0.14 150); color:#fff; border:none; border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">Approve &amp; verify</button>
+                <button onClick="{{ bulkReject }}" style="background:#fff; color:oklch(55% 0.2 25); border:1px solid oklch(85% 0.05 25); border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">Send back</button>
+                <button onClick="{{ bulkArchive }}" style="background:#fff; color:oklch(45% 0.02 260); border:1px solid oklch(88% 0.01 260); border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">Archive</button>
+                <button onClick="{{ clearSelection }}" style="background:none; border:none; color:oklch(52% 0.02 260); font-size:12px; font-weight:600; cursor:pointer;">Clear</button>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; overflow:hidden;">
+            <div style="display:grid; grid-template-columns:{{ tableColsHeader }}; gap:12px; padding:12px 18px; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:oklch(52% 0.02 260); border-bottom:1px solid oklch(92% 0.008 260); background:oklch(98.5% 0.004 260); align-items:center;">
+              <input type="checkbox" checked="{{ pageAllSelected }}" onChange="{{ onToggleSelectAll }}"></input>
+              <div onClick="{{ onSortTitle }}" style="cursor:pointer; user-select:none;">Document{{ sortTitleArrow }}</div>
+              <sc-if value="{{ showOwnerCol }}" hint-placeholder-val="{{ true }}"><div>Uploaded by</div></sc-if>
+              <div onClick="{{ onSortDate }}" style="cursor:pointer; user-select:none;">Date{{ sortDateArrow }}</div>
+              <div onClick="{{ onSortAmount }}" style="cursor:pointer; user-select:none;">Amount{{ sortAmountArrow }}</div>
+              <div onClick="{{ onSortConf }}" style="cursor:pointer; user-select:none;">Confidence{{ sortConfArrow }}</div>
+              <div onClick="{{ onSortStatus }}" style="cursor:pointer; user-select:none;">Status{{ sortStatusArrow }}</div>
+            </div>
+            <sc-for list="{{ filteredDocuments }}" as="doc" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:{{ tableColsHeader }}; gap:12px; padding:14px 18px; border-bottom:1px solid oklch(94% 0.006 260); align-items:center;" style-hover="background:oklch(97% 0.006 260);">
+                <input type="checkbox" checked="{{ doc.isSelected }}" onClick="{{ doc.onToggleSelect }}" onChange="{{ doc.onToggleSelect }}"></input>
+                <div onClick="{{ doc.onClick }}" style="display:flex; align-items:center; gap:12px; min-width:0; cursor:pointer;">
+                  <div style="width:34px; height:34px; border-radius:9px; background:{{ doc.iconBg }}; color:{{ doc.iconColor }}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ doc.iconPath }}"></path></svg>
+                  </div>
+                  <div style="min-width:0;">
+                    <div style="font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ doc.title }}</div>
+                    <div style="font-size:12px; color:oklch(55% 0.02 260);">{{ doc.typeLabel }} · via {{ doc.sourceLabel }}</div>
+                  </div>
+                </div>
+                <sc-if value="{{ showOwnerCol }}" hint-placeholder-val="{{ true }}"><div onClick="{{ doc.onClick }}" style="font-size:13px; color:oklch(35% 0.02 260); cursor:pointer;">{{ doc.owner }}</div></sc-if>
+                <div onClick="{{ doc.onClick }}" style="font-size:13px; color:oklch(35% 0.02 260); cursor:pointer;">{{ doc.dateLabel }}</div>
+                <div onClick="{{ doc.onClick }}" style="font-size:13.5px; font-weight:700; cursor:pointer;">{{ doc.amountLabel }}</div>
+                <div onClick="{{ doc.onClick }}" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <div style="width:7px; height:7px; border-radius:999px; background:{{ doc.confColor }};"></div>
+                  <span style="font-size:12.5px; color:oklch(40% 0.02 260);">{{ doc.confLabel }}</span>
+                </div>
+                <div onClick="{{ doc.onClick }}" style="cursor:pointer;">
+                  <span style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; background:{{ doc.statusBg }}; color:{{ doc.statusColor }};">{{ doc.statusLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noDocumentsInView }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:48px 18px; text-align:center; color:oklch(55% 0.02 260); font-size:13.5px;">Nothing here yet.</div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ showPagination }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div style="font-size:12.5px; color:oklch(52% 0.02 260);">Page {{ docPage }} of {{ docTotalPages }}</div>
+              <div style="display:flex; gap:8px;">
+                <button onClick="{{ onDocPagePrev }}" disabled="{{ docPagePrevDisabled }}" style="{{ docPagePrevStyle }}">Previous</button>
+                <button onClick="{{ onDocPageNext }}" disabled="{{ docPageNextDisabled }}" style="{{ docPageNextStyle }}">Next</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- DOCUMENT DETAIL -->
+      <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <button onClick="{{ backFromDetail }}" style="display:flex; align-items:center; gap:6px; background:none; border:none; cursor:pointer; font-size:13.5px; font-weight:600; color:oklch(50% 0.16 260); padding:0; width:fit-content;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            Back to documents
+          </button>
+
+          <div style="display:grid; grid-template-columns:{{ detailCols }}; gap:20px; align-items:start;">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px;">
+              <div style="font-size:12.5px; font-weight:700; color:oklch(52% 0.02 260); text-transform:uppercase; letter-spacing:0.03em;">Original document</div>
+              <div style="aspect-ratio:3/4; border-radius:10px; overflow:hidden;">
+                <x-import component-from-global-scope="image-slot" from="./image-slot.js" id="{{ detailPreviewId }}" shape="rounded" radius="10" placeholder="Drop the scanned document image" style="width:100%;height:100%;" hint-size="100%,100%"></x-import>
+              </div>
+            </div>
+
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:18px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                <div>
+                  <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:17px;">{{ selectedDoc.title }}</div>
+                  <div style="font-size:12.5px; color:oklch(52% 0.02 260); margin-top:2px;">{{ selectedDoc.typeLabel }} · uploaded {{ selectedDoc.dateLabel }} via {{ selectedDoc.sourceLabel }}</div>
+                </div>
+                <span style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; background:{{ selectedDoc.statusBg }}; color:{{ selectedDoc.statusColor }};">{{ selectedDoc.statusLabel }}</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <sc-for list="{{ selectedDoc.fields }}" as="field" hint-placeholder-count="6">
+                  <div style="display:flex; flex-direction:column; gap:5px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <div style="width:6px; height:6px; border-radius:999px; background:{{ field.confColor }}; flex-shrink:0;"></div>
+                      <label style="font-size:12px; font-weight:600; color:oklch(45% 0.02 260);">{{ field.label }}</label>
+                    </div>
+                    <input value="{{ field.value }}" onChange="{{ field.onChange }}" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:9px 11px; font-size:13.5px; font-weight:600; color:oklch(20% 0.02 260); width:100%;"></input>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:6px; border-top:1px solid oklch(94% 0.006 260);">
+                <sc-if value="{{ isArchivedDoc }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ restoreDoc }}" style="display:flex; align-items:center; gap:7px; background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:11px 18px; font-size:13.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
+                    Restore document
+                  </button>
+                </sc-if>
+                <sc-if value="{{ isArchivedDoc }}" hint-placeholder-val="{{ true }}">
+                  <div></div>
+                </sc-if>
+                <sc-if value="{{ isArchivedDoc }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:contents;">
+                    <button onClick="{{ approveDoc }}" style="display:flex; align-items:center; gap:7px; background:oklch(60% 0.14 150); color:#fff; border:none; border-radius:9px; padding:11px 18px; font-size:13.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(54% 0.14 150);">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+                      Approve &amp; verify
+                    </button>
+                    <button onClick="{{ rejectDoc }}" style="background:#fff; color:oklch(55% 0.2 25); border:1px solid oklch(85% 0.05 25); border-radius:9px; padding:11px 18px; font-size:13.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(97% 0.03 25);">Send back for re-scan</button>
+                    <button onClick="{{ archiveDoc }}" style="background:#fff; color:oklch(45% 0.02 260); border:1px solid oklch(88% 0.01 260); border-radius:9px; padding:11px 18px; font-size:13.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(96% 0.006 260);">Archive</button>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:4px;">
+            <div style="font-family:'Manrope',sans-serif; font-weight:700; font-size:15px; margin-bottom:8px;">Activity</div>
+            <sc-for list="{{ activityLog }}" as="ev" hint-placeholder-count="3">
+              <div style="display:flex; gap:12px; padding:8px 0;">
+                <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+                  <div style="width:8px; height:8px; border-radius:999px; background:oklch(55% 0.16 260); margin-top:5px;"></div>
+                  <div style="{{ ev.lineStyle }}"></div>
+                </div>
+                <div style="flex:1; padding-bottom:4px;">
+                  <div style="font-size:13px; font-weight:600;">{{ ev.action }}</div>
+                  <div style="font-size:12px; color:oklch(55% 0.02 260); margin-top:1px;">{{ ev.actor }} · {{ ev.timeLabel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- EXTRACTION SETTINGS -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:16px; max-width:820px;">
+          <div style="font-size:13.5px; color:oklch(40% 0.02 260); line-height:1.6;">Choose which fields the extraction engine should pull for each document type. Changes apply to the next scan or upload — existing documents keep the data already captured.</div>
+          <sc-for list="{{ settingsSections }}" as="section" hint-placeholder-count="3">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="width:32px; height:32px; border-radius:8px; background:{{ section.iconBg }}; color:{{ section.iconColor }}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ section.iconPath }}"></path></svg>
+                </div>
+                <div style="font-family:'Manrope',sans-serif; font-weight:700; font-size:15px;">{{ section.typeLabel }}</div>
+                <div style="margin-left:auto; font-size:12px; color:oklch(52% 0.02 260);">{{ section.enabledCount }} of {{ section.totalCount }} fields</div>
+              </div>
+              <sc-for list="{{ section.fields }}" as="field" hint-placeholder-count="6">
+                <div style="display:flex; align-items:center; gap:14px; padding:10px 4px; border-top:1px solid oklch(95% 0.006 260);">
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:13.5px; font-weight:600;">{{ field.label }}<span style="{{ field.requiredTagStyle }}">{{ field.requiredTag }}</span></div>
+                    <div style="font-size:12px; color:oklch(55% 0.02 260); margin-top:1px;">{{ field.desc }}</div>
+                  </div>
+                  <button onClick="{{ field.onToggle }}" disabled="{{ field.locked }}" style="{{ field.trackStyle }}">
+                    <div style="{{ field.thumbStyle }}"></div>
+                  </button>
+                  <sc-if value="{{ field.custom }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ field.onRemove }}" title="Remove column" style="background:none; border:none; cursor:pointer; color:oklch(55% 0.2 25); font-size:17px; line-height:1; padding:2px 4px;">×</button>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <div style="display:flex; align-items:flex-end; gap:8px; padding:12px 4px 2px; border-top:1px solid oklch(95% 0.006 260); margin-top:2px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:160px; display:flex; flex-direction:column; gap:4px;">
+                  <label style="font-size:11.5px; font-weight:600; color:oklch(52% 0.02 260);">Column title</label>
+                  <input value="{{ section.newFieldTitle }}" onChange="{{ section.onNewFieldTitleChange }}" placeholder="e.g. Cost center" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:8px 11px; font-size:13px;"></input>
+                </div>
+                <div style="flex:1.4; min-width:200px; display:flex; flex-direction:column; gap:4px;">
+                  <label style="font-size:11.5px; font-weight:600; color:oklch(52% 0.02 260);">Description</label>
+                  <input value="{{ section.newFieldDesc }}" onChange="{{ section.onNewFieldDescChange }}" placeholder="What should this field capture?" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:8px 11px; font-size:13px;"></input>
+                </div>
+                <button onClick="{{ section.onAddField }}" style="background:oklch(96% 0.006 260); color:oklch(35% 0.16 260); border:1px solid oklch(88% 0.03 260); border-radius:8px; padding:8.5px 14px; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;">+ Add column</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- USER MANAGEMENT -->
+      <sc-if value="{{ isUsers }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
+          <div style="display:flex; justify-content:flex-end;">
+            <button onClick="{{ openInviteForm }}" style="display:flex; align-items:center; gap:7px; background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+              Invite user
+            </button>
+          </div>
+
+          <sc-if value="{{ showInviteForm }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:14px;">
+              <div style="font-family:'Manrope',sans-serif; font-weight:700; font-size:15px;">Invite a new user</div>
+              <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:180px; display:flex; flex-direction:column; gap:4px;">
+                  <label style="font-size:11.5px; font-weight:600; color:oklch(52% 0.02 260);">Full name</label>
+                  <input value="{{ inviteDraft.name }}" onChange="{{ onInviteNameChange }}" placeholder="Jordan Lee" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:9px 11px; font-size:13px;"></input>
+                </div>
+                <div style="flex:1; min-width:180px; display:flex; flex-direction:column; gap:4px;">
+                  <label style="font-size:11.5px; font-weight:600; color:oklch(52% 0.02 260);">Email</label>
+                  <input value="{{ inviteDraft.email }}" onChange="{{ onInviteEmailChange }}" placeholder="jordan@company.com" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:9px 11px; font-size:13px;"></input>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <label style="font-size:11.5px; font-weight:600; color:oklch(52% 0.02 260);">Role</label>
+                  <div style="display:flex; gap:6px;">
+                    <button onClick="{{ setInviteRoleStaff }}" style="{{ inviteRoleStaffStyle }}">Staff</button>
+                    <button onClick="{{ setInviteRoleAdmin }}" style="{{ inviteRoleAdminStyle }}">Admin</button>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; gap:10px;">
+                <button onClick="{{ sendInvite }}" style="background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:10px 18px; font-size:13px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">Send invite</button>
+                <button onClick="{{ closeInviteForm }}" style="background:#fff; color:oklch(35% 0.02 260); border:1px solid oklch(88% 0.01 260); border-radius:9px; padding:10px 18px; font-size:13px; font-weight:700; cursor:pointer;">Cancel</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; overflow:hidden;">
+            <div style="display:grid; grid-template-columns:1.5fr 1fr 0.7fr 0.9fr 0.8fr; gap:12px; padding:12px 18px; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:oklch(52% 0.02 260); border-bottom:1px solid oklch(92% 0.008 260); background:oklch(98.5% 0.004 260);">
+              <div>Name</div><div>Role</div><div>Documents</div><div>Status</div><div></div>
+            </div>
+            <sc-for list="{{ usersList }}" as="u" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:1.5fr 1fr 0.7fr 0.9fr 0.8fr; gap:12px; padding:13px 18px; border-bottom:1px solid oklch(94% 0.006 260); align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                  <div style="width:30px; height:30px; border-radius:999px; background:oklch(88% 0.03 260); display:flex; align-items:center; justify-content:center; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; color:oklch(38% 0.05 260); flex-shrink:0;">{{ u.initials }}</div>
+                  <div style="min-width:0;">
+                    <div style="font-size:13.5px; font-weight:600;">{{ u.name }}</div>
+                    <div style="font-size:12px; color:oklch(55% 0.02 260);">{{ u.email }}</div>
+                  </div>
+                </div>
+
+                <sc-if value="{{ u.isEditing }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; gap:6px;">
+                    <button onClick="{{ u.onSetRoleStaff }}" style="{{ u.roleStaffStyle }}">Staff</button>
+                    <button onClick="{{ u.onSetRoleAdmin }}" style="{{ u.roleAdminStyle }}">Admin</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ u.isEditing }}" hint-placeholder-val="{{ false }}">
+                  <div></div>
+                </sc-if>
+                <sc-if value="{{ u.isEditing }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; gap:6px;">
+                    <button onClick="{{ u.onSetStatusActive }}" style="{{ u.statusActiveStyle }}">Active</button>
+                    <button onClick="{{ u.onSetStatusSuspended }}" style="{{ u.statusSuspendedStyle }}">Suspended</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ u.isEditing }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; gap:8px;">
+                    <button onClick="{{ u.onSave }}" style="background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">Save</button>
+                    <button onClick="{{ u.onCancel }}" style="background:none; border:none; color:oklch(52% 0.02 260); font-size:12px; font-weight:700; cursor:pointer;">Cancel</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ u.isNotEditing }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:13px; color:oklch(35% 0.02 260);">{{ u.role }}</div>
+                </sc-if>
+                <sc-if value="{{ u.isNotEditing }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:13px; font-weight:600;">{{ u.docCount }}</div>
+                </sc-if>
+                <sc-if value="{{ u.isNotEditing }}" hint-placeholder-val="{{ true }}">
+                  <div><span style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; background:{{ u.statusBg }}; color:{{ u.statusColor }};">{{ u.status }}</span></div>
+                </sc-if>
+                <sc-if value="{{ u.isNotEditing }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ u.onEdit }}" style="display:flex; align-items:center; gap:5px; background:none; border:1px solid oklch(88% 0.01 260); border-radius:7px; padding:6px 10px; font-size:12px; font-weight:600; color:oklch(35% 0.02 260); cursor:pointer; width:fit-content;" style-hover="background:oklch(96% 0.006 260);">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+                    Edit
+                  </button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- EXPORT -->
+      <sc-if value="{{ isExport }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:20px; max-width:920px;">
+          <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:16px; padding:22px; display:flex; flex-direction:column; gap:20px;">
+            <div>
+              <div style="font-size:13px; font-weight:700; margin-bottom:10px;">Document type</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ exportTypesList }}" as="t" hint-placeholder-count="3">
+                  <button onClick="{{ t.onSelect }}" style="{{ t.style }}">{{ t.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                <div style="font-size:13px; font-weight:700;">Columns to export</div>
+                <span style="font-size:12px; color:oklch(52% 0.02 260);">{{ exportColumnsEnabledCount }} of {{ exportColumnsTotalCount }} selected</span>
+              </div>
+              <div style="border:1px solid oklch(92% 0.008 260); border-radius:10px; overflow:hidden;">
+                <sc-for list="{{ exportColumnsList }}" as="col" hint-placeholder-count="6">
+                  <div style="display:flex; align-items:center; gap:12px; padding:9px 12px; border-top:1px solid oklch(95% 0.006 260);">
+                    <button onClick="{{ col.onToggle }}" style="{{ col.trackStyle }}">
+                      <div style="{{ col.thumbStyle }}"></div>
+                    </button>
+                    <input value="{{ col.title }}" onChange="{{ col.onTitleChange }}" disabled="{{ col.disabledInput }}" style="{{ col.inputStyle }}"></input>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:24px; flex-wrap:wrap;">
+              <div>
+                <div style="font-size:13px; font-weight:700; margin-bottom:10px;">Status</div>
+                <div style="display:flex; gap:8px;">
+                  <button onClick="{{ setExportStatusAll }}" style="{{ exportStatusAllStyle }}">All</button>
+                  <button onClick="{{ setExportStatusVerified }}" style="{{ exportStatusVerifiedStyle }}">Verified only</button>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:13px; font-weight:700; margin-bottom:10px;">Date range</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <input type="date" value="{{ exportDateFrom }}" onChange="{{ onExportDateFromChange }}" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:8px 10px; font-size:13px;"></input>
+                  <span style="color:oklch(55% 0.02 260);">to</span>
+                  <input type="date" value="{{ exportDateTo }}" onChange="{{ onExportDateToChange }}" style="border:1px solid oklch(88% 0.01 260); border-radius:8px; padding:8px 10px; font-size:13px;"></input>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size:13px; font-weight:700; margin-bottom:10px;">Export format</div>
+              <div style="display:grid; grid-template-columns:{{ formatGridCols }}; gap:10px;">
+                <sc-for list="{{ exportFormatsList }}" as="fmt" hint-placeholder-count="5">
+                  <button onClick="{{ fmt.onSelect }}" style="{{ fmt.style }}">
+                    <div style="font-size:13.5px; font-weight:700;">{{ fmt.label }}</div>
+                    <div style="font-size:11.5px; margin-top:3px; color:{{ fmt.descColor }};">{{ fmt.desc }}</div>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:14px; padding-top:6px; border-top:1px solid oklch(94% 0.006 260);">
+              <button onClick="{{ generateExport }}" style="background:oklch(55% 0.16 260); color:#fff; border:none; border-radius:9px; padding:12px 22px; font-size:13.5px; font-weight:700; cursor:pointer;" style-hover="background:oklch(48% 0.16 260);">Generate export</button>
+              <div style="font-size:13px; color:oklch(52% 0.02 260);">{{ exportMatchCount }} documents match these filters</div>
+            </div>
+          </div>
+
+          <div style="background:#fff; border:1px solid oklch(92% 0.008 260); border-radius:14px; overflow:hidden;">
+            <div style="padding:14px 18px; font-size:14px; font-weight:700; border-bottom:1px solid oklch(92% 0.008 260);">Export history</div>
+            <sc-for list="{{ exportHistoryList }}" as="h" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid oklch(94% 0.006 260);">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(45% 0.02 260)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M12 15l-4-4M12 15l4-4"></path><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:13px; font-weight:600;">{{ h.filename }}</div>
+                  <div style="font-size:11.5px; color:oklch(55% 0.02 260);">{{ h.meta }}</div>
+                </div>
+                <span style="font-size:11px; font-weight:700; color:oklch(45% 0.02 260); background:oklch(95% 0.006 260); padding:3px 9px; border-radius:999px;">{{ h.format }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- Mobile bottom nav -->
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid oklch(92% 0.008 260); display:flex; padding:6px 4px 10px; z-index:10;">
+      <sc-if value="{{ showUploadNav }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goUpload }}" style="{{ mobNavUploadStyle }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"></path><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>
+          <span style="font-size:10.5px; font-weight:600;">Upload</span>
+        </button>
+      </sc-if>
+      <button onClick="{{ goDocuments }}" style="{{ mobNavDocumentsStyle }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-2-1-2 1-2-1-2 1-2-1-2 1-2-1-2 1V3z"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg>
+        <span style="font-size:10.5px; font-weight:600;">Documents</span>
+      </button>
+      <sc-if value="{{ showExportNav }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goExport }}" style="{{ mobNavExportStyle }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M12 15l-4-4M12 15l4-4"></path><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
+          <span style="font-size:10.5px; font-weight:600;">Export</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ showSettingsNav }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goSettings }}" style="{{ mobNavSettingsStyle }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span style="font-size:10.5px; font-weight:600;">Settings</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ showUsersNav }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goUsers }}" style="{{ mobNavUsersStyle }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <span style="font-size:10.5px; font-weight:600;">Users</span>
+        </button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toastVisible }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; left:50%; bottom:{{ toastBottom }}; transform:translateX(-50%); background:oklch(22% 0.02 260); color:#fff; font-size:13.5px; font-weight:600; padding:11px 20px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.18); animation:toastIn 0.2s ease-out; z-index:20;">{{ toastMessage }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const DOCS = [
+  { id: 'd1', type: 'invoice', title: 'Acme Supplies Ltd — INV-2044', vendor: 'Acme Supplies Ltd', number: 'INV-2044', invDate: '2026-07-02', dueDate: '2026-07-30', amount: 1240.00, tax: 99.20, category: 'Office supplies', status: 'pending', conf: 'high', source: 'upload', owner: 'You', date: '2026-07-02' },
+  { id: 'd2', type: 'expense', title: 'Grab Taxi', vendor: 'Grab Taxi', amount: 18.50, category: 'Transport', method: 'Corporate card', employee: 'You', status: 'verified', conf: 'high', source: 'scan', owner: 'You', date: '2026-07-08' },
+  { id: 'd3', type: 'bank_statement', title: 'HSBC Business — Jul 2026', bank: 'HSBC Business', account: '•••• 4821', period: 'Jul 1–14, 2026', opening: 18420.55, closing: 21980.10, txCount: 47, status: 'pending', conf: 'medium', source: 'email', owner: 'Priya', date: '2026-07-13' },
+  { id: 'd4', type: 'invoice', title: 'Staples Office — INV-8831', vendor: 'Staples Office', number: 'INV-8831', invDate: '2026-06-20', dueDate: '2026-07-18', amount: 342.10, tax: 27.37, category: 'Office supplies', status: 'verified', conf: 'high', source: 'upload', owner: 'Priya', date: '2026-06-20' },
+  { id: 'd5', type: 'expense', title: 'Hotel Marina Bay', vendor: 'Marina Bay Hotel', amount: 560.00, category: 'Travel', method: 'Personal — reimburse', employee: 'You', status: 'pending', conf: 'medium', source: 'scan', owner: 'You', date: '2026-07-11' },
+  { id: 'd6', type: 'invoice', title: 'CloudHost Inc — INV-2091', vendor: 'CloudHost Inc', number: 'INV-2091', invDate: '2026-07-05', dueDate: '2026-08-04', amount: 89.00, tax: 7.12, category: 'Software', status: 'pending', conf: 'low', source: 'email', owner: 'Wei', date: '2026-07-05' },
+  { id: 'd7', type: 'bank_statement', title: 'DBS Corporate — Jun 2026', bank: 'DBS Corporate', account: '•••• 1197', period: 'Jun 1–30, 2026', opening: 42110.00, closing: 39875.40, txCount: 112, status: 'verified', conf: 'high', source: 'upload', owner: 'Wei', date: '2026-07-01' },
+  { id: 'd8', type: 'expense', title: 'Uber Eats', vendor: 'Uber Eats', amount: 24.30, category: 'Meals', method: 'Corporate card', employee: 'You', status: 'verified', conf: 'high', source: 'scan', owner: 'You', date: '2026-07-09' },
+  { id: 'd9', type: 'invoice', title: 'Global Print Co — INV-1187', vendor: 'Global Print Co', number: 'INV-1187', invDate: '2026-07-09', dueDate: '2026-08-08', amount: 1890.00, tax: 151.20, category: 'Marketing', status: 'pending', conf: 'medium', source: 'upload', owner: 'Priya', date: '2026-07-09' },
+  { id: 'd10', type: 'bank_statement', title: 'OCBC Business — Jul 2026', bank: 'OCBC Business', account: '•••• 6602', period: 'Jul 1–14, 2026', opening: 9840.20, closing: 11205.75, txCount: 31, status: 'pending', conf: 'high', source: 'upload', owner: 'You', date: '2026-07-14' },
+];
+
+const ICONS = { invoice: 'M6 2h9l3 3v17H6z M9 7h6M9 11h6M9 15h4', expense: 'M5 3h14v18l-2-1-2 1-2-1-2 1-2-1-2 1-2-1-2 1V3z M8 8h8M8 12h8M8 16h5', bank_statement: 'M3 21h18 M5 21V10 M9 21V10 M15 21V10 M19 21V10 M12 2L3 8h18z' };
+const TYPE_LABEL = { invoice: 'Invoice', expense: 'Expense', bank_statement: 'Bank statement' };
+const SOURCE_LABEL = { upload: 'upload', scan: 'mobile scan', email: 'email' };
+const ICON_BG = { invoice: 'oklch(92% 0.05 260)', expense: 'oklch(93% 0.06 150)', bank_statement: 'oklch(93% 0.05 60)' };
+const ICON_COLOR = { invoice: 'oklch(45% 0.15 260)', expense: 'oklch(42% 0.13 150)', bank_statement: 'oklch(48% 0.12 60)' };
+const CONF_COLOR = { high: 'oklch(60% 0.14 150)', medium: 'oklch(72% 0.15 70)', low: 'oklch(58% 0.2 25)' };
+const CONF_LABEL = { high: 'High confidence', medium: 'Medium confidence', low: 'Needs attention' };
+const STATUS_BG = { pending: 'oklch(94% 0.04 70)', verified: 'oklch(93% 0.06 150)', archived: 'oklch(93% 0.006 260)' };
+const STATUS_COLOR = { pending: 'oklch(50% 0.13 70)', verified: 'oklch(42% 0.13 150)', archived: 'oklch(45% 0.02 260)' };
+const STATUS_LABEL = { pending: 'Needs review', verified: 'Verified', archived: 'Archived' };
+
+const ALL_FIELDS = {
+  invoice: [
+    { key: 'vendor', label: 'Vendor name', desc: 'Who issued the invoice', required: true },
+    { key: 'number', label: 'Invoice number', desc: 'Unique invoice identifier', required: false },
+    { key: 'invDate', label: 'Invoice date', desc: 'Date issued', required: false },
+    { key: 'dueDate', label: 'Due date', desc: 'Payment deadline', required: false },
+    { key: 'amount', label: 'Amount', desc: 'Total invoice amount', required: true },
+    { key: 'tax', label: 'Tax', desc: 'Tax / VAT amount', required: false },
+    { key: 'category', label: 'Category', desc: 'Expense category', required: false },
+    { key: 'poNumber', label: 'PO number', desc: 'Purchase order reference', required: false, defaultOff: true },
+  ],
+  expense: [
+    { key: 'vendor', label: 'Merchant', desc: 'Where the expense was made', required: true },
+    { key: 'date', label: 'Expense date', desc: 'Date of purchase', required: false },
+    { key: 'amount', label: 'Amount', desc: 'Total expense amount', required: true },
+    { key: 'category', label: 'Category', desc: 'Expense category', required: false },
+    { key: 'method', label: 'Payment method', desc: 'How it was paid', required: false },
+    { key: 'employee', label: 'Employee', desc: 'Who submitted the expense', required: false },
+    { key: 'projectCode', label: 'Project code', desc: 'Cost center to bill against', required: false, defaultOff: true },
+  ],
+  bank_statement: [
+    { key: 'bank', label: 'Bank', desc: 'Issuing bank', required: true },
+    { key: 'account', label: 'Account number', desc: 'Masked account identifier', required: true },
+    { key: 'period', label: 'Statement period', desc: 'Date range covered', required: false },
+    { key: 'opening', label: 'Opening balance', desc: 'Balance at period start', required: false },
+    { key: 'closing', label: 'Closing balance', desc: 'Balance at period end', required: false },
+    { key: 'txCount', label: 'Transaction count', desc: 'Number of transactions', required: false },
+    { key: 'iban', label: 'IBAN', desc: 'International account number', required: false, defaultOff: true },
+  ],
+};
+function defaultFieldConfig() {
+  const cfg = {};
+  Object.keys(ALL_FIELDS).forEach(type => { cfg[type] = {}; ALL_FIELDS[type].forEach(f => { cfg[type][f.key] = !f.defaultOff; }); });
+  return cfg;
+}
+function switchStyle(enabled, locked) {
+  return 'width:38px;height:22px;border-radius:999px;position:relative;border:none;flex-shrink:0;padding:0;'
+    + 'cursor:' + (locked ? 'not-allowed' : 'pointer') + ';opacity:' + (locked ? '0.55' : '1') + ';'
+    + 'background:' + (enabled ? 'oklch(55% 0.16 260)' : 'oklch(88% 0.01 260)') + ';';
+}
+function thumbStyle(enabled) {
+  return 'width:18px;height:18px;border-radius:999px;background:#fff;position:absolute;top:2px;left:' + (enabled ? '18px' : '2px') + ';transition:left 0.15s ease;';
+}
+
+function money(n) { return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(iso) { const d = new Date(iso + 'T00:00:00'); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+
+function navBtnStyle(active) {
+  return 'display:flex;align-items:center;gap:10px;text-align:left;border:none;border-radius:9px;padding:10px 10px;font-size:13.5px;font-weight:600;cursor:pointer;width:100%;'
+    + (active ? 'background:oklch(93% 0.05 260);color:oklch(40% 0.16 260);' : 'background:none;color:oklch(35% 0.02 260);');
+}
+function roleBtnStyle(active) {
+  return 'border:none;border-radius:8px;padding:7px 8px;font-size:12.5px;font-weight:700;cursor:pointer;text-align:left;'
+    + (active ? 'background:#fff;color:oklch(35% 0.16 260);box-shadow:0 1px 2px rgba(0,0,0,0.06);' : 'background:none;color:oklch(52% 0.02 260);');
+}
+function tabPillStyle(active) {
+  return 'border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;'
+    + (active ? 'background:#fff;color:oklch(35% 0.16 260);box-shadow:0 1px 2px rgba(0,0,0,0.06);' : 'background:none;color:oklch(52% 0.02 260);');
+}
+function typePillStyle(active) {
+  return 'border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;'
+    + (active ? 'background:oklch(55% 0.16 260);color:#fff;border:1px solid oklch(55% 0.16 260);' : 'background:#fff;color:oklch(35% 0.02 260);border:1px solid oklch(88% 0.01 260);');
+}
+function chipStyle(active) {
+  return 'border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:700;cursor:pointer;'
+    + (active ? 'background:oklch(93% 0.05 260);color:oklch(38% 0.16 260);border:1px solid oklch(80% 0.08 260);' : 'background:#fff;color:oklch(40% 0.02 260);border:1px solid oklch(88% 0.01 260);');
+}
+function mobNavStyle(active) {
+  return 'flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;padding:6px 2px;cursor:pointer;'
+    + (active ? 'color:oklch(50% 0.16 260);' : 'color:oklch(58% 0.02 260);');
+}
+
+class Component extends DCLogic {
+  state = {
+    role: 'admin', screen: 'documents', returnScreen: 'documents',
+    selectedDocId: null, uploadTab: 'file', uploadDocType: 'invoice', dragActive: false,
+    uploadedFiles: [], exportTypes: { invoice: true, expense: true, bank_statement: true },
+    exportType: 'invoice', exportStatus: 'all', exportFormat: 'csv', exportDateFrom: '2026-07-01', exportDateTo: '2026-07-14',
+    exportHistory: [
+      { filename: 'invoices_jun2026.csv', meta: '128 rows · Jun 30, 2026', format: 'CSV' },
+      { filename: 'all_docs_q2_2026.xlsx', meta: '412 rows · Jun 30, 2026', format: 'Excel' },
+    ],
+    docEdits: {}, statusOverrides: {}, toast: null, isMobile: false, fileCounter: 1,
+    fieldConfig: defaultFieldConfig(),
+    customFields: { invoice: [], expense: [], bank_statement: [] },
+    newFieldByType: { invoice: { title: '', desc: '' }, expense: { title: '', desc: '' }, bank_statement: { title: '', desc: '' } },
+    exportColumnConfig: {},
+    users: [
+      { id: 'u1', name: 'You', email: 'you@company.com', role: 'Staff', status: 'Active' },
+      { id: 'u2', name: 'Priya Nair', email: 'priya@company.com', role: 'Staff', status: 'Active' },
+      { id: 'u3', name: 'Wei Tan', email: 'wei@company.com', role: 'Staff', status: 'Active' },
+      { id: 'u4', name: 'Alex Devraj', email: 'alex@company.com', role: 'Admin', status: 'Active' },
+    ],
+    showInviteForm: false, inviteDraft: { name: '', email: '', role: 'Staff' },
+    editingUserId: null, editDraft: { role: 'Staff', status: 'Active' },
+    docSearch: '', docTypeFilter: { invoice: true, expense: true, bank_statement: true }, docPage: 1, showArchived: false,
+    scanStep: 'capture', scanPageCount: 0,
+    docSortKey: 'date', docSortDir: 'desc', selectedDocIds: {},
+    activityEvents: {},
+  };
+
+  logActivity = (docId, actor, action) => this.setState(s => ({ activityEvents: { ...s.activityEvents, [docId]: [...(s.activityEvents[docId] || []), { actor, action, time: Date.now() }] } }));
+  DOCS_PER_PAGE = 5;
+  CONF_RANK = { low: 0, medium: 1, high: 2 };
+  STATUS_RANK = { pending: 0, verified: 1, archived: 2 };
+
+  setDocSort = (key) => this.setState(s => ({ docSortKey: key, docSortDir: s.docSortKey === key ? (s.docSortDir === 'asc' ? 'desc' : 'asc') : (key === 'title' ? 'asc' : 'desc'), docPage: 1 }));
+
+  toggleSelectDoc = (id) => this.setState(s => { const sel = { ...s.selectedDocIds }; if (sel[id]) delete sel[id]; else sel[id] = true; return { selectedDocIds: sel }; });
+  toggleSelectAll = (ids, allSelected) => this.setState(s => {
+    const sel = { ...s.selectedDocIds };
+    if (allSelected) ids.forEach(id => delete sel[id]); else ids.forEach(id => { sel[id] = true; });
+    return { selectedDocIds: sel };
+  });
+  clearSelection = () => this.setState({ selectedDocIds: {} });
+  bulkApprove = () => {
+    const ids = Object.keys(this.state.selectedDocIds);
+    this.setState(s => { const ov = { ...s.statusOverrides }; ids.forEach(id => { ov[id] = 'verified'; }); return { statusOverrides: ov, selectedDocIds: {} }; });
+    this.showToast(ids.length + ' document(s) verified');
+  };
+  bulkReject = () => {
+    const count = Object.keys(this.state.selectedDocIds).length;
+    this.setState({ selectedDocIds: {} });
+    this.showToast(count + ' document(s) sent back for re-scan');
+  };
+  bulkArchive = () => {
+    const ids = Object.keys(this.state.selectedDocIds);
+    this.setState(s => { const ov = { ...s.statusOverrides }; ids.forEach(id => { ov[id] = 'archived'; }); return { statusOverrides: ov, selectedDocIds: {} }; });
+    this.showToast(ids.length + ' document(s) archived');
+  };
+  toggleShowArchived = () => this.setState(s => ({ showArchived: !s.showArchived, docPage: 1 }));
+  archiveDoc = () => {
+    const id = this.state.selectedDocId; const actor = this.state.role === 'staff' ? 'You' : 'Alex Devraj';
+    this.setState(s => ({ statusOverrides: { ...s.statusOverrides, [id]: 'archived' } }));
+    this.logActivity(id, actor, 'Archived');
+    this.showToast('Document archived');
+    this.setState({ screen: this.state.returnScreen });
+  };
+  capturePage = () => this.setState(s => ({ scanPageCount: s.scanPageCount + 1, scanStep: 'preview' }));
+  addAnotherPage = () => this.setState({ scanStep: 'capture' });
+  removeScanPage = (n) => this.setState(s => {
+    const newCount = s.scanPageCount - 1;
+    return { scanPageCount: Math.max(0, newCount), scanStep: newCount <= 0 ? 'capture' : 'preview' };
+  });
+  useScannedPages = () => {
+    this.setState({ scanStep: 'uploading' });
+    setTimeout(() => this.setState({ scanStep: 'success' }), 1300);
+  };
+  scanAnother = () => this.setState({ scanStep: 'capture', scanPageCount: 0 });
+  restoreDoc = () => {
+    const id = this.state.selectedDocId; const actor = this.state.role === 'staff' ? 'You' : 'Alex Devraj';
+    this.setState(s => { const ov = { ...s.statusOverrides }; delete ov[id]; return { statusOverrides: ov }; });
+    this.logActivity(id, actor, 'Restored from archive');
+    this.showToast('Document restored');
+  };
+
+  toggleDocTypeFilter = (key) => this.setState(s => ({ docTypeFilter: { ...s.docTypeFilter, [key]: !s.docTypeFilter[key] }, docPage: 1 }));
+  setDocPage = (n) => this.setState({ docPage: n });
+  docPagePrev = () => this.setState(s => ({ docPage: Math.max(1, s.docPage - 1) }));
+  docPageNext = (totalPages) => this.setState(s => ({ docPage: Math.min(totalPages, s.docPage + 1) }));
+
+  openInviteForm = () => this.setState({ showInviteForm: true, inviteDraft: { name: '', email: '', role: 'Staff' } });
+  closeInviteForm = () => this.setState({ showInviteForm: false });
+  onInviteField = (key, value) => this.setState(s => ({ inviteDraft: { ...s.inviteDraft, [key]: value } }));
+  sendInvite = () => {
+    const d = this.state.inviteDraft;
+    if (!d.name.trim() || !d.email.trim()) return;
+    const initials = d.name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const id = 'u' + Date.now();
+    this.setState(s => ({ users: [...s.users, { id, name: d.name.trim(), email: d.email.trim(), role: d.role, status: 'Invited' }], showInviteForm: false }));
+    this.showToast('Invite sent to ' + d.name.trim());
+  };
+  startEditUser = (u) => this.setState({ editingUserId: u.id, editDraft: { role: u.role, status: u.status } });
+  cancelEditUser = () => this.setState({ editingUserId: null });
+  setEditDraft = (key, value) => this.setState(s => ({ editDraft: { ...s.editDraft, [key]: value } }));
+  saveEditUser = () => {
+    const id = this.state.editingUserId; const draft = this.state.editDraft;
+    this.setState(s => ({ users: s.users.map(u => u.id === id ? { ...u, role: draft.role, status: draft.status } : u), editingUserId: null }));
+    this.showToast('User updated');
+  };
+
+  toggleExportColumn = (key) => this.setState(s => { const cur = s.exportColumnConfig[key] || { enabled: true, title: null }; return { exportColumnConfig: { ...s.exportColumnConfig, [key]: { ...cur, enabled: !cur.enabled } } }; });
+  setExportColumnTitle = (key, value) => this.setState(s => { const cur = s.exportColumnConfig[key] || { enabled: true, title: null }; return { exportColumnConfig: { ...s.exportColumnConfig, [key]: { ...cur, title: value } } }; });
+
+  toggleFieldConfig = (type, key) => this.setState(s => ({ fieldConfig: { ...s.fieldConfig, [type]: { ...s.fieldConfig[type], [key]: !s.fieldConfig[type][key] } } }));
+  onNewFieldTitleChange = (type, value) => this.setState(s => ({ newFieldByType: { ...s.newFieldByType, [type]: { ...s.newFieldByType[type], title: value } } }));
+  onNewFieldDescChange = (type, value) => this.setState(s => ({ newFieldByType: { ...s.newFieldByType, [type]: { ...s.newFieldByType[type], desc: value } } }));
+  addCustomField = (type) => {
+    const draft = this.state.newFieldByType[type];
+    const label = (draft.title || '').trim();
+    if (!label) return;
+    const desc = (draft.desc || '').trim() || 'Custom field';
+    const key = 'custom_' + type + '_' + Date.now();
+    this.setState(s => ({
+      customFields: { ...s.customFields, [type]: [...s.customFields[type], { key, label, desc }] },
+      fieldConfig: { ...s.fieldConfig, [type]: { ...s.fieldConfig[type], [key]: true } },
+      newFieldByType: { ...s.newFieldByType, [type]: { title: '', desc: '' } },
+    }));
+    this.showToast('Column added');
+  };
+  removeCustomField = (type, key) => {
+    this.setState(s => {
+      const fc = { ...s.fieldConfig[type] }; delete fc[key];
+      return { customFields: { ...s.customFields, [type]: s.customFields[type].filter(f => f.key !== key) }, fieldConfig: { ...s.fieldConfig, [type]: fc } };
+    });
+    this.showToast('Column removed');
+  };
+
+  componentDidMount() {
+    this._mq = window.matchMedia('(max-width: 900px)');
+    this._onMq = (e) => this.setState({ isMobile: e.matches });
+    this._onMq(this._mq);
+    this._mq.addEventListener ? this._mq.addEventListener('change', this._onMq) : this._mq.addListener(this._onMq);
+  }
+  componentWillUnmount() {
+    if (this._mq) { this._mq.removeEventListener ? this._mq.removeEventListener('change', this._onMq) : this._mq.removeListener(this._onMq); }
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+  }
+
+  showToast(message) {
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this.setState({ toast: message });
+    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+
+  docStatus(doc) { return this.state.statusOverrides[doc.id] || doc.status; }
+
+  approveDoc = () => { const id = this.state.selectedDocId; this.setState(s => ({ statusOverrides: { ...s.statusOverrides, [id]: 'verified' } })); this.logActivity(id, this.state.role === 'staff' ? 'You' : 'Alex Devraj', 'Approved & verified'); this.showToast('Document verified'); this.setState({ screen: this.state.returnScreen }); };
+  rejectDoc = () => { const id = this.state.selectedDocId; this.logActivity(id, this.state.role === 'staff' ? 'You' : 'Alex Devraj', 'Sent back for re-scan'); this.showToast('Sent back for re-scan'); this.setState({ screen: this.state.returnScreen }); };
+  saveDoc = () => { const id = this.state.selectedDocId; this.logActivity(id, this.state.role === 'staff' ? 'You' : 'Alex Devraj', 'Edited extracted fields'); this.showToast('Changes saved'); };
+  updateDocField = (docId, key, value) => { this.setState(s => ({ docEdits: { ...s.docEdits, [docId]: { ...(s.docEdits[docId] || {}), [key]: value } } })); };
+
+  openDetail = (docId, fromScreen) => this.setState({ selectedDocId: docId, returnScreen: fromScreen, screen: 'detail' });
+  backFromDetail = () => this.setState({ screen: this.state.returnScreen });
+
+  onDragOver = (e) => { e.preventDefault(); this.setState({ dragActive: true }); };
+  onDragLeave = () => this.setState({ dragActive: false });
+  onDrop = (e) => { e.preventDefault(); this.setState({ dragActive: false }); this.addFakeFile(); };
+  simulateFileSelect = () => this.addFakeFile();
+  addFakeFile = () => {
+    const n = this.state.fileCounter;
+    const names = ['scan_0' + n + '.pdf', 'receipt_0' + n + '.jpg', 'document_0' + n + '.pdf'];
+    const name = names[n % names.length];
+    const id = 'f' + Date.now();
+    this.setState(s => ({ uploadedFiles: [...s.uploadedFiles, { id, name, progress: 15, status: 'uploading' }], fileCounter: s.fileCounter + 1 }));
+    const tick = (pct, status) => setTimeout(() => {
+      this.setState(s => ({ uploadedFiles: s.uploadedFiles.map(f => f.id === id ? { ...f, progress: pct, status } : f) }));
+    }, status === 'uploading' ? 350 : 900);
+    tick(65, 'uploading'); tick(100, 'done');
+  };
+  removeFile = (id) => this.setState(s => ({ uploadedFiles: s.uploadedFiles.filter(f => f.id !== id) }));
+
+  copyEmail = () => { try { navigator.clipboard.writeText('documents@scan.docflow.app'); } catch (e) {} this.showToast('Email address copied'); };
+
+  setExportType = (key) => this.setState({ exportType: key });
+  generateExport = () => {
+    const ext = this.state.exportFormat === 'csv' ? 'csv' : 'xlsx';
+    const fname = 'export_' + this.state.exportDateFrom + '_to_' + this.state.exportDateTo + '.' + ext;
+    this.setState(s => ({ exportHistory: [{ filename: fname, meta: this.matchCount() + ' rows · just now', format: this.state.exportFormat === 'csv' ? 'CSV' : 'Excel' }, ...s.exportHistory] }));
+    this.showToast('Export generated');
+  };
+  matchCount = () => {
+    const s = this.state;
+    return DOCS.filter(d => d.type === s.exportType && (s.role !== 'staff' || d.owner === 'You') && (s.exportStatus === 'all' || this.docStatus(d) === 'verified') && d.date >= s.exportDateFrom && d.date <= s.exportDateTo).length;
+  };
+
+  buildDocView(doc, fromScreen) {
+    const status = this.docStatus(doc);
+    return {
+      id: doc.id, title: doc.title, typeLabel: TYPE_LABEL[doc.type], sourceLabel: SOURCE_LABEL[doc.source], owner: doc.owner,
+      dateLabel: fmtDate(doc.date), amountLabel: doc.amount != null ? money(doc.amount) : '—',
+      iconPath: ICONS[doc.type], iconBg: ICON_BG[doc.type], iconColor: ICON_COLOR[doc.type],
+      confColor: CONF_COLOR[doc.conf], confLabel: CONF_LABEL[doc.conf],
+      statusBg: STATUS_BG[status], statusColor: STATUS_COLOR[status], statusLabel: STATUS_LABEL[status],
+      onClick: () => this.openDetail(doc.id, fromScreen),
+      isSelected: !!this.state.selectedDocIds[doc.id], onToggleSelect: (e) => { e.stopPropagation(); this.toggleSelectDoc(doc.id); },
+    };
+  }
+
+  fieldsFor(doc) {
+    const edits = this.state.docEdits[doc.id] || {};
+    const cfg = this.state.fieldConfig[doc.type] || {};
+    const displayVal = { amount: doc.amount != null ? money(doc.amount) : '—', tax: doc.tax != null ? money(doc.tax) : '—', opening: doc.opening != null ? money(doc.opening) : '—', closing: doc.closing != null ? money(doc.closing) : '—' };
+    const allDefs = [...ALL_FIELDS[doc.type], ...this.state.customFields[doc.type]];
+    return allDefs.filter(f => cfg[f.key]).map((f, i) => {
+      const raw = doc[f.key] !== undefined ? doc[f.key] : '—';
+      const fallback = displayVal[f.key] !== undefined ? displayVal[f.key] : raw;
+      const value = edits[f.key] !== undefined ? edits[f.key] : fallback;
+      const conf = i < 2 ? doc.conf : (i % 3 === 0 ? 'medium' : doc.conf);
+      return { key: f.key, label: f.label, value: String(value), confColor: CONF_COLOR[conf], onChange: (e) => this.updateDocField(doc.id, f.key, e.target.value) };
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const role = s.role;
+    const roleLabel = role === 'staff' ? 'Staff' : 'Admin';
+    const showUploadNav = true;
+    const showExportNav = true;
+    const showSettingsNav = role === 'admin';
+    const showUsersNav = role === 'admin';
+    const showSidebar = !s.isMobile;
+
+    const docsForRole = role === 'staff' ? DOCS.filter(d => d.owner === 'You') : DOCS;
+    const needsReviewCount = docsForRole.filter(d => this.docStatus(d) === 'pending').length;
+
+    const screenMeta = {
+      upload: ['Upload & scan', 'Add a new invoice, expense or bank statement'],
+      documents: ['Documents', 'Review and verify extracted data'],
+      detail: ['Verify document', 'Confirm the details extracted from this document'],
+      export: ['Export', 'Send verified data to CSV or Excel'],
+      settings: ['Extraction settings', 'Choose which fields to extract per document type'],
+      users: ['User management', 'Staff accounts and their document activity'],
+    }[s.screen];
+
+    const countFor = (owner) => DOCS.filter(d => d.owner === owner).length;
+    const nameForOwner = { 'You': 'You', 'Priya Nair': 'Priya', 'Wei Tan': 'Wei', 'Alex Devraj': 'Alex Devraj' };
+    const USER_STATUS_BG = { Active: 'oklch(93% 0.06 150)', Invited: 'oklch(94% 0.04 70)', Suspended: 'oklch(94% 0.05 25)' };
+    const USER_STATUS_COLOR = { Active: 'oklch(42% 0.13 150)', Invited: 'oklch(50% 0.13 70)', Suspended: 'oklch(50% 0.18 25)' };
+    const usersList = s.users.map(u => {
+      const isEditing = s.editingUserId === u.id;
+      const initials = u.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      return {
+        id: u.id, name: u.name, email: u.email, initials, docCount: countFor(nameForOwner[u.name] || u.name),
+        role: u.role, status: u.status, statusBg: USER_STATUS_BG[u.status] || USER_STATUS_BG.Active, statusColor: USER_STATUS_COLOR[u.status] || USER_STATUS_COLOR.Active,
+        isEditing, isNotEditing: !isEditing, onEdit: () => this.startEditUser(u),
+        onSetRoleStaff: () => this.setEditDraft('role', 'Staff'), onSetRoleAdmin: () => this.setEditDraft('role', 'Admin'),
+        roleStaffStyle: chipStyle(isEditing && s.editDraft.role === 'Staff'), roleAdminStyle: chipStyle(isEditing && s.editDraft.role === 'Admin'),
+        onSetStatusActive: () => this.setEditDraft('status', 'Active'), onSetStatusSuspended: () => this.setEditDraft('status', 'Suspended'),
+        statusActiveStyle: chipStyle(isEditing && s.editDraft.status === 'Active'), statusSuspendedStyle: chipStyle(isEditing && s.editDraft.status === 'Suspended'),
+        onSave: this.saveEditUser, onCancel: this.cancelEditUser,
+      };
+    });
+
+    const settingsSections = Object.keys(ALL_FIELDS).map(type => {
+      const cfg = s.fieldConfig[type];
+      const builtIn = ALL_FIELDS[type].map(f => ({
+        label: f.label, desc: f.desc, custom: false,
+        requiredTag: f.required ? ' · Required' : '', requiredTagStyle: 'color:oklch(55% 0.02 260); font-weight:500; font-size:12px;',
+        locked: f.required, onToggle: f.required ? () => {} : () => this.toggleFieldConfig(type, f.key),
+        trackStyle: switchStyle(!!cfg[f.key], f.required), thumbStyle: thumbStyle(!!cfg[f.key]),
+      }));
+      const custom = s.customFields[type].map(f => ({
+        label: f.label, desc: f.desc, custom: true,
+        requiredTag: '', requiredTagStyle: '', locked: false, onToggle: () => this.toggleFieldConfig(type, f.key), onRemove: () => this.removeCustomField(type, f.key),
+        trackStyle: switchStyle(!!cfg[f.key], false), thumbStyle: thumbStyle(!!cfg[f.key]),
+      }));
+      const fields = [...builtIn, ...custom];
+      return {
+        typeLabel: TYPE_LABEL[type], iconPath: ICONS[type], iconBg: ICON_BG[type], iconColor: ICON_COLOR[type], fields,
+        enabledCount: Object.values(cfg).filter(Boolean).length, totalCount: fields.length,
+        newFieldTitle: s.newFieldByType[type].title, newFieldDesc: s.newFieldByType[type].desc,
+        onNewFieldTitleChange: (e) => this.onNewFieldTitleChange(type, e.target.value), onNewFieldDescChange: (e) => this.onNewFieldDescChange(type, e.target.value),
+        onAddField: () => this.addCustomField(type),
+      };
+    });
+
+    const archivedCount = docsForRole.filter(d => this.docStatus(d) === 'archived').length;
+    const query = s.docSearch.trim().toLowerCase();
+    let filtered = docsForRole.filter(d => s.docTypeFilter[d.type]);
+    filtered = filtered.filter(d => s.showArchived ? true : this.docStatus(d) !== 'archived');
+    filtered = filtered.filter(d => !query || d.title.toLowerCase().includes(query) || d.owner.toLowerCase().includes(query));
+    const dir = s.docSortDir === 'asc' ? 1 : -1;
+    const sortKey = s.docSortKey;
+    filtered = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'title') cmp = a.title.localeCompare(b.title);
+      else if (sortKey === 'date') cmp = a.date.localeCompare(b.date);
+      else if (sortKey === 'amount') cmp = (a.amount || 0) - (b.amount || 0);
+      else if (sortKey === 'conf') cmp = this.CONF_RANK[a.conf] - this.CONF_RANK[b.conf];
+      else if (sortKey === 'status') cmp = this.STATUS_RANK[this.docStatus(a)] - this.STATUS_RANK[this.docStatus(b)];
+      return cmp * dir;
+    });
+    const docTotalPages = Math.max(1, Math.ceil(filtered.length / this.DOCS_PER_PAGE));
+    const docPage = Math.min(s.docPage, docTotalPages);
+    const pageStart = (docPage - 1) * this.DOCS_PER_PAGE;
+    const filteredDocuments = filtered.slice(pageStart, pageStart + this.DOCS_PER_PAGE).map(d => this.buildDocView(d, 'documents'));
+    const docTypeFiltersList = ['invoice', 'expense', 'bank_statement'].map(k => ({ key: k, label: TYPE_LABEL[k] + 's', style: chipStyle(!!s.docTypeFilter[k]), onToggle: () => this.toggleDocTypeFilter(k) }));
+
+    const selDoc = DOCS.find(d => d.id === s.selectedDocId);
+    const selectedDoc = selDoc ? { ...this.buildDocView(selDoc, s.returnScreen), fields: this.fieldsFor(selDoc) } : { title: '', typeLabel: '', sourceLabel: '', dateLabel: '', statusBg: '', statusColor: '', statusLabel: '', fields: [] };
+
+    const isArchivedDoc = selDoc ? this.docStatus(selDoc) === 'archived' : false;
+
+    let activityLog = [];
+    if (selDoc) {
+      const seed = [
+        { actor: 'System', action: 'Data extracted (' + CONF_LABEL[selDoc.conf] + ')', timeLabel: fmtDate(selDoc.date) },
+        { actor: selDoc.owner, action: 'Uploaded via ' + SOURCE_LABEL[selDoc.source], timeLabel: fmtDate(selDoc.date) },
+      ];
+      const sessionEvents = (s.activityEvents[selDoc.id] || []).map(ev => ({ actor: ev.actor, action: ev.action, timeLabel: 'just now' })).reverse();
+      activityLog = [...sessionEvents, ...seed].map((ev, i, arr) => ({ ...ev, lineStyle: i < arr.length - 1 ? 'width:1.5px;flex:1;background:oklch(90% 0.01 260);margin-top:2px;' : '' }));
+    }
+
+    const exportTypesList = ['invoice', 'expense', 'bank_statement'].map(k => ({ key: k, label: TYPE_LABEL[k] + 's', style: chipStyle(s.exportType === k), onSelect: () => this.setExportType(k) }));
+
+    const columnMap = {};
+    [...ALL_FIELDS[s.exportType], ...s.customFields[s.exportType]].forEach(f => {
+      if (!columnMap[f.key]) columnMap[f.key] = { key: f.key, defaultLabel: f.label, sources: [] };
+      columnMap[f.key].sources.push(TYPE_LABEL[s.exportType]);
+    });
+    const exportColumnsList = Object.values(columnMap).map(c => {
+      const cfg = s.exportColumnConfig[c.key] || {};
+      const enabled = cfg.enabled !== false;
+      const title = cfg.title !== undefined && cfg.title !== null ? cfg.title : c.defaultLabel;
+      return {
+        title, sourceLabel: c.sources.join(', '), disabledInput: !enabled,
+        onToggle: () => this.toggleExportColumn(c.key), onTitleChange: (e) => this.setExportColumnTitle(c.key, e.target.value),
+        trackStyle: switchStyle(enabled, false), thumbStyle: thumbStyle(enabled),
+        inputStyle: 'flex:1;border:1px solid oklch(90% 0.01 260);border-radius:7px;padding:6px 9px;font-size:13px;font-weight:600;' + (enabled ? 'color:oklch(25% 0.02 260);background:#fff;' : 'color:oklch(65% 0.01 260);background:oklch(97% 0.004 260);'),
+      };
+    });
+    const exportColumnsEnabledCount = exportColumnsList.filter(c => !c.disabledInput).length;
+    const formats = [
+      { key: 'csv', label: 'CSV', desc: 'Simple spreadsheet-ready file', available: true },
+      { key: 'excel', label: 'Excel (.xlsx)', desc: 'Formatted workbook', available: true },
+      { key: 'quickbooks', label: 'QuickBooks', desc: 'Coming soon', available: false },
+      { key: 'xero', label: 'Xero', desc: 'Coming soon', available: false },
+      { key: 'pdf', label: 'PDF report', desc: 'Coming soon', available: false },
+    ];
+    const exportFormatsList = formats.map(f => ({
+      label: f.label, desc: f.desc,
+      descColor: f.available ? (f.key === s.exportFormat ? 'oklch(90% 0.03 260)' : 'oklch(55% 0.02 260)') : 'oklch(65% 0.01 260)',
+      onSelect: f.available ? () => this.setState({ exportFormat: f.key }) : () => {},
+      style: 'border-radius:11px;padding:13px 14px;text-align:left;cursor:' + (f.available ? 'pointer' : 'not-allowed') + ';'
+        + (f.available && f.key === s.exportFormat ? 'background:oklch(55% 0.16 260);color:#fff;border:1px solid oklch(55% 0.16 260);' : f.available ? 'background:#fff;color:oklch(30% 0.02 260);border:1px solid oklch(88% 0.01 260);' : 'background:oklch(97% 0.004 260);color:oklch(60% 0.01 260);border:1px solid oklch(93% 0.006 260);'),
+    }));
+
+    return {
+      role, roleLabel, showSidebar, isMobile: s.isMobile,
+      selectStaff: () => this.setState({ role: 'staff', screen: 'documents' }),
+      selectAdmin: () => this.setState({ role: 'admin', screen: 'documents' }),
+      roleBtnStaffStyle: roleBtnStyle(role === 'staff'), roleBtnAdminStyle: roleBtnStyle(role === 'admin'),
+      userInitials: role === 'staff' ? 'YO' : 'AD', userName: role === 'staff' ? 'You' : 'Alex Devraj',
+
+      showUploadNav, showExportNav, needsReviewCount,
+      goUpload: () => this.setState({ screen: 'upload' }),
+      goDocuments: () => this.setState({ screen: 'documents' }),
+      goExport: () => this.setState({ screen: 'export' }), goSettings: () => this.setState({ screen: 'settings' }), goUsers: () => this.setState({ screen: 'users' }),
+      showSettingsNav, showUsersNav, settingsSections, usersList,
+      showInviteForm: s.showInviteForm, openInviteForm: this.openInviteForm, closeInviteForm: this.closeInviteForm, sendInvite: this.sendInvite,
+      inviteDraft: s.inviteDraft, onInviteNameChange: (e) => this.onInviteField('name', e.target.value), onInviteEmailChange: (e) => this.onInviteField('email', e.target.value),
+      setInviteRoleStaff: () => this.onInviteField('role', 'Staff'), setInviteRoleAdmin: () => this.onInviteField('role', 'Admin'),
+      inviteRoleStaffStyle: chipStyle(s.inviteDraft.role === 'Staff'), inviteRoleAdminStyle: chipStyle(s.inviteDraft.role === 'Admin'),
+      navUploadStyle: navBtnStyle(s.screen === 'upload'), navDocumentsStyle: navBtnStyle(s.screen === 'documents'), navExportStyle: navBtnStyle(s.screen === 'export'), navSettingsStyle: navBtnStyle(s.screen === 'settings'), navUsersStyle: navBtnStyle(s.screen === 'users'),
+      mobNavUploadStyle: mobNavStyle(s.screen === 'upload'), mobNavDocumentsStyle: mobNavStyle(s.screen === 'documents'), mobNavExportStyle: mobNavStyle(s.screen === 'export'), mobNavSettingsStyle: mobNavStyle(s.screen === 'settings'), mobNavUsersStyle: mobNavStyle(s.screen === 'users'),
+
+      screenTitle: screenMeta[0], screenSubtitle: screenMeta[1],
+      topbarPadding: s.isMobile ? '14px 16px' : '18px 28px', contentPadding: s.isMobile ? '16px' : '28px',
+      mainPaddingBottomStyle: s.isMobile ? 'padding-bottom:66px;' : '',
+
+      isUpload: s.screen === 'upload', isDocuments: s.screen === 'documents', isDetail: s.screen === 'detail', isExport: s.screen === 'export', isSettings: s.screen === 'settings', isUsers: s.screen === 'users',
+
+      isUploadTabFile: s.uploadTab === 'file', isUploadTabScan: s.uploadTab === 'scan', isUploadTabEmail: s.uploadTab === 'email',
+      setUploadTabFile: () => this.setState({ uploadTab: 'file' }), setUploadTabScan: () => this.setState({ uploadTab: 'scan' }), setUploadTabEmail: () => this.setState({ uploadTab: 'email' }),
+      uploadTabFileStyle: tabPillStyle(s.uploadTab === 'file'), uploadTabScanStyle: tabPillStyle(s.uploadTab === 'scan'), uploadTabEmailStyle: tabPillStyle(s.uploadTab === 'email'),
+      setTypeInvoice: () => this.setState({ uploadDocType: 'invoice' }), setTypeExpense: () => this.setState({ uploadDocType: 'expense' }), setTypeBank: () => this.setState({ uploadDocType: 'bank_statement' }), setTypeAuto: () => this.setState({ uploadDocType: 'auto' }),
+      typePillInvoiceStyle: typePillStyle(s.uploadDocType === 'invoice'), typePillExpenseStyle: typePillStyle(s.uploadDocType === 'expense'), typePillBankStyle: typePillStyle(s.uploadDocType === 'bank_statement'), typePillAutoStyle: typePillStyle(s.uploadDocType === 'auto'),
+      onDragOver: this.onDragOver, onDragLeave: this.onDragLeave, onDrop: this.onDrop, simulateFileSelect: this.simulateFileSelect,
+      goSettingsPreventDefault: (e) => { e.preventDefault(); this.setState({ screen: 'settings' }); },
+      activeUploadFieldSummary: (() => {
+        const t = s.uploadDocType === 'auto' ? 'invoice' : s.uploadDocType;
+        const cfg = s.fieldConfig[t] || {};
+        const total = ALL_FIELDS[t].length + s.customFields[t].length;
+        return Object.values(cfg).filter(Boolean).length + ' of ' + total + ' fields';
+      })(),
+      dropZoneStyle: 'border:2px dashed ' + (s.dragActive ? 'oklch(55% 0.16 260)' : 'oklch(85% 0.01 260)') + ';background:' + (s.dragActive ? 'oklch(96% 0.03 260)' : 'oklch(98.5% 0.004 260)') + ';border-radius:14px;padding:40px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;',
+      hasUploadedFiles: s.uploadedFiles.length > 0,
+      uploadedFiles: s.uploadedFiles.map(f => ({ name: f.name, progressWidth: f.progress + '%', barColor: f.status === 'done' ? 'oklch(60% 0.14 150)' : 'oklch(55% 0.16 260)', statusLabel: f.status === 'done' ? 'Queued' : 'Uploading…', statusColor: f.status === 'done' ? 'oklch(42% 0.13 150)' : 'oklch(50% 0.16 260)', onRemove: () => this.removeFile(f.id) })),
+      scanToken: 'a8f3-92c1', copyEmail: this.copyEmail, inboundEmail: 'documents@scan.docflow.app',
+      isScanCapture: s.scanStep === 'capture', isScanPreview: s.scanStep === 'preview', isScanUploading: s.scanStep === 'uploading', isScanSuccess: s.scanStep === 'success',
+      scanCaptureHint: s.scanPageCount > 0 ? 'Position the next page in frame' : 'Position document in frame',
+      scanPageBadge: s.scanPageCount > 0 ? String(s.scanPageCount) : '',
+      capturePage: this.capturePage, addAnotherPage: this.addAnotherPage, useScannedPages: this.useScannedPages, scanAnother: this.scanAnother,
+      scanPageCount: s.scanPageCount,
+      scanPages: Array.from({ length: s.scanPageCount }, (_, i) => ({ n: i + 1, onRemove: () => this.removeScanPage(i + 1) })),
+      scanUploadTypeLabel: TYPE_LABEL[s.uploadDocType === 'auto' ? 'invoice' : s.uploadDocType],
+
+      showOwnerCol: role !== 'staff', tableColsHeader: '24px ' + (s.isMobile ? '2fr 1fr 1fr' : (role !== 'staff' ? '2fr 1fr 0.8fr 0.8fr 1fr 1fr' : '2fr 0.8fr 0.8fr 1fr 1fr')),
+      hasSelection: Object.keys(s.selectedDocIds).length > 0, selectedCount: Object.keys(s.selectedDocIds).length,
+      pageAllSelected: filteredDocuments.length > 0 && filteredDocuments.every(d => s.selectedDocIds[d.id]),
+      onToggleSelectAll: () => this.toggleSelectAll(filteredDocuments.map(d => d.id), filteredDocuments.length > 0 && filteredDocuments.every(d => s.selectedDocIds[d.id])),
+      bulkApprove: this.bulkApprove, bulkReject: this.bulkReject, bulkArchive: this.bulkArchive, clearSelection: this.clearSelection,
+      showArchived: s.showArchived, toggleShowArchived: this.toggleShowArchived, archivedCount,
+      filteredDocuments, noDocumentsInView: filteredDocuments.length === 0,
+      docSearch: s.docSearch, onDocSearchChange: (e) => this.setState({ docSearch: e.target.value, docPage: 1 }), docTypeFiltersList,
+      docPage, docTotalPages, showPagination: filtered.length > this.DOCS_PER_PAGE,
+      docPagePrevDisabled: docPage <= 1, docPageNextDisabled: docPage >= docTotalPages,
+      onDocPagePrev: this.docPagePrev, onDocPageNext: () => this.docPageNext(docTotalPages),
+      docPagePrevStyle: 'background:#fff;border:1px solid oklch(88% 0.01 260);border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:' + (docPage <= 1 ? 'not-allowed' : 'pointer') + ';color:' + (docPage <= 1 ? 'oklch(70% 0.01 260)' : 'oklch(35% 0.02 260)') + ';',
+      docPageNextStyle: 'background:#fff;border:1px solid oklch(88% 0.01 260);border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:' + (docPage >= docTotalPages ? 'not-allowed' : 'pointer') + ';color:' + (docPage >= docTotalPages ? 'oklch(70% 0.01 260)' : 'oklch(35% 0.02 260)') + ';',
+      onSortTitle: () => this.setDocSort('title'), onSortDate: () => this.setDocSort('date'), onSortAmount: () => this.setDocSort('amount'), onSortConf: () => this.setDocSort('conf'), onSortStatus: () => this.setDocSort('status'),
+      sortTitleArrow: s.docSortKey === 'title' ? (s.docSortDir === 'asc' ? ' ▲' : ' ▼') : '',
+      sortDateArrow: s.docSortKey === 'date' ? (s.docSortDir === 'asc' ? ' ▲' : ' ▼') : '',
+      sortAmountArrow: s.docSortKey === 'amount' ? (s.docSortDir === 'asc' ? ' ▲' : ' ▼') : '',
+      sortConfArrow: s.docSortKey === 'conf' ? (s.docSortDir === 'asc' ? ' ▲' : ' ▼') : '',
+      sortStatusArrow: s.docSortKey === 'status' ? (s.docSortDir === 'asc' ? ' ▲' : ' ▼') : '',
+
+      detailCols: s.isMobile ? '1fr' : '340px 1fr', detailPreviewId: 'preview-' + (s.selectedDocId || 'none'),
+      selectedDoc, activityLog, isArchivedDoc,
+      approveDoc: this.approveDoc, rejectDoc: this.rejectDoc, saveDoc: this.saveDoc, backFromDetail: this.backFromDetail,
+      archiveDoc: this.archiveDoc, restoreDoc: this.restoreDoc,
+
+      exportTypesList, exportMatchCount: this.matchCount(),
+      exportColumnsList, exportColumnsEnabledCount, exportColumnsTotalCount: exportColumnsList.length,
+      setExportStatusAll: () => this.setState({ exportStatus: 'all' }), setExportStatusVerified: () => this.setState({ exportStatus: 'verified' }),
+      exportStatusAllStyle: chipStyle(s.exportStatus === 'all'), exportStatusVerifiedStyle: chipStyle(s.exportStatus === 'verified'),
+      exportDateFrom: s.exportDateFrom, exportDateTo: s.exportDateTo,
+      onExportDateFromChange: (e) => this.setState({ exportDateFrom: e.target.value }), onExportDateToChange: (e) => this.setState({ exportDateTo: e.target.value }),
+      formatGridCols: s.isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', exportFormatsList, generateExport: this.generateExport,
+      exportHistoryList: s.exportHistory.map(h => ({ filename: h.filename, meta: h.meta, format: h.format })),
+
+      toastVisible: !!s.toast, toastMessage: s.toast || '', toastBottom: s.isMobile ? '84px' : '28px',
+    };
+  }
+}
+
+</script>
+</body>
+</html>
