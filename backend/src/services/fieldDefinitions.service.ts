@@ -18,6 +18,15 @@ export const fieldDefinitionsService = {
     return FieldDefinition.find().sort({ order: 1, createdAt: 1 }).lean();
   },
 
+  /** Enabled custom fields, sent to the extraction service so it looks for them by name. */
+  async listEnabledCustomForPrompt(): Promise<Array<{ key: string; label: string; description?: string }>> {
+    const defs = await FieldDefinition.find({ isCustom: true, enabled: true })
+      .sort({ order: 1 })
+      .select("key label description")
+      .lean();
+    return defs.map((d) => ({ key: d.key, label: d.label, description: d.description }));
+  },
+
   async toggle(key: string, enabled: boolean) {
     const def = await FieldDefinition.findOne({ key });
     if (!def) throw ApiError.notFound("Field definition not found");

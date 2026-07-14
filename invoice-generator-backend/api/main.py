@@ -13,7 +13,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -419,6 +419,25 @@ printed. Include every charge shown (freight, discount, cess, TCS, round-off) �
 that has no field in the schema into other_fields with its printed label."""
 
 
+def build_custom_fields_prompt(fields: list[dict]) -> str:
+    """Render an extra instruction block for admin-defined custom fields (from the
+    portal's Extraction Settings page), so they land in other_fields under a stable,
+    known key instead of whatever label Gemini would otherwise pick on its own."""
+    if not fields:
+        return ""
+    lines = "\n".join(
+        f'- key "{f["key"]}" ({f["label"]}): {f["description"]}' if f.get("description")
+        else f'- key "{f["key"]}" ({f["label"]})'
+        for f in fields
+    )
+    return f"""
+
+In addition to the fixed fields above, also specifically look for these additional fields on the
+document. Include each one in "other_fields" using EXACTLY the key given below (not the label), and
+use "" if it is genuinely not present on the document — do not guess:
+{lines}"""
+
+
 BOUNDARY_PROMPT = """This PDF contains one or more invoices, one after another. An invoice may
 span several pages.
 
@@ -654,7 +673,7 @@ def _is_rate_limit(exc: Exception) -> bool:
 
 
 async def _process_chunk(client, chunk, concurrency, total, attempt, on_file_progress=None,
-                         attempts_by_idx=None):
+                         attempts_by_idx=None, custom_fields_prompt=""):
     """Run a chunk of (idx, filename, data) through Gemini, at most `concurrency` at once.
 
     `attempts_by_idx` overrides how many times a given work item may be re-sent on bad
@@ -673,7 +692,7 @@ async def _process_chunk(client, chunk, concurrency, total, attempt, on_file_pro
                 if on_file_progress:
                     on_file_progress(i, "processing")
                 result, usage = await asyncio.to_thread(
-                    extract_invoice, client, name, data, mime, "", None,
+                    extract_invoice, client, name, data, mime, custom_fields_prompt, None,
                     attempts_by_idx.get(i, 2))
             log.info("[%d/%d] OK %s (%d rows) in %.1fs", i, total, name, len(result),
                      time.perf_counter() - file_start)
@@ -720,11 +739,12 @@ async def _process_chunk(client, chunk, concurrency, total, attempt, on_file_pro
 
 
 async def process_adaptive(client, chunk, concurrency, total, attempt=1, on_file_progress=None,
-                           attempts_by_idx=None):
+                           attempts_by_idx=None, custom_fields_prompt=""):
     """Process a chunk; on rate-limit, retry the rate-limited files as a smaller
     sub-chunk (halved concurrency) after an exponential backoff, down to sequential."""
     invoices, errors, rate_limited, usage = await _process_chunk(
-        client, chunk, concurrency, total, attempt, on_file_progress, attempts_by_idx)
+        client, chunk, concurrency, total, attempt, on_file_progress, attempts_by_idx,
+        custom_fields_prompt)
 
     if rate_limited:
         if attempt > RATE_LIMIT_RETRIES:
@@ -740,7 +760,7 @@ async def process_adaptive(client, chunk, concurrency, total, attempt=1, on_file
             await asyncio.sleep(backoff)
             sub_inv, sub_err, sub_usage = await process_adaptive(
                 client, rate_limited, sub_conc, total, attempt + 1, on_file_progress,
-                attempts_by_idx)
+                attempts_by_idx, custom_fields_prompt)
             invoices.extend(sub_inv)
             errors.extend(sub_err)
             usage["input"] += sub_usage["input"]
@@ -748,7 +768,7 @@ async def process_adaptive(client, chunk, concurrency, total, attempt=1, on_file
     return invoices, errors, usage
 
 
-async def reread_unreconciled(client, invoices: list[dict], chunk) -> tuple[list[dict], dict]:
+async def reread_unreconciled(client, invoices: list[dict], chunk, custom_fields_prompt="") -> tuple[list[dict], dict]:
     """Second opinion on the documents whose figures don't add up.
 
     A failed check is usually the document's own doing (a charge we can't model) but it
@@ -776,7 +796,7 @@ async def reread_unreconciled(client, invoices: list[dict], chunk) -> tuple[list
         try:
             fresh, u = await asyncio.to_thread(
                 extract_invoice, client, name, data, mime,
-                VERIFY_SUFFIX.format(issues=issues), 0.2)
+                VERIFY_SUFFIX.format(issues=issues) + custom_fields_prompt, 0.2)
         except Exception as exc:
             log.warning("  re-read of %s failed (%s); keeping the first reading", name, exc)
             u = getattr(exc, "usage", None)
@@ -915,7 +935,7 @@ def resolve_pages(invoices, work_meta):
                 inv.pop("page", None)           # unknown beats wrong — the card just shows no page
 
 
-async def retry_failed_by_splitting(client, errors, work_to_file, work_meta, depth=1):
+async def retry_failed_by_splitting(client, errors, work_to_file, work_meta, depth=1, custom_fields_prompt=""):
     """A chunk that returned unparseable JSON gets cut smaller and retried.
 
     Truncation isn't the only way a call fails — the model sometimes emits malformed JSON
@@ -959,13 +979,14 @@ async def retry_failed_by_splitting(client, errors, work_to_file, work_meta, dep
                     if wid in {w for w, _, _, _ in sub_chunk} and len(m["starts"]) > 1}
 
     invoices, errs, u = await process_adaptive(client, sub_chunk, MAX_CONCURRENCY, len(sub_chunk),
-                                               attempts_by_idx=sub_attempts)
+                                               attempts_by_idx=sub_attempts,
+                                               custom_fields_prompt=custom_fields_prompt)
     usage["input"] += u["input"]
     usage["output"] += u["output"]
 
     # anything still broken gets cut smaller again, until it's a single invoice
     deeper_inv, deeper_err, u2 = await retry_failed_by_splitting(
-        client, errs, work_to_file, work_meta, depth + 1)
+        client, errs, work_to_file, work_meta, depth + 1, custom_fields_prompt)
     usage["input"] += u2["input"]
     usage["output"] += u2["output"]
 
@@ -973,7 +994,7 @@ async def retry_failed_by_splitting(client, errors, work_to_file, work_meta, dep
     return invoices + deeper_inv, still_failed, usage
 
 
-async def _run_job(jid: str, client, chunk, pre_errors, total, stored=None):
+async def _run_job(jid: str, client, chunk, pre_errors, total, stored=None, custom_fields_prompt=""):
     batch_start = time.perf_counter()
     try:
         by_name = {s["filename"]: s.get("_id") for s in (stored or [])}
@@ -1008,20 +1029,20 @@ async def _run_job(jid: str, client, chunk, pre_errors, total, stored=None):
 
         invoices, extract_errors, usage = await process_adaptive(
             client, chunk, MAX_CONCURRENCY, len(chunk), on_file_progress=file_progress,
-            attempts_by_idx=attempts_by_idx)
+            attempts_by_idx=attempts_by_idx, custom_fields_prompt=custom_fields_prompt)
         usage["input"] += split_usage["input"]
         usage["output"] += split_usage["output"]
 
         # a batch whose JSON wouldn't parse gets cut smaller and retried, so one awkward
         # invoice doesn't take the whole batch down with it
         recovered, extract_errors, retry_usage = await retry_failed_by_splitting(
-            client, extract_errors, work_to_file, work_meta)
+            client, extract_errors, work_to_file, work_meta, custom_fields_prompt=custom_fields_prompt)
         invoices.extend(recovered)
         usage["input"] += retry_usage["input"]
         usage["output"] += retry_usage["output"]
 
         # second opinion on anything whose figures don't add up (billed, so fold in the tokens)
-        invoices, verify_usage = await reread_unreconciled(client, invoices, chunk)
+        invoices, verify_usage = await reread_unreconciled(client, invoices, chunk, custom_fields_prompt)
         usage["input"] += verify_usage["input"]
         usage["output"] += verify_usage["output"]
 
@@ -1088,15 +1109,21 @@ def login(body: LoginBody):
 
 
 @app.post("/extract", dependencies=[Depends(require_token)])
-async def extract(files: list[UploadFile] = File(...)):
+async def extract(files: list[UploadFile] = File(...), custom_fields: str = Form("[]")):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not set in environment/.env")
 
+    try:
+        custom_fields_list = json.loads(custom_fields) or []
+    except (json.JSONDecodeError, TypeError):
+        custom_fields_list = []
+    custom_fields_prompt = build_custom_fields_prompt(custom_fields_list)
+
     client = genai.Client(api_key=api_key,
                           http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
     total = len(files)
-    log.info("=== /extract received %d file(s) ===", total)
+    log.info("=== /extract received %d file(s), %d custom field(s) ===", total, len(custom_fields_list))
 
     # Read uploads into memory now (the request body is only available here), reject
     # non-PDFs up front, then hand off to a background task.
@@ -1155,7 +1182,8 @@ async def extract(files: list[UploadFile] = File(...)):
         for _, name in file_order
     ]
     # keep a reference to the task so it isn't garbage-collected mid-flight
-    JOBS[jid]["task"] = asyncio.create_task(_run_job(jid, client, chunk, pre_errors, total, stored))
+    JOBS[jid]["task"] = asyncio.create_task(
+        _run_job(jid, client, chunk, pre_errors, total, stored, custom_fields_prompt))
     return {"job_id": jid}
 
 

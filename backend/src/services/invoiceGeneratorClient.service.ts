@@ -20,6 +20,12 @@ export interface UploadedFile {
   mimetype: string;
 }
 
+export interface CustomFieldPromptInput {
+  key: string;
+  label: string;
+  description?: string;
+}
+
 let cachedToken: string | null = null;
 
 const http: AxiosInstance = axios.create({
@@ -64,12 +70,15 @@ export const invoiceGeneratorClient = {
    * Forward one or more files to /extract. Returns the job_id; the Python service registers
    * a `Files` doc (status "processing") per file under that job_id immediately.
    */
-  async extract(files: UploadedFile[]): Promise<{ jobId: string }> {
+  async extract(files: UploadedFile[], customFields?: CustomFieldPromptInput[]): Promise<{ jobId: string }> {
     return withAuth(async (token) => {
       const form = new FormData();
       for (const f of files) {
         const blob = new Blob([new Uint8Array(f.buffer)], { type: f.mimetype });
         form.append("files", blob, f.originalname);
+      }
+      if (customFields && customFields.length > 0) {
+        form.append("custom_fields", JSON.stringify(customFields));
       }
       try {
         const { data } = await http.post<{ job_id: string }>("/extract", form, {

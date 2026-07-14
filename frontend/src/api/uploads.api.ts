@@ -6,9 +6,10 @@ export interface UploadResult {
 }
 
 export const uploadsApi = {
-  upload: (files: File[], onProgress?: (pct: number) => void) => {
+  upload: (files: File[], onProgress?: (pct: number) => void, source?: "upload" | "scan") => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
+    if (source) form.append("source", source);
     return api
       .post<UploadResult>("/documents/upload", form, {
         onUploadProgress: (e) => {
@@ -17,10 +18,6 @@ export const uploadsApi = {
       })
       .then((r) => r.data);
   },
-  createScanSession: () =>
-    api
-      .post<{ token: string; expiresAt: string; scanUrl: string }>("/scan-sessions")
-      .then((r) => r.data),
   inboundEmailAddress: () =>
     api.get<{ address: string }>("/inbound-email-address").then((r) => r.data),
 };

@@ -19,7 +19,7 @@ export default function UploadPage() {
     <div>
       <PageHeader title="Upload & Scan" subtitle="Bring invoices into DocFlow for automatic extraction." />
 
-      <div className="row gap-8" style={{ marginBottom: 20 }}>
+      <div className="row gap-8" style={{ marginBottom: 20, flexWrap: "wrap" }}>
         {TABS.map((t) => (
           <button
             key={t.id}
