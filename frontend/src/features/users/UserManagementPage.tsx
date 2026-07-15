@@ -83,6 +83,7 @@ export default function UserManagementPage() {
         {loading ? (
           <Spinner />
         ) : (
+          <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
@@ -140,6 +141,7 @@ export default function UserManagementPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

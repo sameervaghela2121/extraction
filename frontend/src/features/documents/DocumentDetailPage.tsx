@@ -101,7 +101,7 @@ export default function DocumentDetailPage() {
 
       <div className="detail-grid">
         {/* Preview */}
-        <div className="card" style={{ padding: 12, overflow: "hidden", minHeight: 820 }}>
+        <div className="card preview-card" style={{ padding: 12, overflow: "hidden" }}>
           {doc.extractionStatus === "failed" ? (
             <div className="stack" style={{ padding: 24, gap: 8 }}>
               <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
@@ -111,7 +111,8 @@ export default function DocumentDetailPage() {
             <iframe
               title="Document preview"
               src={previewUrl}
-              style={{ width: "100%", height: 800, border: "none", borderRadius: 8 }}
+              className="preview-iframe"
+              style={{ width: "100%", border: "none", borderRadius: 8 }}
             />
           ) : (
             <Spinner label="Loading preview…" />
@@ -211,7 +212,13 @@ export default function DocumentDetailPage() {
 
       <style>{`
         .detail-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; }
-        @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
+        .preview-card { min-height: 820px; }
+        .preview-iframe { height: min(800px, 75vh); }
+        @media (max-width: 900px) {
+          .detail-grid { grid-template-columns: 1fr; }
+          .preview-card { min-height: 0; }
+          .preview-iframe { height: 65vh; }
+        }
       `}</style>
     </div>
   );

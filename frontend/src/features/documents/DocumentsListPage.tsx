@@ -125,6 +125,7 @@ export default function DocumentsListPage() {
         ) : items.length === 0 ? (
           <EmptyState>Nothing here yet.</EmptyState>
         ) : (
+          <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
@@ -164,6 +165,7 @@ export default function DocumentsListPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -49,6 +49,10 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* A single element overflowing its container (a wide table, a fixed-width row) can
+     otherwise force the whole page to scroll sideways — clip at the body level so an
+     overflow bug in one component can't drag the rest of the layout with it. */
+  overflow-x: hidden;
 }
 
 a {
@@ -264,6 +268,16 @@ textarea {
 }
 .table tbody tr:hover {
   background: var(--surface-2);
+}
+/* Wrap a <table> in this on narrow screens so it scrolls horizontally within its own
+   card instead of squeezing every column unreadably thin or getting silently clipped
+   by a parent's overflow:hidden. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll .table {
+  min-width: 640px;
 }
 
 /* ---- utility ---- */
