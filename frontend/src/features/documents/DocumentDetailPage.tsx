@@ -73,20 +73,17 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const act = async (action: "verify" | "reject" | "archive" | "restore") => {
+  const act = async (action: "verify" | "archive" | "restore") => {
     try {
       if (action === "verify") await documentsApi.verify(id);
-      if (action === "reject") await documentsApi.reject(id);
       if (action === "archive") await documentsApi.archive(id);
       if (action === "restore") await documentsApi.restore(id);
       notify(
         action === "verify"
           ? "Document verified"
-          : action === "reject"
-            ? "Sent back for re-scan"
-            : action === "archive"
-              ? "Document deleted"
-              : "Document restored",
+          : action === "archive"
+            ? "Document deleted"
+            : "Document restored",
       );
       if (action === "archive") {
         navigate("/documents");
@@ -110,132 +107,137 @@ export default function DocumentDetailPage() {
       </button>
 
       <div className="detail-grid">
-        {/* Preview */}
-        <div className="card preview-card" style={{ padding: 12, overflow: "hidden" }}>
-          {doc.extractionStatus === "failed" ? (
-            <div className="stack" style={{ padding: 24, gap: 8 }}>
-              <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
-              <span className="muted" style={{ fontSize: 13 }}>{doc.extractionError}</span>
-            </div>
-          ) : !previewUrl ? (
-            <Spinner label="Loading preview…" />
-          ) : isMobile ? (
-            <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
-              <FileText size={40} style={{ color: "var(--text-muted)" }} />
-              <div style={{ fontWeight: 600 }}>{doc.title}</div>
-              <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
-                Open document
-              </button>
-            </div>
-          ) : (
-            <iframe
-              title="Document preview"
-              src={previewUrl}
-              className="preview-iframe"
-              style={{ width: "100%", border: "none", borderRadius: 8 }}
-            />
-          )}
-        </div>
-
-        {/* Fields + actions */}
+        {/* Left column: PDF preview + action buttons */}
         <div className="stack" style={{ gap: 16 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <div className="row" style={{ marginBottom: 4 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700 }}>{doc.title}</h2>
-              <div className="spacer" />
-              <StatusPill status={doc.status} />
-            </div>
-            <div className="row gap-12" style={{ marginBottom: 16 }}>
-              <span className="faint" style={{ fontSize: 12 }}>
-                Invoice · via {doc.source} · {new Date(doc.uploadedAt).toLocaleDateString()}
-              </span>
-              <ConfidenceBadge confidence={doc.confidence} />
-            </div>
-            {doc.validation && doc.confidence !== "high" && (
-              <div
-                style={{
-                  fontSize: 13,
-                  padding: "8px 12px",
-                  background: "var(--danger-soft)",
-                  color: "oklch(40% 0.16 25)",
-                  borderRadius: "var(--radius-sm)",
-                  marginBottom: 14,
-                }}
-              >
-                {doc.validation}
+          <div className="card preview-card" style={{ padding: 12, overflow: "hidden" }}>
+            {doc.extractionStatus === "failed" ? (
+              <div className="stack" style={{ padding: 24, gap: 8 }}>
+                <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
+                <span className="muted" style={{ fontSize: 13 }}>{doc.extractionError}</span>
               </div>
-            )}
-
-            <div className="stack" style={{ gap: 12 }}>
-              {doc.fields.map((f) => (
-                <div key={f.key}>
-                  <label className="field-label" style={{ textTransform: "capitalize" }}>
-                    {f.key.replace(/_/g, " ")}
-                  </label>
-                  <input
-                    className="input"
-                    value={edits[f.key] ?? (f.value ?? "").toString()}
-                    onChange={(e) => setEdits((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                  />
-                </div>
-              ))}
-              {doc.fields.length === 0 && (
-                <div className="muted" style={{ fontSize: 13 }}>
-                  {doc.extractionStatus === "processing"
-                    ? "Extraction in progress — check back shortly."
-                    : "No fields extracted."}
-                </div>
-              )}
-            </div>
-
-            {hasEdits && (
-              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveFields} disabled={saving}>
-                {saving ? "Saving…" : "Save changes"}
-              </button>
+            ) : !previewUrl ? (
+              <Spinner label="Loading preview…" />
+            ) : isMobile ? (
+              <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
+                <FileText size={40} style={{ color: "var(--text-muted)" }} />
+                <div style={{ fontWeight: 600 }}>{doc.title}</div>
+                <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
+                  Open document
+                </button>
+              </div>
+            ) : (
+              <iframe
+                title="Document preview"
+                src={previewUrl}
+                className="preview-iframe"
+                style={{ width: "100%", border: "none", borderRadius: 8 }}
+              />
             )}
           </div>
 
-          {/* Action buttons */}
           <div className="row gap-8" style={{ flexWrap: "wrap" }}>
             {doc.status === "archived" ? (
               <button className="btn btn-primary" onClick={() => act("restore")}>Restore document</button>
             ) : (
               <>
                 <button className="btn btn-primary" onClick={() => act("verify")}>Approve & verify</button>
-                <button className="btn" onClick={() => act("reject")}>Send back for re-scan</button>
                 <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
               </>
             )}
           </div>
+        </div>
 
-          {/* Activity log */}
-          <div className="card" style={{ padding: 18 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Activity</h3>
-            <div className="stack" style={{ gap: 12 }}>
-              {doc.activity.map((a, i) => (
-                <div key={i} className="row gap-8" style={{ alignItems: "flex-start" }}>
-                  <span className="dot dot-high" style={{ marginTop: 6 }} />
-                  <div>
-                    <div style={{ fontSize: 13 }}>
-                      <strong>{a.action}</strong> · {a.actor}
-                    </div>
-                    <div className="faint" style={{ fontSize: 12 }}>{new Date(a.timestamp).toLocaleString()}</div>
-                  </div>
-                </div>
-              ))}
+        {/* Middle column: fields */}
+        <div className="card detail-fields-card" style={{ padding: 18 }}>
+          <div className="row" style={{ marginBottom: 4, flexWrap: "wrap", rowGap: 4 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, minWidth: 0, overflowWrap: "break-word" }}>{doc.title}</h2>
+            <div className="spacer" />
+            <StatusPill status={doc.status} />
+          </div>
+          <div className="row gap-12" style={{ marginBottom: 16 }}>
+            <span className="faint" style={{ fontSize: 12 }}>
+              Invoice · via {doc.source} · {new Date(doc.uploadedAt).toLocaleDateString()}
+            </span>
+            <ConfidenceBadge confidence={doc.confidence} />
+          </div>
+          {doc.validation && doc.confidence !== "high" && (
+            <div
+              style={{
+                fontSize: 13,
+                padding: "8px 12px",
+                background: "var(--danger-soft)",
+                color: "oklch(40% 0.16 25)",
+                borderRadius: "var(--radius-sm)",
+                marginBottom: 14,
+              }}
+            >
+              {doc.validation}
             </div>
+          )}
+
+          <div className="stack" style={{ gap: 12 }}>
+            {doc.fields.map((f) => (
+              <div key={f.key}>
+                <label className="field-label" style={{ textTransform: "capitalize" }}>
+                  {f.key.replace(/_/g, " ")}
+                </label>
+                <input
+                  className="input"
+                  value={edits[f.key] ?? (f.value ?? "").toString()}
+                  onChange={(e) => setEdits((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+            {doc.fields.length === 0 && (
+              <div className="muted" style={{ fontSize: 13 }}>
+                {doc.extractionStatus === "processing"
+                  ? "Extraction in progress — check back shortly."
+                  : "No fields extracted."}
+              </div>
+            )}
+          </div>
+
+          {hasEdits && (
+            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveFields} disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          )}
+        </div>
+
+        {/* Right column: activity */}
+        <div className="card detail-fields-card" style={{ padding: 18 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Activity</h3>
+          <div className="stack" style={{ gap: 12 }}>
+            {doc.activity.map((a, i) => (
+              <div key={i} className="row gap-8" style={{ alignItems: "flex-start" }}>
+                <span className="dot dot-high" style={{ marginTop: 6 }} />
+                <div>
+                  <div style={{ fontSize: 13 }}>
+                    <strong>{a.action}</strong> · {a.actor}
+                  </div>
+                  <div className="faint" style={{ fontSize: 12 }}>{new Date(a.timestamp).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
       <style>{`
-        .detail-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; }
-        .preview-card { min-height: 820px; }
-        .preview-iframe { height: min(800px, 75vh); }
+        /* This page needs more width than the app's default 1200px content cap (that cap is an
+           inline style on .app-main, so overriding it from here needs !important — a plain class
+           rule can't win against an inline style). Only applies while this page is mounted. */
+        .app-main { max-width: 1600px !important; }
+        .detail-grid { display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr; gap: 20px; align-items: start; }
+        .preview-card, .detail-fields-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
+        .detail-fields-card { overflow-y: auto; }
+        .preview-iframe { height: 100%; }
         @media (max-width: 900px) {
+          .app-main { max-width: none !important; }
           .detail-grid { grid-template-columns: 1fr; }
-          .preview-card { min-height: 0; }
+          .preview-card, .detail-fields-card { height: auto; }
           .preview-iframe { height: 65vh; }
+          .detail-fields-card { overflow-y: visible; }
         }
       `}</style>
     </div>
