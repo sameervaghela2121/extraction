@@ -89,7 +89,7 @@ export default function UserManagementPage() {
               <tr>
                 <th>Name</th>
                 <th>Role</th>
-                <th>Documents</th>
+                <th className="hide-narrow">Documents</th>
                 <th>Status</th>
                 <th style={{ width: 90 }}></th>
               </tr>
@@ -118,7 +118,7 @@ export default function UserManagementPage() {
                         <span style={{ textTransform: "capitalize" }}>{u.role}</span>
                       )}
                     </td>
-                    <td className="muted">{u.docCount}</td>
+                    <td className="muted hide-narrow">{u.docCount}</td>
                     <td>
                       {editing ? (
                         <div className="row gap-8">

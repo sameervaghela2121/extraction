@@ -37,8 +37,6 @@ export default function AppLayout() {
           borderRight: "1px solid var(--border)",
           background: "var(--surface)",
           padding: "18px 14px",
-          display: "flex",
-          flexDirection: "column",
           position: "fixed",
           top: 0,
           bottom: 0,
@@ -91,7 +89,7 @@ export default function AppLayout() {
       {/* Main content */}
       <main
         className="app-main"
-        style={{ marginLeft: "var(--sidebar-w)", flex: 1, padding: "28px 32px 80px", maxWidth: 1200 }}
+        style={{ marginLeft: "var(--sidebar-w)", flex: 1, padding: "28px 32px 80px", maxWidth: 1200, minWidth: 0 }}
       >
         <Outlet />
       </main>
@@ -114,6 +112,10 @@ export default function AppLayout() {
         }
         .nav-link:hover { background: var(--surface-2); text-decoration: none; }
         .nav-link.active { background: var(--brand-soft); color: var(--brand-strong); }
+        /* display/flex-direction live here, not as inline styles on the <aside>, so the
+           max-width:900px override below can actually win — an inline style beats a
+           plain class rule regardless of media query, !important or not. */
+        .app-sidebar { display: flex; flex-direction: column; }
         .app-bottomnav { display: none; }
         @media (max-width: 900px) {
           .app-sidebar { display: none; }

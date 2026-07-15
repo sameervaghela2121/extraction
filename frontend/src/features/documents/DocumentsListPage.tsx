@@ -135,14 +135,14 @@ export default function DocumentsListPage() {
                 <th style={{ cursor: "pointer" }} onClick={() => toggleSort("title")}>
                   Document {sort === "title" ? (order === "asc" ? "↑" : "↓") : ""}
                 </th>
-                {user?.role === "admin" && <th>Uploaded by</th>}
+                {user?.role === "admin" && <th className="hide-narrow">Uploaded by</th>}
                 <th style={{ cursor: "pointer" }} onClick={() => toggleSort("date")}>
                   Date {sort === "date" ? (order === "asc" ? "↑" : "↓") : ""}
                 </th>
                 <th>Amount</th>
-                <th>Confidence</th>
+                <th className="hide-narrow">Confidence</th>
                 <th>Status</th>
-                <th>Extraction status</th>
+                <th className="hide-narrow">Extraction status</th>
               </tr>
             </thead>
             <tbody>
@@ -155,12 +155,12 @@ export default function DocumentsListPage() {
                     <div style={{ fontWeight: 600 }}>{d.title}</div>
                     <div className="faint" style={{ fontSize: 12 }}>Invoice · via {d.source}</div>
                   </td>
-                  {user?.role === "admin" && <td className="muted">{d.owner}</td>}
+                  {user?.role === "admin" && <td className="muted hide-narrow">{d.owner}</td>}
                   <td className="muted">{new Date(d.uploadedAt).toLocaleDateString()}</td>
                   <td>{d.amount != null ? `₹${d.amount.toLocaleString()}` : "—"}</td>
-                  <td><ConfidenceBadge confidence={d.confidence} /></td>
+                  <td className="hide-narrow"><ConfidenceBadge confidence={d.confidence} /></td>
                   <td><StatusPill status={d.status} /></td>
-                  <td><ExtractionStatusPill status={d.extractionStatus} /></td>
+                  <td className="hide-narrow"><ExtractionStatusPill status={d.extractionStatus} /></td>
                 </tr>
               ))}
             </tbody>
