@@ -33,9 +33,9 @@ export const documentsController = {
   async verify(req: Request, res: Response) {
     res.json(await documentsService.transition(req.params.id, req.auth!, "verify"));
   },
-  // async reject(req: Request, res: Response) {
-  //   res.json(await documentsService.transition(req.params.id, req.auth!, "reject"));
-  // },
+  async unverify(req: Request, res: Response) {
+    res.json(await documentsService.transition(req.params.id, req.auth!, "unverify"));
+  },
   async archive(req: Request, res: Response) {
     res.json(await documentsService.transition(req.params.id, req.auth!, "archive"));
   },
@@ -46,9 +46,9 @@ export const documentsController = {
   async bulkVerify(req: Request, res: Response) {
     res.json(await documentsService.bulkTransition(req.body.ids ?? [], req.auth!, "verify"));
   },
-  // async bulkReject(req: Request, res: Response) {
-  //   res.json(await documentsService.bulkTransition(req.body.ids ?? [], req.auth!, "reject"));
-  // },
+  async bulkUnverify(req: Request, res: Response) {
+    res.json(await documentsService.bulkTransition(req.body.ids ?? [], req.auth!, "unverify"));
+  },
   async bulkArchive(req: Request, res: Response) {
     res.json(await documentsService.bulkTransition(req.body.ids ?? [], req.auth!, "archive"));
   },

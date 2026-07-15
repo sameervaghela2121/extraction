@@ -13,7 +13,7 @@ router.get("/", asyncHandler(documentsController.list));
 
 // Bulk actions (declared before :id routes to avoid path collisions)
 router.post("/bulk/verify", validate({ body: bulkSchema }), asyncHandler(documentsController.bulkVerify));
-// router.post("/bulk/reject", validate({ body: bulkSchema }), asyncHandler(documentsController.bulkReject));
+router.post("/bulk/unverify", validate({ body: bulkSchema }), asyncHandler(documentsController.bulkUnverify));
 router.post("/bulk/archive", validate({ body: bulkSchema }), asyncHandler(documentsController.bulkArchive));
 
 router.get("/:id", asyncHandler(documentsController.detail));
@@ -25,7 +25,7 @@ router.patch(
   asyncHandler(documentsController.updateFields),
 );
 router.post("/:id/verify", asyncHandler(documentsController.verify));
-// router.post("/:id/reject", asyncHandler(documentsController.reject));
+router.post("/:id/unverify", asyncHandler(documentsController.unverify));
 router.post("/:id/archive", asyncHandler(documentsController.archive));
 router.post("/:id/restore", asyncHandler(documentsController.restore));
 

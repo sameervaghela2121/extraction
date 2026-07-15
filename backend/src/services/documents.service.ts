@@ -211,7 +211,7 @@ export const documentsService = {
   async transition(
     id: string,
     auth: AuthPayload,
-    action: "verify" | "reject" | "archive" | "restore",
+    action: "verify" | "unverify" | "archive" | "restore",
   ) {
     const doc = await this.getOwnedOrAdmin(id, auth);
     switch (action) {
@@ -221,9 +221,9 @@ export const documentsService = {
         doc.verifiedBy = new Types.ObjectId(auth.userId);
         await logActivity(doc._id, auth.name, "Approved & verified");
         break;
-      case "reject":
+      case "unverify":
         doc.status = "pending";
-        await logActivity(doc._id, auth.name, "Sent back for re-scan");
+        await logActivity(doc._id, auth.name, "Marked as pending");
         break;
       case "archive":
         doc.status = "archived";
@@ -241,7 +241,7 @@ export const documentsService = {
   async bulkTransition(
     ids: string[],
     auth: AuthPayload,
-    action: "verify" | "reject" | "archive",
+    action: "verify" | "unverify" | "archive",
   ) {
     const results = [];
     for (const id of ids) {

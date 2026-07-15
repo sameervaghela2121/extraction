@@ -25,11 +25,11 @@ export const documentsApi = {
   updateFields: (id: string, fields: Record<string, string | number>) =>
     api.patch<DocumentDetail>(`/documents/${id}/fields`, { fields }).then((r) => r.data),
   verify: (id: string) => api.post(`/documents/${id}/verify`).then((r) => r.data),
-  // reject: (id: string) => api.post(`/documents/${id}/reject`).then((r) => r.data),
+  unverify: (id: string) => api.post(`/documents/${id}/unverify`).then((r) => r.data),
   archive: (id: string) => api.post(`/documents/${id}/archive`).then((r) => r.data),
   restore: (id: string) => api.post(`/documents/${id}/restore`).then((r) => r.data),
   bulkVerify: (ids: string[]) => api.post("/documents/bulk/verify", { ids }).then((r) => r.data),
-  // bulkReject: (ids: string[]) => api.post("/documents/bulk/reject", { ids }).then((r) => r.data),
+  bulkUnverify: (ids: string[]) => api.post("/documents/bulk/unverify", { ids }).then((r) => r.data),
   bulkArchive: (ids: string[]) => api.post("/documents/bulk/archive", { ids }).then((r) => r.data),
   /** Fetches the original file as an authenticated blob and returns a local object URL
    * for it — a plain <iframe src="/api/..."> can't carry the JWT header, so this is

@@ -89,12 +89,13 @@ export default function DocumentsListPage() {
     setSelected(next);
   };
 
-  const bulk = async (action: "verify" | "archive") => {
+  const bulk = async (action: "verify" | "unverify" | "archive") => {
     const ids = [...selected];
     try {
       if (action === "verify") await documentsApi.bulkVerify(ids);
+      if (action === "unverify") await documentsApi.bulkUnverify(ids);
       if (action === "archive") await documentsApi.bulkArchive(ids);
-      const verb = action === "archive" ? "deleted" : "verified";
+      const verb = action === "archive" ? "deleted" : action === "unverify" ? "marked as pending" : "verified";
       notify(`${ids.length} document${ids.length > 1 ? "s" : ""} ${verb}`);
       setSelected(new Set());
       load();
@@ -134,6 +135,7 @@ export default function DocumentsListPage() {
           <strong style={{ fontSize: 13 }}>{selected.size} selected</strong>
           <div className="spacer" />
           <button className="btn btn-sm btn-primary" onClick={() => bulk("verify")}>Approve & verify</button>
+          <button className="btn btn-sm" onClick={() => bulk("unverify")}>Mark as pending</button>
           <button className="btn btn-sm" onClick={() => bulk("archive")}>Delete</button>
         </div>
       )}

@@ -36,6 +36,18 @@ export default function DocumentDetailPage() {
     }
   }, [id, notify]);
 
+  // Same fetch as `load`, but never flips the page-level `loading` flag — used after an
+  // in-place action (verify/unverify/restore) so the page just updates where it changed
+  // instead of unmounting into a full-page spinner and back.
+  const refresh = useCallback(async () => {
+    try {
+      const d = await documentsApi.detail(id);
+      setDoc(d);
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    }
+  }, [id, notify]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -73,23 +85,26 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const act = async (action: "verify" | "archive" | "restore") => {
+  const act = async (action: "verify" | "unverify" | "archive" | "restore") => {
     try {
       if (action === "verify") await documentsApi.verify(id);
+      if (action === "unverify") await documentsApi.unverify(id);
       if (action === "archive") await documentsApi.archive(id);
       if (action === "restore") await documentsApi.restore(id);
       notify(
         action === "verify"
           ? "Document verified"
-          : action === "archive"
-            ? "Document deleted"
-            : "Document restored",
+          : action === "unverify"
+            ? "Marked as pending"
+            : action === "archive"
+              ? "Document deleted"
+              : "Document restored",
       );
       if (action === "archive") {
         navigate("/documents");
         return;
       }
-      load();
+      refresh();
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     }
@@ -138,6 +153,11 @@ export default function DocumentDetailPage() {
           <div className="row gap-8" style={{ flexWrap: "wrap" }}>
             {doc.status === "archived" ? (
               <button className="btn btn-primary" onClick={() => act("restore")}>Restore document</button>
+            ) : doc.status === "verified" ? (
+              <>
+                <button className="btn" onClick={() => act("unverify")}>Mark as pending</button>
+                <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
+              </>
             ) : (
               <>
                 <button className="btn btn-primary" onClick={() => act("verify")}>Approve & verify</button>
