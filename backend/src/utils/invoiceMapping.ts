@@ -68,3 +68,12 @@ export function extractedFields(inv?: ISharedInvoice | null): ExtractedField[] {
 
   return out;
 }
+
+/** Line items are tabular (qty/rate/amount per row), unlike the scalar fields above —
+ * kept separate so the Detail page can render them as a table instead of input rows.
+ * `items` is `Schema.Types.Mixed`: different PDFs can extract different item shapes,
+ * so this stays a loose record rather than a fixed interface — the caller derives
+ * columns from whatever keys actually show up instead of assuming one schema. */
+export function extractedItems(inv?: ISharedInvoice | null): Array<Record<string, unknown>> {
+  return (inv?.items as unknown as Array<Record<string, unknown>>) ?? [];
+}

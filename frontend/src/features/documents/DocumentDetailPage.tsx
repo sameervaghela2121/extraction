@@ -57,15 +57,26 @@ export default function DocumentDetailPage() {
   // extractionStatus (not the whole `doc`) so saving a field doesn't re-fetch the PDF.
   useEffect(() => {
     if (!doc || doc.extractionStatus === "failed") return;
+    // If the component unmounts (e.g. navigating away) before this resolves, `cancelled`
+    // stops it touching state or leaking the blob URL — otherwise the fetch still finishes
+    // after cleanup already ran with objectUrl still null, so nothing gets revoked.
+    let cancelled = false;
     let objectUrl: string | null = null;
     documentsApi
       .getFilePreviewUrl(doc.id)
       .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         objectUrl = url;
         setPreviewUrl(url);
       })
-      .catch((err) => notify(apiErrorMessage(err), "error"));
+      .catch((err) => {
+        if (!cancelled) notify(apiErrorMessage(err), "error");
+      });
     return () => {
+      cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [doc?.id, doc?.extractionStatus, notify]);
@@ -114,6 +125,9 @@ export default function DocumentDetailPage() {
   if (!doc) return null;
 
   const hasEdits = Object.keys(edits).length > 0;
+  // Line items don't have a fixed shape (different PDFs extract different columns), so the
+  // table's columns are whatever keys actually show up across this document's items.
+  const itemColumns = Array.from(new Set(doc.items.flatMap((item) => Object.keys(item))));
 
   return (
     <div>
@@ -155,7 +169,7 @@ export default function DocumentDetailPage() {
               <button className="btn btn-primary" onClick={() => act("restore")}>Restore document</button>
             ) : doc.status === "verified" ? (
               <>
-                <button className="btn" onClick={() => act("unverify")}>Mark as pending</button>
+                <button className="btn" onClick={() => act("unverify")}>Mark Unverified</button>
                 <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
               </>
             ) : (
@@ -220,6 +234,34 @@ export default function DocumentDetailPage() {
             <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveFields} disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
             </button>
+          )}
+
+          {doc.items.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <label className="field-label">Items</label>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {itemColumns.map((col) => (
+                        <th key={col} style={{ textTransform: "capitalize" }}>
+                          {col.replace(/_/g, " ")}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doc.items.map((item, i) => (
+                      <tr key={i}>
+                        {itemColumns.map((col) => (
+                          <td key={col}>{item[col] ?? ""}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
 

@@ -6,15 +6,6 @@ import { env } from "../config/env";
  * (raw pymongo, one doc per extracted invoice) — strict:false so its full Gemini-output
  * shape (plus any `other_fields` keys and our own edit stamps) survives round-trips.
  */
-export interface ISharedInvoiceItem {
-  description?: string;
-  hsn?: string;
-  qty?: number;
-  unit?: string;
-  rate?: number;
-  amount?: number;
-}
-
 export interface ISharedInvoice {
   _id: Types.ObjectId;
   job_id: string;
@@ -26,7 +17,10 @@ export interface ISharedInvoice {
   seller_gstin?: string;
   buyer_name?: string;
   buyer_gstin?: string;
-  items?: ISharedInvoiceItem[];
+  // Mixed on purpose: different PDFs extract different item shapes (columns vary by
+  // invoice layout), so this isn't a fixed interface — callers derive columns from
+  // whatever keys are actually present instead of assuming description/hsn/qty/etc.
+  items?: Array<Record<string, unknown>>;
   taxable_value?: number;
   cgst_rate?: string;
   cgst_amount?: number;

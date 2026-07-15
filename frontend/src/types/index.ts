@@ -63,8 +63,14 @@ export interface DocumentDetail {
   validation?: string;
   confidence: Confidence;
   fields: ExtractedField[];
+  items: InvoiceItem[];
   activity: ActivityEntry[];
 }
+
+// Different PDFs extract different item shapes, so this stays a loose record —
+// the table on the Detail page derives its columns from whatever keys are present
+// instead of assuming a fixed set like description/hsn/qty.
+export type InvoiceItem = Record<string, string | number | null>;
 
 export interface FieldDefinition {
   _id: string;

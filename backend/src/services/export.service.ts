@@ -7,6 +7,13 @@ import type { AuthPayload } from "../types/express";
 
 export type ExportFormat = "csv" | "xlsx";
 
+/** Line items are `Schema.Types.Mixed` — different PDFs can extract different item
+ * shapes, so there's no fixed key set to assume. `Item ` + humanized key keeps this
+ * distinct from any invoice-level column that happens to share a name (e.g. "amount"). */
+function humanizeKey(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface ExportFilters {
   status?: string;
   dateFrom?: string;
@@ -60,19 +67,48 @@ export const exportService = {
       columns = defs.map((d) => ({ key: d.key, label: d.label }));
     }
 
-    const rows = docs.map((d) => {
+    // Line items per doc, plus the union of every key seen across all of them (in first-seen
+    // order) — that union becomes the item columns, so no PDF's fields get silently dropped
+    // just because another PDF's items happened to use different keys.
+    const itemsByDoc = new Map<string, Array<Record<string, unknown>>>();
+    const itemKeys: string[] = [];
+    const seenItemKeys = new Set<string>();
+    for (const d of docs) {
+      const inv = invoiceByFile.get(d.fileId.toString()) as unknown as Record<string, unknown> | undefined;
+      const items = (inv?.items as Array<Record<string, unknown>> | undefined) ?? [];
+      itemsByDoc.set(d.fileId.toString(), items);
+      for (const item of items) {
+        for (const key of Object.keys(item)) {
+          if (!seenItemKeys.has(key)) {
+            seenItemKeys.add(key);
+            itemKeys.push(key);
+          }
+        }
+      }
+    }
+    const itemColumns = itemKeys.map((key) => ({ key, label: `Item ${humanizeKey(key)}` }));
+
+    const rows: Record<string, unknown>[] = [];
+    for (const d of docs) {
       const inv = invoiceByFile.get(d.fileId.toString()) as unknown as Record<string, unknown> | undefined;
       const other = (inv?.other_fields as Record<string, unknown>) ?? {};
-      const row: Record<string, unknown> = { Document: d.title, Status: d.status };
+      const invoiceCells: Record<string, unknown> = { Document: d.title, Status: d.status };
       for (const col of columns!) {
-        row[col.label] = inv?.[col.key] ?? other[col.key] ?? "";
+        invoiceCells[col.label] = inv?.[col.key] ?? other[col.key] ?? "";
       }
-      return row;
-    });
+
+      const items = itemsByDoc.get(d.fileId.toString()) ?? [];
+      const itemRows = items.length === 0 ? [{}] : items;
+      for (const item of itemRows) {
+        const row: Record<string, unknown> = { ...invoiceCells };
+        for (const col of itemColumns) row[col.label] = item[col.key] ?? "";
+        rows.push(row);
+      }
+    }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `invoices-${stamp}.${input.format}`;
-    const headers = ["Document", "Status", ...columns.map((c) => c.label)];
+    const headers = ["Document", "Status", ...columns.map((c) => c.label), ...itemColumns.map((c) => c.label)];
 
     const buffer =
       input.format === "csv" ? buildCsv(headers, rows) : await buildXlsx(headers, rows);

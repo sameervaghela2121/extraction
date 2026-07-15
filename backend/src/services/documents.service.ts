@@ -7,6 +7,7 @@ import { ApiError } from "../utils/ApiError";
 import {
   confidenceFromValidation,
   extractedFields,
+  extractedItems,
   invoiceAmount,
   invoiceVendor,
 } from "../utils/invoiceMapping";
@@ -178,6 +179,7 @@ export const documentsService = {
       validation: invoice?.validation,
       confidence: confidenceFromValidation(invoice?.validation),
       fields: extractedFields(invoice as ISharedInvoice | null),
+      items: extractedItems(invoice as ISharedInvoice | null),
       activity: activity.map((a) => ({
         actor: a.actor,
         action: a.action,
