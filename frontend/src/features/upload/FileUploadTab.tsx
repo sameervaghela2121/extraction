@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { UploadCloud } from "lucide-react";
 import { uploadsApi } from "../../api/uploads.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
@@ -56,7 +57,9 @@ export default function FileUploadTab() {
           transition: "all 0.15s",
         }}
       >
-        <div style={{ fontSize: 30, marginBottom: 8 }}>⬆</div>
+        <div style={{ marginBottom: 8, color: "var(--text-muted)" }}>
+          <UploadCloud size={30} />
+        </div>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Drag & drop your invoices here</div>
         <div className="faint" style={{ fontSize: 13, marginBottom: 16 }}>PDF, JPG or PNG — up to 20MB</div>
         <button className="btn btn-primary" onClick={() => inputRef.current?.click()}>

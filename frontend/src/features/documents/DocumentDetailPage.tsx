@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, FileText } from "lucide-react";
 import { documentsApi } from "../../api/documents.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
@@ -101,7 +102,7 @@ export default function DocumentDetailPage() {
   return (
     <div>
       <button className="btn btn-ghost btn-sm" onClick={() => navigate("/documents")} style={{ marginBottom: 14 }}>
-        ← Back to documents
+        <ArrowLeft size={14} /> Back to documents
       </button>
 
       <div className="detail-grid">
@@ -116,7 +117,7 @@ export default function DocumentDetailPage() {
             <Spinner label="Loading preview…" />
           ) : isMobile ? (
             <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
-              <span style={{ fontSize: 40 }}>📄</span>
+              <FileText size={40} style={{ color: "var(--text-muted)" }} />
               <div style={{ fontWeight: 600 }}>{doc.title}</div>
               <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
                 Open document

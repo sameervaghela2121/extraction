@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { X } from "lucide-react";
 import { fieldDefinitionsApi } from "../../api/fieldDefinitions.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
@@ -92,7 +93,7 @@ export default function ExtractionSettingsPage() {
                 <div className="spacer" />
                 {f.isCustom && (
                   <button className="btn btn-ghost btn-sm" onClick={() => remove(f)} title="Remove column">
-                    ✕
+                    <X size={14} />
                   </button>
                 )}
                 <button

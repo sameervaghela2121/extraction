@@ -1,20 +1,21 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Upload, FolderOpen, Download, Settings, Users, LogOut, type LucideIcon } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "../components/ui";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: string;
+  icon: LucideIcon;
   adminOnly?: boolean;
 }
 
 const NAV: NavItem[] = [
-  { to: "/upload", label: "Upload & Scan", icon: "⬆" },
-  { to: "/documents", label: "Documents", icon: "🗂" },
-  { to: "/export", label: "Export", icon: "⇩" },
-  { to: "/settings", label: "Extraction settings", icon: "⚙", adminOnly: true },
-  { to: "/users", label: "User management", icon: "👥", adminOnly: true },
+  { to: "/upload", label: "Upload & Scan", icon: Upload },
+  { to: "/documents", label: "Documents", icon: FolderOpen },
+  { to: "/export", label: "Export", icon: Download },
+  { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
+  { to: "/users", label: "User management", icon: Users, adminOnly: true },
 ];
 
 export default function AppLayout() {
@@ -63,7 +64,7 @@ export default function AppLayout() {
         <nav className="stack" style={{ gap: 2 }}>
           {items.map((item) => (
             <NavLink key={item.to} to={item.to} className="nav-link">
-              <span style={{ width: 18, textAlign: "center" }}>{item.icon}</span>
+              <item.icon size={18} />
               {item.label}
             </NavLink>
           ))}
@@ -81,7 +82,7 @@ export default function AppLayout() {
           </div>
           <div className="spacer" />
           <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Log out">
-            ⏻
+            <LogOut size={16} />
           </button>
         </div>
       </aside>
@@ -98,7 +99,7 @@ export default function AppLayout() {
       <nav className="app-bottomnav">
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} className="bottomnav-link">
-            <span style={{ fontSize: 18 }}>{item.icon}</span>
+            <item.icon size={18} />
             <span style={{ fontSize: 10 }}>{item.label.split(" ")[0]}</span>
           </NavLink>
         ))}

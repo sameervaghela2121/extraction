@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { documentsApi, type DocumentQuery } from "../../api/documents.api";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -132,11 +133,15 @@ export default function DocumentsListPage() {
                   <input type="checkbox" checked={allSelected} onChange={toggleAll} />
                 </th>
                 <th style={{ cursor: "pointer" }} onClick={() => toggleSort("title")}>
-                  Document {sort === "title" ? (order === "asc" ? "↑" : "↓") : ""}
+                  <span className="row gap-8" style={{ display: "inline-flex" }}>
+                    Document {sort === "title" && (order === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                  </span>
                 </th>
                 {user?.role === "admin" && <th className="hide-narrow">Uploaded by</th>}
                 <th style={{ cursor: "pointer" }} onClick={() => toggleSort("date")}>
-                  Date {sort === "date" ? (order === "asc" ? "↑" : "↓") : ""}
+                  <span className="row gap-8" style={{ display: "inline-flex" }}>
+                    Date {sort === "date" && (order === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                  </span>
                 </th>
                 <th>Amount</th>
                 <th className="hide-narrow">Confidence</th>

@@ -124,8 +124,8 @@ export default function ExportPage() {
           <div className="row gap-8" style={{ marginBottom: 18, flexWrap: "wrap" }}>
             <button className={`btn ${format === "csv" ? "btn-primary" : ""}`} onClick={() => setFormat("csv")}>CSV</button>
             <button className={`btn ${format === "xlsx" ? "btn-primary" : ""}`} onClick={() => setFormat("xlsx")}>Excel (.xlsx)</button>
-            <button className="btn" disabled title="Coming soon">QuickBooks</button>
-            <button className="btn" disabled title="Coming soon">Xero</button>
+            {/* <button className="btn" disabled title="Coming soon">QuickBooks</button>
+            <button className="btn" disabled title="Coming soon">Xero</button> */}
           </div>
 
           <div className="row gap-12">

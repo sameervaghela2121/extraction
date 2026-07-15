@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { X } from "lucide-react";
 import { uploadsApi } from "../../api/uploads.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
@@ -90,7 +91,7 @@ export default function MobileScanTab() {
                 disabled={uploading}
                 aria-label={`Remove page ${i + 1}`}
               >
-                ×
+                <X size={16} />
               </button>
             </div>
           ))}
