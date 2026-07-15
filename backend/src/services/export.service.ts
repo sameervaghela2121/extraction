@@ -98,7 +98,7 @@ export const exportService = {
     for (const d of docs) {
       const inv = invoiceByFile.get(d.fileId.toString()) as unknown as Record<string, unknown> | undefined;
       const other = (inv?.other_fields as Record<string, unknown>) ?? {};
-      const invoiceCells: Record<string, unknown> = { Document: d.title, Status: d.status };
+      const invoiceCells: Record<string, unknown> = {};
       for (const col of columns!) {
         invoiceCells[col.label] = inv?.[col.key] ?? other[col.key] ?? "";
       }
@@ -114,7 +114,7 @@ export const exportService = {
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `invoices-${stamp}.${input.format}`;
-    const headers = ["Document", "Status", ...columns.map((c) => c.label), ...itemColumns.map((c) => c.label)];
+    const headers = [...columns.map((c) => c.label), ...itemColumns.map((c) => c.label)];
 
     const buffer =
       input.format === "csv" ? buildCsv(headers, rows) : await buildXlsx(headers, rows);
