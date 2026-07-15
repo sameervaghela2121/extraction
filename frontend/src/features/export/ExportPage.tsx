@@ -153,7 +153,12 @@ export default function ExportPage() {
 
             <div
               className="row gap-12"
-              style={{ padding: "14px 20px", background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}
+              style={{
+                padding: "14px 20px",
+                background: "var(--surface-2)",
+                borderTop: "1px solid var(--border)",
+                flexWrap: "wrap",
+              }}
             >
               <button className="btn btn-primary" onClick={generate} disabled={busy || enabledColumns.length === 0}>
                 <Download size={14} />

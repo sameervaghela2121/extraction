@@ -74,7 +74,7 @@ export default function ExtractionSettingsPage() {
         <Spinner />
       ) : (
         <div className="card" style={{ padding: 20, maxWidth: 720 }}>
-          <div className="row" style={{ marginBottom: 14 }}>
+          <div className="row" style={{ marginBottom: 14, flexWrap: "wrap", rowGap: 6 }}>
             <h3 style={{ fontSize: 15, fontWeight: 600 }}>Invoice fields</h3>
             <div className="spacer" />
             <span className="faint" style={{ fontSize: 13 }}>{enabledCount} of {fields.length} enabled</span>

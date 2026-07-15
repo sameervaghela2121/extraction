@@ -123,7 +123,13 @@ export default function DocumentsListPage() {
       {selected.size > 0 && (
         <div
           className="card row gap-8"
-          style={{ padding: "10px 14px", marginBottom: 12, background: "var(--brand-soft)", borderColor: "transparent" }}
+          style={{
+            padding: "10px 14px",
+            marginBottom: 12,
+            background: "var(--brand-soft)",
+            borderColor: "transparent",
+            flexWrap: "wrap",
+          }}
         >
           <strong style={{ fontSize: 13 }}>{selected.size} selected</strong>
           <div className="spacer" />
@@ -185,7 +191,7 @@ export default function DocumentsListPage() {
       </div>
 
       {data && data.totalPages > 1 && (
-        <div className="row gap-8" style={{ marginTop: 14, justifyContent: "flex-end" }}>
+        <div className="row gap-8" style={{ marginTop: 14, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <span className="muted" style={{ fontSize: 13 }}>
             Page {data.page} of {data.totalPages}
           </span>

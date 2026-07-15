@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Confidence, DocumentStatus } from "../types";
+import type { DocumentStatus } from "../types";
 
 export function StatusPill({ status }: { status: DocumentStatus }) {
   const label = status === "pending" ? "Pending" : status === "verified" ? "Verified" : "Archived";
@@ -20,16 +20,6 @@ export function ExtractionStatusPill({ status }: { status: string }) {
     : status === "processing" || status === "retrying" ? "Processing"
     : "Unknown";
   return <span className={`pill ${cls}`}>{label}</span>;
-}
-
-export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
-  const high = confidence === "high";
-  return (
-    <span className="row gap-8" style={{ fontSize: 13 }}>
-      <span className={`dot ${high ? "dot-high" : "dot-attention"}`} />
-      {high ? "High confidence" : "Needs attention"}
-    </span>
-  );
 }
 
 export function Avatar({ name }: { name: string }) {

@@ -4,7 +4,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { documentsApi } from "../../api/documents.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
-import { StatusPill, ConfidenceBadge, Spinner } from "../../components/ui";
+import { StatusPill, Spinner } from "../../components/ui";
 import { isMobileDevice } from "../../utils/device";
 import type { DocumentDetail } from "../../types";
 
@@ -154,11 +154,10 @@ export default function DocumentDetailPage() {
             <div className="spacer" />
             <StatusPill status={doc.status} />
           </div>
-          <div className="row gap-12" style={{ marginBottom: 16 }}>
+          <div className="row gap-12" style={{ marginBottom: 16, flexWrap: "wrap" }}>
             <span className="faint" style={{ fontSize: 12 }}>
               Invoice · via {doc.source} · {new Date(doc.uploadedAt).toLocaleDateString()}
             </span>
-            <ConfidenceBadge confidence={doc.confidence} />
           </div>
           {doc.validation && doc.confidence !== "high" && (
             <div
