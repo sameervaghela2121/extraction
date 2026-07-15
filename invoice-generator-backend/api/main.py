@@ -495,7 +495,7 @@ def find_invoice_pages(client: genai.Client, filename: str, data: bytes) -> tupl
     usage = {"input": 0, "output": 0}
     log.info("  boundary pass: %s (%.0f KB)", filename, len(data) / 1024)
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         contents=[types.Part.from_bytes(data=data, mime_type="application/pdf"), BOUNDARY_PROMPT],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -567,7 +567,7 @@ def extract_invoice(client: genai.Client, filename: str, data: bytes,
         log.info("  Gemini call start: %s (%.0f KB, attempt %d)", filename, len(data) / 1024, attempt)
         t0 = time.perf_counter()
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             contents=[
                 types.Part.from_bytes(data=data, mime_type=mime),
                 EXTRACTION_PROMPT + extra_prompt,
