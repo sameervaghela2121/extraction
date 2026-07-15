@@ -4,7 +4,6 @@ import { fieldDefinitionsApi } from "../../api/fieldDefinitions.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { PageHeader } from "../../components/ui";
-import type { ExportHistoryItem } from "../../types";
 
 interface Column {
   key: string;
@@ -20,7 +19,6 @@ export default function ExportPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [count, setCount] = useState<number | null>(null);
-  const [history, setHistory] = useState<ExportHistoryItem[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -30,7 +28,6 @@ export default function ExportPage() {
         setColumns(defs.filter((d) => d.enabled).map((d) => ({ key: d.key, label: d.label, enabled: true }))),
       )
       .catch((err) => notify(apiErrorMessage(err), "error"));
-    exportApi.history().then(setHistory).catch(() => {});
   }, [notify]);
 
   const filters = useCallback(
@@ -50,14 +47,12 @@ export default function ExportPage() {
   const generate = async () => {
     setBusy(true);
     try {
-      const job = await exportApi.generate({
+      await exportApi.generate({
         format,
         ...filters(),
         columns: enabledColumns.map((c) => ({ key: c.key, label: c.label })),
       });
-      setHistory((h) => [job, ...h]);
-      notify("Export generated");
-      await exportApi.download(job.id, job.filename);
+      notify("Export downloaded");
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
@@ -65,19 +60,11 @@ export default function ExportPage() {
     }
   };
 
-  const download = async (item: ExportHistoryItem) => {
-    try {
-      await exportApi.download(item.id, item.filename);
-    } catch (err) {
-      notify(apiErrorMessage(err), "error");
-    }
-  };
-
   return (
     <div>
       <PageHeader title="Export" subtitle="Generate a spreadsheet of your extracted invoices." />
 
-      <div className="export-grid">
+      <div style={{ maxWidth: 640 }}>
         <div className="card" style={{ padding: 20 }}>
           <label className="field-label">Columns to export ({enabledColumns.length} of {columns.length})</label>
           <div className="stack" style={{ gap: 2, marginBottom: 18 }}>
@@ -137,50 +124,7 @@ export default function ExportPage() {
             </span>
           </div>
         </div>
-
-        <div className="card" style={{ padding: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Export history</h3>
-          {history.length === 0 ? (
-            <div className="faint" style={{ fontSize: 13 }}>No exports yet.</div>
-          ) : (
-            <div className="stack" style={{ gap: 10 }}>
-              {history.map((h) => (
-                <button
-                  key={h.id}
-                  onClick={() => download(h)}
-                  className="row gap-8"
-                  style={{
-                    padding: "8px 0",
-                    borderBottom: "1px solid var(--border)",
-                    background: "none",
-                    border: "none",
-                    borderBottomWidth: 1,
-                    borderBottomStyle: "solid",
-                    borderBottomColor: "var(--border)",
-                    color: "var(--text)",
-                    width: "100%",
-                    textAlign: "left",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{h.filename}</div>
-                    <div className="faint" style={{ fontSize: 12 }}>
-                      {h.rowCount} rows · {new Date(h.generatedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="spacer" />
-                  <span className="pill pill-archived" style={{ textTransform: "uppercase" }}>{h.format}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
-
-      <style>{`
-        .export-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
-        @media (max-width: 900px) { .export-grid { grid-template-columns: 1fr; } }
-      `}</style>
     </div>
   );
 }

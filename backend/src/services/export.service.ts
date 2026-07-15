@@ -1,15 +1,11 @@
-import fs from "fs";
-import path from "path";
 import { Types } from "mongoose";
 import ExcelJS from "exceljs";
 import { DocumentModel } from "../models/Document.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
-import { ExportJob, type ExportFormat } from "../models/ExportJob.model";
 import { FieldDefinition } from "../models/FieldDefinition.model";
-import { ApiError } from "../utils/ApiError";
 import type { AuthPayload } from "../types/express";
 
-const EXPORT_DIR = path.resolve(process.cwd(), "storage", "exports");
+export type ExportFormat = "csv" | "xlsx";
 
 interface ExportFilters {
   status?: string;
@@ -35,6 +31,8 @@ export const exportService = {
     return DocumentModel.countDocuments(buildDocumentFilter(auth, filters));
   },
 
+  /** Builds the export in memory and hands back the raw file — nothing is written to disk
+   * or persisted as "history", so there's nothing to go stale or 404 later. */
   async generate(
     auth: AuthPayload,
     input: {
@@ -72,62 +70,18 @@ export const exportService = {
       return row;
     });
 
-    fs.mkdirSync(EXPORT_DIR, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `invoices-${stamp}.${input.format}`;
-    const filePath = path.join(EXPORT_DIR, filename);
     const headers = ["Document", "Status", ...columns.map((c) => c.label)];
 
-    if (input.format === "csv") {
-      await writeCsv(filePath, headers, rows);
-    } else {
-      await writeXlsx(filePath, headers, rows);
-    }
+    const buffer =
+      input.format === "csv" ? buildCsv(headers, rows) : await buildXlsx(headers, rows);
+    const contentType =
+      input.format === "csv"
+        ? "text/csv"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    const job = await ExportJob.create({
-      filename,
-      format: input.format,
-      filters: {
-        status: input.status,
-        dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
-        dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-      },
-      columns,
-      rowCount: rows.length,
-      generatedBy: new Types.ObjectId(auth.userId),
-      filePath,
-    });
-
-    return {
-      id: job._id.toString(),
-      filename,
-      format: input.format,
-      rowCount: rows.length,
-      generatedAt: job.generatedAt,
-    };
-  },
-
-  async history(auth: AuthPayload) {
-    const filter = auth.role === "admin" ? {} : { generatedBy: new Types.ObjectId(auth.userId) };
-    const jobs = await ExportJob.find(filter).sort({ generatedAt: -1 }).limit(50).lean();
-    return jobs.map((j) => ({
-      id: j._id.toString(),
-      filename: j.filename,
-      format: j.format,
-      rowCount: j.rowCount,
-      generatedAt: j.generatedAt,
-    }));
-  },
-
-  async getDownload(auth: AuthPayload, id: string) {
-    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid export id");
-    const job = await ExportJob.findById(id);
-    if (!job) throw ApiError.notFound("Export not found");
-    if (auth.role !== "admin" && job.generatedBy.toString() !== auth.userId) {
-      throw ApiError.forbidden("You do not have access to this export");
-    }
-    if (!fs.existsSync(job.filePath)) throw ApiError.notFound("Export file is no longer available");
-    return { filePath: job.filePath, filename: job.filename, format: job.format };
+    return { buffer, filename, contentType, rowCount: rows.length };
   },
 };
 
@@ -136,15 +90,15 @@ function csvEscape(value: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-async function writeCsv(filePath: string, headers: string[], rows: Record<string, unknown>[]) {
+function buildCsv(headers: string[], rows: Record<string, unknown>[]): Buffer {
   const lines = [headers.map(csvEscape).join(",")];
   for (const row of rows) {
     lines.push(headers.map((h) => csvEscape(row[h])).join(","));
   }
-  await fs.promises.writeFile(filePath, lines.join("\n"), "utf8");
+  return Buffer.from(lines.join("\n"), "utf8");
 }
 
-async function writeXlsx(filePath: string, headers: string[], rows: Record<string, unknown>[]) {
+async function buildXlsx(headers: string[], rows: Record<string, unknown>[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Invoices");
   ws.addRow(headers);
@@ -152,5 +106,6 @@ async function writeXlsx(filePath: string, headers: string[], rows: Record<strin
   for (const row of rows) {
     ws.addRow(headers.map((h) => row[h] ?? ""));
   }
-  await wb.xlsx.writeFile(filePath);
+  const arrayBuffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(arrayBuffer);
 }

@@ -85,11 +85,3 @@ export interface ManagedUser {
   status: UserStatus;
   docCount: number;
 }
-
-export interface ExportHistoryItem {
-  id: string;
-  filename: string;
-  format: "csv" | "xlsx";
-  rowCount: number;
-  generatedAt: string;
-}
