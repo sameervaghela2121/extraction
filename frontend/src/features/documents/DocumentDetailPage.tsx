@@ -4,6 +4,7 @@ import { documentsApi } from "../../api/documents.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { StatusPill, ConfidenceBadge, Spinner } from "../../components/ui";
+import { isMobileDevice } from "../../utils/device";
 import type { DocumentDetail } from "../../types";
 
 export default function DocumentDetailPage() {
@@ -16,6 +17,10 @@ export default function DocumentDetailPage() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Desktop Chrome renders a PDF inline for <iframe src="...">; mobile browsers
+  // deliberately don't (they show a generic "tap to open" placeholder instead), so
+  // mobile gets a real "open" action routed through the OS's own PDF handling instead.
+  const [isMobile] = useState(isMobileDevice);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,15 +112,26 @@ export default function DocumentDetailPage() {
               <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
               <span className="muted" style={{ fontSize: 13 }}>{doc.extractionError}</span>
             </div>
-          ) : previewUrl ? (
+          ) : !previewUrl ? (
+            <Spinner label="Loading preview…" />
+          ) : isMobile ? (
+            <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
+              <span style={{ fontSize: 40 }}>📄</span>
+              <div style={{ fontWeight: 600 }}>{doc.title}</div>
+              <span className="muted" style={{ fontSize: 13 }}>
+                Mobile browsers can't preview PDFs inline — open it in your PDF viewer instead.
+              </span>
+              <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
+                Open document
+              </button>
+            </div>
+          ) : (
             <iframe
               title="Document preview"
               src={previewUrl}
               className="preview-iframe"
               style={{ width: "100%", border: "none", borderRadius: 8 }}
             />
-          ) : (
-            <Spinner label="Loading preview…" />
           )}
         </div>
 
