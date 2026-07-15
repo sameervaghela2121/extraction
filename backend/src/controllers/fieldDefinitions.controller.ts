@@ -14,6 +14,10 @@ export const fieldDefinitionsController = {
     res.status(201).json(await fieldDefinitionsService.addCustom(req.body));
   },
 
+  async reorder(req: Request, res: Response) {
+    res.json(await fieldDefinitionsService.reorder(req.body.keys));
+  },
+
   async remove(req: Request, res: Response) {
     res.json(await fieldDefinitionsService.remove(req.params.fieldKey));
   },

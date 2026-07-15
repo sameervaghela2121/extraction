@@ -56,6 +56,18 @@ export const fieldDefinitionsService = {
     return def.toObject();
   },
 
+  /** Persists a drag-and-drop reorder: `keys` is the full new sequence, so each key's
+   * array position becomes its new `order`. Fields not included (e.g. disabled ones the
+   * caller never saw) keep whatever order they already had. */
+  async reorder(keys: string[]): Promise<IFieldDefinition[]> {
+    await FieldDefinition.bulkWrite(
+      keys.map((key, index) => ({
+        updateOne: { filter: { key }, update: { order: index } },
+      })),
+    );
+    return this.list();
+  },
+
   async remove(key: string) {
     const def = await FieldDefinition.findOne({ key });
     if (!def) throw ApiError.notFound("Field definition not found");

@@ -8,4 +8,6 @@ export const fieldDefinitionsApi = {
   addCustom: (label: string, description?: string) =>
     api.post<FieldDefinition>("/field-definitions", { label, description }).then((r) => r.data),
   remove: (key: string) => api.delete(`/field-definitions/${key}`).then((r) => r.data),
+  reorder: (keys: string[]) =>
+    api.patch<FieldDefinition[]>("/field-definitions/reorder", { keys }).then((r) => r.data),
 };

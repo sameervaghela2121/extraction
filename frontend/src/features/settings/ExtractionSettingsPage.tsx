@@ -80,7 +80,27 @@ export default function ExtractionSettingsPage() {
             <span className="faint" style={{ fontSize: 13 }}>{enabledCount} of {fields.length} enabled</span>
           </div>
 
-          <div className="stack" style={{ gap: 2 }}>
+          <form onSubmit={addColumn} className="row gap-8" style={{ marginBottom: 18, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 160 }}
+              placeholder="Column title"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+            />
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 160 }}
+              placeholder="Description (optional)"
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+            />
+            <button className="btn btn-primary" type="submit">+ Add column</button>
+          </form>
+
+          <div style={{ height: 1, background: "var(--border)", marginBottom: 14 }} />
+
+          <div className="stack settings-fields-scroll" style={{ gap: 2 }}>
             {fields.map((f) => (
               <div key={f.key} className="row gap-12" style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                 <div>
@@ -106,26 +126,16 @@ export default function ExtractionSettingsPage() {
               </div>
             ))}
           </div>
-
-          <form onSubmit={addColumn} className="row gap-8" style={{ marginTop: 18, flexWrap: "wrap" }}>
-            <input
-              className="input"
-              style={{ flex: 1, minWidth: 160 }}
-              placeholder="Column title"
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-            />
-            <input
-              className="input"
-              style={{ flex: 1, minWidth: 160 }}
-              placeholder="Description (optional)"
-              value={newDesc}
-              onChange={(e) => setNewDesc(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit">+ Add column</button>
-          </form>
         </div>
       )}
+
+      <style>{`
+        .settings-fields-scroll {
+          max-height: 600px; overflow-y: auto;
+          border: 1px solid var(--border); border-radius: var(--radius-sm);
+          padding: 4px 10px;
+        }
+      `}</style>
     </div>
   );
 }
