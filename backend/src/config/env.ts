@@ -19,8 +19,6 @@ export const env = {
 
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   jwtRefreshSecret: required("JWT_REFRESH_SECRET"),
-  jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
-  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
 
   invoiceGeneratorBaseUrl: process.env.INVOICE_GENERATOR_BASE_URL ?? "http://localhost:8000",
   invoiceGeneratorAppUser: process.env.INVOICE_GENERATOR_APP_USER ?? "",
