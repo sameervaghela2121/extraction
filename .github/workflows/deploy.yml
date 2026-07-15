@@ -3,6 +3,7 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   PROJECT_ID: sameerv
@@ -13,13 +14,14 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-      ai_backend: ${{ steps.filter.outputs.ai_backend }}
+      frontend: ${{ steps.filter.outputs.frontend || 'true' }}
+      backend: ${{ steps.filter.outputs.backend || 'true' }}
+      ai_backend: ${{ steps.filter.outputs.ai_backend || 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name == 'push'
         with:
           filters: |
             frontend:
