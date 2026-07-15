@@ -118,9 +118,6 @@ export default function DocumentDetailPage() {
             <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
               <span style={{ fontSize: 40 }}>📄</span>
               <div style={{ fontWeight: 600 }}>{doc.title}</div>
-              <span className="muted" style={{ fontSize: 13 }}>
-                Mobile browsers can't preview PDFs inline — open it in your PDF viewer instead.
-              </span>
               <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
                 Open document
               </button>
