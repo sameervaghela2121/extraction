@@ -113,9 +113,8 @@ export default function DocumentsListPage() {
           <strong style={{ fontSize: 13 }}>{selected.size} selected</strong>
           <div className="spacer" />
           <button className="btn btn-sm btn-primary" onClick={() => bulk("verify")}>Approve & verify</button>
-          <button className="btn btn-sm" onClick={() => bulk("reject")}>Send back</button>
+          <button className="btn btn-sm" onClick={() => bulk("reject")}>Invalidate</button>
           <button className="btn btn-sm" onClick={() => bulk("archive")}>Archive</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}
 
