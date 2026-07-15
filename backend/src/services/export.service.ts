@@ -23,7 +23,13 @@ interface ExportFilters {
 function buildDocumentFilter(auth: AuthPayload, filters: ExportFilters): Record<string, unknown> {
   const filter: Record<string, unknown> = {};
   if (auth.role !== "admin") filter.ownerId = new Types.ObjectId(auth.userId);
-  if (filters.status && filters.status !== "all") filter.status = filters.status;
+  // Deleted (archived) documents are never eligible for export — the Status filter on the
+  // Export page only offers "All"/"Verified only", so there's no way to opt back into them.
+  if (filters.status && filters.status !== "all") {
+    filter.status = filters.status;
+  } else {
+    filter.status = { $ne: "archived" };
+  }
   if (filters.dateFrom || filters.dateTo) {
     const range: Record<string, Date> = {};
     if (filters.dateFrom) range.$gte = new Date(filters.dateFrom);
