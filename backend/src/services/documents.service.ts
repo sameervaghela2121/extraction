@@ -39,7 +39,7 @@ async function findFilesForJob(jobId: string, expected: number) {
 
 export const documentsService = {
   /**
-   * Shared intake path used by upload, scan-complete, and email-in: given a jobId returned by
+   * Shared intake path used by upload and scan-complete: given a jobId returned by
    * the extraction service, create one portal Document per registered file.
    */
   async createFromExtraction(

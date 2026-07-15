@@ -2,15 +2,13 @@ import { useState } from "react";
 import { PageHeader } from "../../components/ui";
 import FileUploadTab from "./FileUploadTab";
 import MobileScanTab from "./MobileScanTab";
-import EmailInTab from "./EmailInTab";
 import { isMobileDevice } from "../../utils/device";
 
-type Tab = "file" | "scan" | "email";
+type Tab = "file" | "scan";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "file", label: "Upload file" },
   { id: "scan", label: "Scan via mobile" },
-  { id: "email", label: "Email-in" },
 ];
 
 export default function UploadPage() {
@@ -41,7 +39,6 @@ export default function UploadPage() {
 
       {tab === "file" && <FileUploadTab />}
       {tab === "scan" && isMobile && <MobileScanTab />}
-      {tab === "email" && <EmailInTab />}
     </div>
   );
 }

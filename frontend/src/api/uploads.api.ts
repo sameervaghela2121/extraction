@@ -18,6 +18,4 @@ export const uploadsApi = {
       })
       .then((r) => r.data);
   },
-  inboundEmailAddress: () =>
-    api.get<{ address: string }>("/inbound-email-address").then((r) => r.data),
 };

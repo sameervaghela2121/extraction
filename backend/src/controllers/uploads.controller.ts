@@ -43,10 +43,4 @@ export const uploadsController = {
       documents: docs.map((d) => ({ id: d._id.toString(), title: d.title, status: d.status })),
     });
   },
-
-  async inboundEmailAddress(req: Request, res: Response) {
-    // Single-tenant: derive a stable per-user inbox alias.
-    const alias = req.auth!.userId.slice(-8);
-    res.json({ address: `documents+${alias}@scan.docflow.app` });
-  },
 };
