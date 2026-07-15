@@ -101,7 +101,7 @@ export default function DocumentDetailPage() {
 
   return (
     <div>
-      <button className="btn btn-ghost btn-sm" onClick={() => navigate("/documents")} style={{ marginBottom: 14 }}>
+      <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 14 }}>
         <ArrowLeft size={14} /> Back to documents
       </button>
 
@@ -199,7 +199,7 @@ export default function DocumentDetailPage() {
               <>
                 <button className="btn btn-primary" onClick={() => act("verify")}>Approve & verify</button>
                 <button className="btn" onClick={() => act("reject")}>Send back for re-scan</button>
-                <button className="btn btn-danger" onClick={() => act("archive")}>Archive</button>
+                <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
               </>
             )}
           </div>

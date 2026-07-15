@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { documentsApi, type DocumentQuery } from "../../api/documents.api";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
-import { PageHeader, StatusPill, ConfidenceBadge, ExtractionStatusPill, Spinner, EmptyState } from "../../components/ui";
+import { PageHeader, StatusPill, ExtractionStatusPill, Spinner, EmptyState } from "../../components/ui";
 import type { DocumentListItem, DocumentListResponse } from "../../types";
 
 export default function DocumentsListPage() {
@@ -19,8 +19,27 @@ export default function DocumentsListPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<"date" | "title">("date");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Page lives in the URL (not just component state) so that navigating into a document
+  // and back restores the exact page you were on, instead of resetting to page 1.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = Number(searchParams.get("page")) || 1;
+  const setPage = useCallback(
+    (next: number | ((prev: number) => number)) => {
+      setSearchParams(
+        (prev) => {
+          const nextPage = typeof next === "function" ? next(Number(prev.get("page")) || 1) : next;
+          const params = new URLSearchParams(prev);
+          if (nextPage <= 1) params.delete("page");
+          else params.set("page", String(nextPage));
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,10 +119,6 @@ export default function DocumentsListPage() {
             setPage(1);
           }}
         />
-        <label className="row gap-8 muted" style={{ fontSize: 13 }}>
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Show archived
-        </label>
       </div>
 
       {selected.size > 0 && (
@@ -114,8 +129,8 @@ export default function DocumentsListPage() {
           <strong style={{ fontSize: 13 }}>{selected.size} selected</strong>
           <div className="spacer" />
           <button className="btn btn-sm btn-primary" onClick={() => bulk("verify")}>Approve & verify</button>
-          <button className="btn btn-sm" onClick={() => bulk("reject")}>Invalidate</button>
-          <button className="btn btn-sm" onClick={() => bulk("archive")}>Archive</button>
+          <button className="btn btn-sm" onClick={() => bulk("reject")}>Reject</button>
+          <button className="btn btn-sm" onClick={() => bulk("archive")}>Delete</button>
         </div>
       )}
 
@@ -144,9 +159,8 @@ export default function DocumentsListPage() {
                   </span>
                 </th>
                 <th>Amount</th>
-                <th className="hide-narrow">Confidence</th>
-                <th>Status</th>
-                <th className="hide-narrow">Extraction status</th>
+                <th>Verification</th>
+                <th className="hide-narrow">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -162,7 +176,6 @@ export default function DocumentsListPage() {
                   {user?.role === "admin" && <td className="muted hide-narrow">{d.owner}</td>}
                   <td className="muted">{new Date(d.uploadedAt).toLocaleDateString()}</td>
                   <td>{d.amount != null ? `₹${d.amount.toLocaleString()}` : "—"}</td>
-                  <td className="hide-narrow"><ConfidenceBadge confidence={d.confidence} /></td>
                   <td><StatusPill status={d.status} /></td>
                   <td className="hide-narrow"><ExtractionStatusPill status={d.extractionStatus} /></td>
                 </tr>

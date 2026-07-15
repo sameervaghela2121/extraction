@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Confidence, DocumentStatus } from "../types";
 
 export function StatusPill({ status }: { status: DocumentStatus }) {
-  const label = status === "pending" ? "Needs review" : status === "verified" ? "Verified" : "Archived";
+  const label = status === "pending" ? "Pending" : status === "verified" ? "Verified" : "Archived";
   return <span className={`pill pill-${status}`}>{label}</span>;
 }
 
