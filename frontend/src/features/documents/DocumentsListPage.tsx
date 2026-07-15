@@ -16,7 +16,6 @@ export default function DocumentsListPage() {
   const [data, setData] = useState<DocumentListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<"date" | "title">("date");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -44,14 +43,14 @@ export default function DocumentsListPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const query: DocumentQuery = { search, showArchived, sort, order, page, pageSize: 10 };
+      const query: DocumentQuery = { search, sort, order, page, pageSize: 10 };
       setData(await documentsApi.list(query));
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
       setLoading(false);
     }
-  }, [search, showArchived, sort, order, page, notify]);
+  }, [search, sort, order, page, notify]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -96,7 +95,8 @@ export default function DocumentsListPage() {
       if (action === "verify") await documentsApi.bulkVerify(ids);
       if (action === "reject") await documentsApi.bulkReject(ids);
       if (action === "archive") await documentsApi.bulkArchive(ids);
-      notify(`${ids.length} document${ids.length > 1 ? "s" : ""} updated`);
+      const verb = action === "archive" ? "deleted" : action === "verify" ? "verified" : "rejected";
+      notify(`${ids.length} document${ids.length > 1 ? "s" : ""} ${verb}`);
       setSelected(new Set());
       load();
     } catch (err) {

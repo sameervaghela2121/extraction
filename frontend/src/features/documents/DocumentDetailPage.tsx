@@ -85,9 +85,13 @@ export default function DocumentDetailPage() {
           : action === "reject"
             ? "Sent back for re-scan"
             : action === "archive"
-              ? "Document archived"
+              ? "Document deleted"
               : "Document restored",
       );
+      if (action === "archive") {
+        navigate("/documents");
+        return;
+      }
       load();
     } catch (err) {
       notify(apiErrorMessage(err), "error");
