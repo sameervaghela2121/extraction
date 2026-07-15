@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const updateFieldsSchema = z.object({
+  invoiceId: z.string().min(1, "invoiceId is required"),
   fields: z.record(z.string(), z.union([z.string(), z.number()])),
 });
 

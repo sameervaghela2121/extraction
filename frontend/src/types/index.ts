@@ -50,6 +50,16 @@ export interface ActivityEntry {
   timestamp: string;
 }
 
+// One uploaded file can contain multiple invoices back-to-back — each gets its own
+// block (fields + line items) instead of collapsing to just the first one.
+export interface InvoiceBlock {
+  invoiceId: string;
+  validation?: string;
+  confidence: Confidence;
+  fields: ExtractedField[];
+  items: InvoiceItem[];
+}
+
 export interface DocumentDetail {
   id: string;
   title: string;
@@ -60,10 +70,7 @@ export interface DocumentDetail {
   fileId: string;
   extractionStatus: string;
   extractionError?: string;
-  validation?: string;
-  confidence: Confidence;
-  fields: ExtractedField[];
-  items: InvoiceItem[];
+  invoices: InvoiceBlock[];
   activity: ActivityEntry[];
 }
 

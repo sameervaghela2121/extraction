@@ -15,8 +15,9 @@ export default function DocumentDetailPage() {
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [edits, setEdits] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
+  // Keyed by invoiceId — a document can hold multiple invoices, each edited independently.
+  const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
+  const [savingInvoiceId, setSavingInvoiceId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // Desktop Chrome renders a PDF inline for <iframe src="...">; mobile browsers
   // deliberately don't (they show a generic "tap to open" placeholder instead), so
@@ -81,18 +82,23 @@ export default function DocumentDetailPage() {
     };
   }, [doc?.id, doc?.extractionStatus, notify]);
 
-  const saveFields = async () => {
-    if (Object.keys(edits).length === 0) return;
-    setSaving(true);
+  const saveFields = async (invoiceId: string) => {
+    const invoiceEdits = edits[invoiceId];
+    if (!invoiceEdits || Object.keys(invoiceEdits).length === 0) return;
+    setSavingInvoiceId(invoiceId);
     try {
-      const updated = await documentsApi.updateFields(id, edits);
+      const updated = await documentsApi.updateFields(id, invoiceId, invoiceEdits);
       setDoc(updated);
-      setEdits({});
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[invoiceId];
+        return next;
+      });
       notify("Fields saved");
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
-      setSaving(false);
+      setSavingInvoiceId(null);
     }
   };
 
@@ -123,11 +129,6 @@ export default function DocumentDetailPage() {
 
   if (loading) return <Spinner label="Loading document…" />;
   if (!doc) return null;
-
-  const hasEdits = Object.keys(edits).length > 0;
-  // Line items don't have a fixed shape (different PDFs extract different columns), so the
-  // table's columns are whatever keys actually show up across this document's items.
-  const itemColumns = Array.from(new Set(doc.items.flatMap((item) => Object.keys(item))));
 
   return (
     <div>
@@ -191,78 +192,113 @@ export default function DocumentDetailPage() {
           <div className="row gap-12" style={{ marginBottom: 16, flexWrap: "wrap" }}>
             <span className="faint" style={{ fontSize: 12 }}>
               Invoice · via {doc.source} · {new Date(doc.uploadedAt).toLocaleDateString()}
+              {doc.invoices.length > 1 ? ` · ${doc.invoices.length} invoices in this document` : ""}
             </span>
           </div>
-          {doc.validation && doc.confidence !== "high" && (
-            <div
-              style={{
-                fontSize: 13,
-                padding: "8px 12px",
-                background: "var(--danger-soft)",
-                color: "oklch(40% 0.16 25)",
-                borderRadius: "var(--radius-sm)",
-                marginBottom: 14,
-              }}
-            >
-              {doc.validation}
+
+          {doc.invoices.length === 0 && (
+            <div className="muted" style={{ fontSize: 13 }}>
+              {doc.extractionStatus === "processing"
+                ? "Extraction in progress — check back shortly."
+                : "No invoice data extracted."}
             </div>
           )}
 
-          <div className="stack" style={{ gap: 12 }}>
-            {doc.fields.map((f) => (
-              <div key={f.key}>
-                <label className="field-label" style={{ textTransform: "capitalize" }}>
-                  {f.key.replace(/_/g, " ")}
-                </label>
-                <input
-                  className="input"
-                  value={edits[f.key] ?? (f.value ?? "").toString()}
-                  onChange={(e) => setEdits((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                />
-              </div>
-            ))}
-            {doc.fields.length === 0 && (
-              <div className="muted" style={{ fontSize: 13 }}>
-                {doc.extractionStatus === "processing"
-                  ? "Extraction in progress — check back shortly."
-                  : "No fields extracted."}
-              </div>
-            )}
-          </div>
+          {doc.invoices.map((invoice, idx) => {
+            // Line items don't have a fixed shape (different PDFs extract different
+            // columns), so the table's columns are whatever keys actually show up.
+            const itemColumns = Array.from(new Set(invoice.items.flatMap((item) => Object.keys(item))));
+            const invoiceEdits = edits[invoice.invoiceId] ?? {};
+            const hasEdits = Object.keys(invoiceEdits).length > 0;
 
-          {hasEdits && (
-            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveFields} disabled={saving}>
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-          )}
+            return (
+              <div
+                key={invoice.invoiceId}
+                style={idx > 0 ? { marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--border)" } : undefined}
+              >
+                {doc.invoices.length > 1 && (
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Invoice {idx + 1}</div>
+                )}
 
-          {doc.items.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <label className="field-label">Items</label>
-              <div className="table-scroll">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      {itemColumns.map((col) => (
-                        <th key={col} style={{ textTransform: "capitalize" }}>
-                          {col.replace(/_/g, " ")}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {doc.items.map((item, i) => (
-                      <tr key={i}>
-                        {itemColumns.map((col) => (
-                          <td key={col}>{item[col] ?? ""}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {invoice.validation && invoice.confidence !== "high" && (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      padding: "8px 12px",
+                      background: "var(--danger-soft)",
+                      color: "oklch(40% 0.16 25)",
+                      borderRadius: "var(--radius-sm)",
+                      marginBottom: 14,
+                    }}
+                  >
+                    {invoice.validation}
+                  </div>
+                )}
+
+                <div className="stack" style={{ gap: 12 }}>
+                  {invoice.fields.map((f) => (
+                    <div key={f.key}>
+                      <label className="field-label" style={{ textTransform: "capitalize" }}>
+                        {f.key.replace(/_/g, " ")}
+                      </label>
+                      <input
+                        className="input"
+                        value={invoiceEdits[f.key] ?? (f.value ?? "").toString()}
+                        onChange={(e) =>
+                          setEdits((prev) => ({
+                            ...prev,
+                            [invoice.invoiceId]: { ...prev[invoice.invoiceId], [f.key]: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                  {invoice.fields.length === 0 && (
+                    <div className="muted" style={{ fontSize: 13 }}>No fields extracted.</div>
+                  )}
+                </div>
+
+                {hasEdits && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginTop: 16 }}
+                    onClick={() => saveFields(invoice.invoiceId)}
+                    disabled={savingInvoiceId === invoice.invoiceId}
+                  >
+                    {savingInvoiceId === invoice.invoiceId ? "Saving…" : "Save changes"}
+                  </button>
+                )}
+
+                {invoice.items.length > 0 && (
+                  <div style={{ marginTop: 20 }}>
+                    <label className="field-label">Line items</label>
+                    <div className="table-scroll">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            {itemColumns.map((col) => (
+                              <th key={col} style={{ textTransform: "capitalize" }}>
+                                {col.replace(/_/g, " ")}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoice.items.map((item, i) => (
+                            <tr key={i}>
+                              {itemColumns.map((col) => (
+                                <td key={col}>{item[col] ?? ""}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })}
         </div>
 
         {/* Right column: activity */}

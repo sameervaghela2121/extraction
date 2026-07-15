@@ -160,9 +160,12 @@ export const documentsService = {
 
   async detail(id: string, auth: AuthPayload) {
     const doc = await this.getOwnedOrAdmin(id, auth);
-    const [file, invoice, activity] = await Promise.all([
+    // One uploaded file can contain multiple invoices back-to-back — the extraction
+    // service writes one Invoice record per invoice it finds, all sharing this file_id.
+    // Sort by page so multi-invoice documents render in the same order as the PDF.
+    const [file, invoices, activity] = await Promise.all([
       SharedFile.findById(doc.fileId).lean(),
-      SharedInvoice.findOne({ file_id: doc.fileId }).lean(),
+      SharedInvoice.find({ file_id: doc.fileId }).sort({ page: 1 }).lean(),
       ActivityLog.find({ documentId: doc._id }).sort({ timestamp: 1 }).lean(),
     ]);
 
@@ -176,10 +179,13 @@ export const documentsService = {
       fileId: doc.fileId.toString(),
       extractionStatus: file?.status ?? "unknown",
       extractionError: file?.error,
-      validation: invoice?.validation,
-      confidence: confidenceFromValidation(invoice?.validation),
-      fields: extractedFields(invoice as ISharedInvoice | null),
-      items: extractedItems(invoice as ISharedInvoice | null),
+      invoices: invoices.map((invoice) => ({
+        invoiceId: invoice._id.toString(),
+        validation: invoice.validation,
+        confidence: confidenceFromValidation(invoice.validation),
+        fields: extractedFields(invoice as ISharedInvoice),
+        items: extractedItems(invoice as ISharedInvoice),
+      })),
       activity: activity.map((a) => ({
         actor: a.actor,
         action: a.action,
@@ -188,10 +194,19 @@ export const documentsService = {
     };
   },
 
-  async updateFields(id: string, updates: Record<string, string | number>, auth: AuthPayload) {
+  async updateFields(
+    id: string,
+    invoiceId: string,
+    updates: Record<string, string | number>,
+    auth: AuthPayload,
+  ) {
     const doc = await this.getOwnedOrAdmin(id, auth);
-    const invoice = await SharedInvoice.findOne({ file_id: doc.fileId });
-    if (!invoice) throw ApiError.notFound("No extracted data found for this document");
+    if (!Types.ObjectId.isValid(invoiceId)) throw ApiError.badRequest("Invalid invoice id");
+    const invoice = await SharedInvoice.findById(invoiceId);
+    // Must actually belong to this document — otherwise the id could target any invoice.
+    if (!invoice || invoice.file_id?.toString() !== doc.fileId.toString()) {
+      throw ApiError.notFound("No extracted data found for this document");
+    }
 
     const known = new Set(Object.keys(invoice.toObject()));
     for (const [key, value] of Object.entries(updates)) {

@@ -26,7 +26,12 @@ export const documentsController = {
   },
 
   async updateFields(req: Request, res: Response) {
-    const result = await documentsService.updateFields(req.params.id, req.body.fields ?? {}, req.auth!);
+    const result = await documentsService.updateFields(
+      req.params.id,
+      req.body.invoiceId,
+      req.body.fields ?? {},
+      req.auth!,
+    );
     res.json(result);
   },
 

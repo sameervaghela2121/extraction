@@ -22,8 +22,8 @@ export const documentsApi = {
       })
       .then((r) => r.data),
   detail: (id: string) => api.get<DocumentDetail>(`/documents/${id}`).then((r) => r.data),
-  updateFields: (id: string, fields: Record<string, string | number>) =>
-    api.patch<DocumentDetail>(`/documents/${id}/fields`, { fields }).then((r) => r.data),
+  updateFields: (id: string, invoiceId: string, fields: Record<string, string | number>) =>
+    api.patch<DocumentDetail>(`/documents/${id}/fields`, { invoiceId, fields }).then((r) => r.data),
   verify: (id: string) => api.post(`/documents/${id}/verify`).then((r) => r.data),
   unverify: (id: string) => api.post(`/documents/${id}/unverify`).then((r) => r.data),
   archive: (id: string) => api.post(`/documents/${id}/archive`).then((r) => r.data),
