@@ -166,7 +166,7 @@ export default function DocumentsListPage() {
                 </th>
                 <th>Amount</th>
                 <th>Verification</th>
-                <th className="hide-narrow">Status</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -183,7 +183,7 @@ export default function DocumentsListPage() {
                   <td className="muted">{new Date(d.uploadedAt).toLocaleDateString()}</td>
                   <td>{d.amount != null ? `₹${d.amount.toLocaleString()}` : "—"}</td>
                   <td><StatusPill status={d.status} /></td>
-                  <td className="hide-narrow"><ExtractionStatusPill status={d.extractionStatus} /></td>
+                  <td><ExtractionStatusPill status={d.extractionStatus} /></td>
                 </tr>
               ))}
             </tbody>
