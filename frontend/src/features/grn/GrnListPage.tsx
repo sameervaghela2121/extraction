@@ -5,7 +5,6 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { PageHeader, GrnStatusPill, Spinner, EmptyState } from "../../components/ui";
-import { formatDdMmYyyy } from "../../utils/date";
 import type { GrnListResponse } from "../../types";
 
 export default function GrnListPage() {
@@ -94,7 +93,7 @@ export default function GrnListPage() {
                     <td className="muted">{g.invoiceDate || "—"}</td>
                     <td className="muted">{g.itemCount}</td>
                     {user?.role === "admin" && <td className="muted hide-narrow">{g.createdBy}</td>}
-                    <td className="muted hide-narrow">{formatDdMmYyyy(g.createdAt)}</td>
+                    <td className="muted hide-narrow">{g.createdAt}</td>
                     <td><GrnStatusPill status={g.status} /></td>
                   </tr>
                 ))}

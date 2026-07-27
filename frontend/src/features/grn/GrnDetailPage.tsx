@@ -100,9 +100,11 @@ export default function GrnDetailPage() {
           ) : (
             <iframe
               title="Invoice preview"
-              // pagemode=none opens straight into the page with no thumbnail sidebar — the
-              // pane is already half-width, so the strip cost real reading room.
-              src={`${previewUrl}#pagemode=none`}
+              // Chrome's thumbnail sidebar is a sticky per-profile preference, not something
+              // this page can set — #pagemode=none / #navpanes=0 are not in Chrome's supported
+              // fragment params and are ignored. Closing it once via the viewer's own toggle
+              // makes it stay closed. Verified empirically; don't re-add a fragment here.
+              src={previewUrl}
               className="grn-preview-iframe"
               style={{ width: "100%", border: "none", borderRadius: 8 }}
             />

@@ -124,9 +124,11 @@ export type GrnStatus = "awaiting" | "approved" | "rejected";
 export interface GrnListItem {
   id: string;
   invoiceNo: string;
+  /** Already DD-MM-YYYY — the backend normalises it. Don't wrap it in `new Date()`. */
   invoiceDate: string;
   itemCount: number;
   createdBy: string;
+  /** Already DD-MM-YYYY, not ISO. Render as-is. */
   createdAt: string;
   status: GrnStatus;
 }
@@ -144,6 +146,7 @@ export interface GrnDetail {
   documentId: string;
   title: string;
   invoiceNo: string;
+  /** All three dates arrive as DD-MM-YYYY strings, not ISO. Render as-is. */
   invoiceDate: string;
   items: GrnItem[];
   status: GrnStatus;
