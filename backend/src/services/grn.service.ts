@@ -4,6 +4,7 @@ import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
 import { documentsService } from "./documents.service";
 import { ApiError } from "../utils/ApiError";
+import { toDdMmYyyy } from "../utils/grnDate";
 import type { AuthPayload } from "../types/express";
 
 /**
@@ -70,7 +71,7 @@ export const grnService = {
             return {
               invoiceId: invoice._id.toString(),
               invoiceNo: existing?.invoiceNo ?? invoice.invoice_no ?? "",
-              invoiceDate: existing?.invoiceDate ?? invoice.invoice_date ?? "",
+              invoiceDate: toDdMmYyyy(existing?.invoiceDate ?? invoice.invoice_date),
               items: existing ? existing.items : toGrnItems(invoice as ISharedInvoice),
               saved: Boolean(existing),
             };
@@ -109,7 +110,9 @@ export const grnService = {
           documentId: doc._id,
           fileId: doc.fileId,
           invoiceNo: input.invoiceNo ?? "",
-          invoiceDate: input.invoiceDate ?? "",
+          // Normalised on write too, so a client sending a raw value can't store an
+          // unformatted date. Read paths normalise as well, covering rows saved before this.
+          invoiceDate: toDdMmYyyy(input.invoiceDate),
           items: input.items,
           // Everything the extraction produced, not just the handful the screen shows.
           // `invoice` is already loaded above for the ownership guard, so this is free.
@@ -144,9 +147,9 @@ export const grnService = {
       // Escaped before it reaches RegExp — an unescaped "(" or "*" typed into the search box
       // would otherwise throw, or force a pathological scan.
       const rx = new RegExp(opts.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      // Invoice number is how a receipt is referenced on paper; item description answers
-      // "which receipts had X on them". Top-level keys AND, so staff scoping still applies.
-      filter.$or = [{ invoiceNo: rx }, { "items.description": rx }];
+      // Invoice number only — how a receipt is referenced on paper. Sits alongside the
+      // createdBy clause, and top-level keys AND, so staff scoping still applies.
+      filter.invoiceNo = rx;
     }
 
     const [grns, total] = await Promise.all([
@@ -165,7 +168,7 @@ export const grnService = {
       items: grns.map((g) => ({
         id: g._id.toString(),
         invoiceNo: g.invoiceNo,
-        invoiceDate: g.invoiceDate,
+        invoiceDate: toDdMmYyyy(g.invoiceDate),
         itemCount: g.items.length,
         createdBy: (g.createdBy as unknown as { name?: string } | null)?.name ?? "—",
         createdAt: g.createdAt,
@@ -187,7 +190,7 @@ export const grnService = {
       documentId: grn.documentId.toString(),
       title: doc.title,
       invoiceNo: grn.invoiceNo,
-      invoiceDate: grn.invoiceDate,
+      invoiceDate: toDdMmYyyy(grn.invoiceDate),
       items: grn.items,
       status: grn.status ?? "awaiting",
       createdAt: grn.createdAt,

@@ -100,7 +100,9 @@ export default function GrnDetailPage() {
           ) : (
             <iframe
               title="Invoice preview"
-              src={previewUrl}
+              // pagemode=none opens straight into the page with no thumbnail sidebar — the
+              // pane is already half-width, so the strip cost real reading room.
+              src={`${previewUrl}#pagemode=none`}
               className="grn-preview-iframe"
               style={{ width: "100%", border: "none", borderRadius: 8 }}
             />

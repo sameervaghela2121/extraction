@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { PageHeader, GrnStatusPill, Spinner, EmptyState } from "../../components/ui";
+import { formatDdMmYyyy } from "../../utils/date";
 import type { GrnListResponse } from "../../types";
 
 export default function GrnListPage() {
@@ -57,7 +58,7 @@ export default function GrnListPage() {
         <input
           className="input"
           style={{ maxWidth: 280 }}
-          placeholder="Search by invoice no. or item name"
+          placeholder="Search by invoice number"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -93,7 +94,7 @@ export default function GrnListPage() {
                     <td className="muted">{g.invoiceDate || "—"}</td>
                     <td className="muted">{g.itemCount}</td>
                     {user?.role === "admin" && <td className="muted hide-narrow">{g.createdBy}</td>}
-                    <td className="muted hide-narrow">{new Date(g.createdAt).toLocaleDateString()}</td>
+                    <td className="muted hide-narrow">{formatDdMmYyyy(g.createdAt)}</td>
                     <td><GrnStatusPill status={g.status} /></td>
                   </tr>
                 ))}
