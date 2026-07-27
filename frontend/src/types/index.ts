@@ -118,6 +118,39 @@ export interface GrnDraft {
   documents: GrnDraftDocument[];
 }
 
+/** "awaiting" = not yet reviewed. Switchable in both directions. */
+export type GrnStatus = "awaiting" | "approved" | "rejected";
+
+export interface GrnListItem {
+  id: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  itemCount: number;
+  createdBy: string;
+  createdAt: string;
+  status: GrnStatus;
+}
+
+export interface GrnListResponse {
+  items: GrnListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface GrnDetail {
+  id: string;
+  /** The uploaded invoice this GRN came from — what the preview pane loads. */
+  documentId: string;
+  title: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  items: GrnItem[];
+  status: GrnStatus;
+  createdAt: string;
+  decidedAt?: string;
+}
+
 export interface ManagedUser {
   id: string;
   name: string;

@@ -14,4 +14,21 @@ export const grnController = {
   async save(req: Request, res: Response) {
     res.status(201).json(await grnService.save(req.body, req.auth!));
   },
+
+  async list(req: Request, res: Response) {
+    const { page, pageSize, search } = req.query as unknown as {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+    };
+    res.json(await grnService.list(req.auth!, { page, pageSize, search }));
+  },
+
+  async detail(req: Request, res: Response) {
+    res.json(await grnService.detail(req.params.id, req.auth!));
+  },
+
+  async setStatus(req: Request, res: Response) {
+    res.json(await grnService.setStatus(req.params.id, req.body.status, req.auth!));
+  },
 };

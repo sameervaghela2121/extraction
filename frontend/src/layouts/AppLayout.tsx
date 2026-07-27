@@ -3,6 +3,7 @@ import {
   Upload,
   FolderOpen,
   ClipboardList,
+  ClipboardCheck,
   Download,
   Settings,
   Users,
@@ -17,12 +18,15 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  /** NavLink prefix-matches by default, so "/grn" would light up on "/grn/new" too. */
+  end?: boolean;
 }
 
 const NAV: NavItem[] = [
   { to: "/upload", label: "Upload & Scan", icon: Upload },
   { to: "/documents", label: "Documents", icon: FolderOpen },
-  { to: "/grn", label: "GRN", icon: ClipboardList },
+  { to: "/grn/new", label: "Create GRN", icon: ClipboardList },
+  { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true },
   { to: "/export", label: "Export", icon: Download },
   { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
@@ -73,7 +77,7 @@ export default function AppLayout() {
 
         <nav className="stack" style={{ gap: 2 }}>
           {items.map((item) => (
-            <NavLink key={item.to} to={item.to} className="nav-link">
+            <NavLink key={item.to} to={item.to} end={item.end} className="nav-link">
               <item.icon size={18} />
               {item.label}
             </NavLink>
@@ -108,7 +112,7 @@ export default function AppLayout() {
       {/* Mobile bottom nav */}
       <nav className="app-bottomnav">
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} className="bottomnav-link">
+          <NavLink key={item.to} to={item.to} end={item.end} className="bottomnav-link">
             <item.icon size={18} />
             <span style={{ fontSize: 10 }}>{item.label.split(" ")[0]}</span>
           </NavLink>

@@ -9,6 +9,8 @@ import DocumentsListPage from "./features/documents/DocumentsListPage";
 import DocumentDetailPage from "./features/documents/DocumentDetailPage";
 import ExportPage from "./features/export/ExportPage";
 import GrnPage from "./features/grn/GrnPage";
+import GrnListPage from "./features/grn/GrnListPage";
+import GrnDetailPage from "./features/grn/GrnDetailPage";
 import ExtractionSettingsPage from "./features/settings/ExtractionSettingsPage";
 import UserManagementPage from "./features/users/UserManagementPage";
 
@@ -25,7 +27,9 @@ export const router = createBrowserRouter([
           { path: "/upload", element: <UploadPage /> },
           { path: "/documents", element: <DocumentsListPage /> },
           { path: "/documents/:id", element: <DocumentDetailPage /> },
-          { path: "/grn", element: <GrnPage /> },
+          { path: "/grn", element: <GrnListPage /> },
+          { path: "/grn/new", element: <GrnPage /> },
+          { path: "/grn/:id", element: <GrnDetailPage /> },
           { path: "/export", element: <ExportPage /> },
           {
             element: <AdminRoute />,
