@@ -4,7 +4,7 @@ import { documentsService } from "../services/documents.service";
 import { fieldDefinitionsService } from "../services/fieldDefinitions.service";
 import { imagesToPdf } from "../utils/imagesToPdf";
 import { ApiError } from "../utils/ApiError";
-import type { DocumentSource } from "../models/Document.model";
+import type { DocumentPurpose, DocumentSource } from "../models/Document.model";
 
 function toUploadedFiles(files?: Express.Multer.File[]): UploadedFile[] {
   if (!files || files.length === 0) throw ApiError.badRequest("No files provided");
@@ -15,9 +15,15 @@ function parseSource(value: unknown): DocumentSource {
   return value === "scan" ? "scan" : "upload";
 }
 
+function parsePurpose(value: unknown): DocumentPurpose {
+  return value === "grn" ? "grn" : "invoice";
+}
+
 export const uploadsController = {
   async upload(req: Request, res: Response) {
-    const source = parseSource((req.body as { source?: unknown } | undefined)?.source);
+    const body = req.body as { source?: unknown; purpose?: unknown } | undefined;
+    const source = parseSource(body?.source);
+    const purpose = parsePurpose(body?.purpose);
     const rawFiles = toUploadedFiles(req.files as Express.Multer.File[] | undefined);
 
     // Camera-captured pages are pages of one document — merge them into a single
@@ -37,7 +43,13 @@ export const uploadsController = {
 
     const customFields = await fieldDefinitionsService.listEnabledCustomForPrompt();
     const { jobId } = await invoiceGeneratorClient.extract(files, customFields);
-    const docs = await documentsService.createFromExtraction(jobId, req.auth!.userId, source, files.length);
+    const docs = await documentsService.createFromExtraction(
+      jobId,
+      req.auth!.userId,
+      source,
+      files.length,
+      purpose,
+    );
     res.status(201).json({
       jobId,
       documents: docs.map((d) => ({ id: d._id.toString(), title: d.title, status: d.status })),

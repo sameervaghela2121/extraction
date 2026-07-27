@@ -21,7 +21,10 @@ interface ExportFilters {
 }
 
 function buildDocumentFilter(auth: AuthPayload, filters: ExportFilters): Record<string, unknown> {
-  const filter: Record<string, unknown> = {};
+  // GRN scans are excluded from exports for the same reason they're hidden from the
+  // Documents list — they aren't part of the invoice review workflow. `$ne` so documents
+  // predating the `purpose` field (which have no such key) are still exported.
+  const filter: Record<string, unknown> = { purpose: { $ne: "grn" } };
   if (auth.role !== "admin") filter.ownerId = new Types.ObjectId(auth.userId);
   // Deleted (archived) documents are never eligible for export — the Status filter on the
   // Export page only offers "All"/"Verified only", so there's no way to opt back into them.

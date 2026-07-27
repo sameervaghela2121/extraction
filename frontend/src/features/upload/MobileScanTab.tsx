@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
-import { uploadsApi } from "../../api/uploads.api";
+import { uploadsApi, type UploadResult } from "../../api/uploads.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 
@@ -10,7 +10,14 @@ interface CapturedPage {
   previewUrl: string;
 }
 
-export default function MobileScanTab() {
+interface Props {
+  /** When given, the caller handles what happens next instead of the default
+   *  "notify and go to Documents" — used by the GRN page, which stays put. */
+  onUploaded?: (result: UploadResult) => void;
+  purpose?: "invoice" | "grn";
+}
+
+export default function MobileScanTab({ onUploaded, purpose }: Props) {
   const navigate = useNavigate();
   const { notify } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,14 +44,19 @@ export default function MobileScanTab() {
     setUploading(true);
     setProgress(0);
     try {
-      await uploadsApi.upload(
+      const result = await uploadsApi.upload(
         pages.map((p) => p.file),
         setProgress,
         "scan",
+        purpose,
       );
-      notify("Sent to Documents as an invoice");
       pages.forEach((p) => URL.revokeObjectURL(p.previewUrl));
       setPages([]);
+      if (onUploaded) {
+        onUploaded(result);
+        return;
+      }
+      notify("Sent to Documents as an invoice");
       setTimeout(() => navigate("/documents"), 900);
     } catch (err) {
       notify(apiErrorMessage(err, "Upload failed"), "error");
