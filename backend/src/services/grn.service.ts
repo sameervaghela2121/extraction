@@ -1,9 +1,10 @@
 import { Types } from "mongoose";
-import { Grn, type IGrnItem } from "../models/Grn.model";
+import { Grn, type GrnStatus, type IGrnItem } from "../models/Grn.model";
 import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
 import { documentsService } from "./documents.service";
 import { ApiError } from "../utils/ApiError";
+import { toDDMMYYYY } from "../utils/grnDate";
 import type { AuthPayload } from "../types/express";
 
 /**
@@ -70,7 +71,9 @@ export const grnService = {
             return {
               invoiceId: invoice._id.toString(),
               invoiceNo: existing?.invoiceNo ?? invoice.invoice_no ?? "",
-              invoiceDate: existing?.invoiceDate ?? invoice.invoice_date ?? "",
+              // Normalised here, so the capture screen shows DD-MM-YYYY and therefore saves it —
+              // new GRNs land in that shape without a migration.
+              invoiceDate: toDDMMYYYY(existing?.invoiceDate ?? invoice.invoice_date),
               items: existing ? existing.items : toGrnItems(invoice as ISharedInvoice),
               saved: Boolean(existing),
             };
@@ -126,9 +129,93 @@ export const grnService = {
       id: grn!._id.toString(),
       invoiceId: input.invoiceId,
       invoiceNo: grn!.invoiceNo,
-      invoiceDate: grn!.invoiceDate,
+      invoiceDate: toDDMMYYYY(grn!.invoiceDate),
       items: grn!.items,
       saved: true,
     };
+  },
+
+  /** Every saved GRN, newest first. Staff see their own; admins see all. */
+  async list(auth: AuthPayload, opts: { page?: number; pageSize?: number; search?: string }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 10));
+
+    const filter: Record<string, unknown> =
+      auth.role === "admin" ? {} : { createdBy: new Types.ObjectId(auth.userId) };
+
+    if (opts.search) {
+      // Escaped before it reaches RegExp — an unescaped "(" or "*" typed into the search box
+      // would otherwise throw, or force a pathological scan.
+      const rx = new RegExp(opts.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      // Invoice number only — it is how a receipt is referenced on paper. A sibling key of
+      // `createdBy`, so top-level AND keeps staff scoping intact.
+      filter.invoiceNo = rx;
+    }
+
+    const [grns, total] = await Promise.all([
+      Grn.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        // `extracted` is the full invoice snapshot — never send it to a list screen.
+        .select("-extracted")
+        .populate("createdBy", "name")
+        .lean(),
+      Grn.countDocuments(filter),
+    ]);
+
+    return {
+      items: grns.map((g) => ({
+        id: g._id.toString(),
+        invoiceNo: g.invoiceNo,
+        invoiceDate: toDDMMYYYY(g.invoiceDate),
+        itemCount: g.items.length,
+        createdBy: (g.createdBy as unknown as { name?: string } | null)?.name ?? "—",
+        createdAt: toDDMMYYYY(g.createdAt),
+        status: g.status ?? "awaiting",
+      })),
+      total,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  },
+
+  async detail(id: string, auth: AuthPayload) {
+    const grn = await this.findGrn(id);
+    // Reuses the document guard rather than a second rule; also gives us the title.
+    const doc = await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
+
+    return {
+      id: grn._id.toString(),
+      documentId: grn.documentId.toString(),
+      title: doc.title,
+      invoiceNo: grn.invoiceNo,
+      invoiceDate: toDDMMYYYY(grn.invoiceDate),
+      items: grn.items,
+      status: grn.status ?? "awaiting",
+      createdAt: toDDMMYYYY(grn.createdAt),
+      decidedAt: grn.decidedAt ? toDDMMYYYY(grn.decidedAt) : undefined,
+    };
+  },
+
+  /** Approve/reject, switchable in both directions — a mis-tap is undone by tapping the other. */
+  async setStatus(id: string, status: GrnStatus, auth: AuthPayload) {
+    const grn = await this.findGrn(id);
+    await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
+
+    grn.status = status;
+    grn.decidedBy = new Types.ObjectId(auth.userId);
+    grn.decidedAt = new Date();
+    await grn.save();
+
+    return { id: grn._id.toString(), status, decidedAt: grn.decidedAt };
+  },
+
+  /** Load only — authorization is the getOwnedOrAdmin call on the GRN's document. */
+  async findGrn(id: string) {
+    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid GRN id");
+    const grn = await Grn.findById(id);
+    if (!grn) throw ApiError.notFound("GRN not found");
+    return grn;
   },
 };

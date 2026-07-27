@@ -118,6 +118,42 @@ export interface GrnDraft {
   documents: GrnDraftDocument[];
 }
 
+/** "awaiting" = not yet reviewed. Switchable in both directions. */
+export type GrnStatus = "awaiting" | "approved" | "rejected";
+
+export interface GrnListItem {
+  id: string;
+  invoiceNo: string;
+  /** Already DD-MM-YYYY — the backend normalises it. Don't wrap it in `new Date()`. */
+  invoiceDate: string;
+  itemCount: number;
+  createdBy: string;
+  /** Already DD-MM-YYYY, not ISO. Render as-is. */
+  createdAt: string;
+  status: GrnStatus;
+}
+
+export interface GrnListResponse {
+  items: GrnListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface GrnDetail {
+  id: string;
+  /** The uploaded invoice this GRN came from — what the preview pane loads. */
+  documentId: string;
+  title: string;
+  invoiceNo: string;
+  /** All three dates arrive as DD-MM-YYYY strings, not ISO. Render as-is. */
+  invoiceDate: string;
+  items: GrnItem[];
+  status: GrnStatus;
+  createdAt: string;
+  decidedAt?: string;
+}
+
 export interface ManagedUser {
   id: string;
   name: string;

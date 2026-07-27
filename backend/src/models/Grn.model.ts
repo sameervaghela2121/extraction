@@ -11,6 +11,9 @@ export interface IGrnItem {
   quantity: number | null;
 }
 
+/** "awaiting" = nobody has looked at it yet. Reversible in both directions. */
+export type GrnStatus = "awaiting" | "approved" | "rejected";
+
 export interface IGrn {
   _id: Types.ObjectId;
   documentId: Types.ObjectId;
@@ -19,6 +22,11 @@ export interface IGrn {
   invoiceNo: string;
   invoiceDate: string;
   items: IGrnItem[];
+  // Optional: GRNs saved before this field existed have no `status` key at all — a
+  // mongoose `default` doesn't backfill. Read paths coalesce to "awaiting".
+  status?: GrnStatus;
+  decidedBy?: Types.ObjectId;
+  decidedAt?: Date;
   /**
    * Snapshot of the WHOLE extracted invoice as it was read, kept alongside the
    * confirmed values above. The GRN screen shows only a few fields, but everything
@@ -51,6 +59,9 @@ const grnSchema = new Schema<IGrn>(
     invoiceNo: { type: String, default: "" },
     invoiceDate: { type: String, default: "" },
     items: { type: [grnItemSchema], default: [] },
+    status: { type: String, enum: ["awaiting", "approved", "rejected"], default: "awaiting", index: true },
+    decidedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    decidedAt: { type: Date },
     // Mixed: mirrors how SharedInvoice models Gemini's open-ended output, so fields we
     // don't know about yet survive without a schema change.
     extracted: { type: Schema.Types.Mixed },

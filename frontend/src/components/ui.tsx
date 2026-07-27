@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { DocumentStatus } from "../types";
+import type { DocumentStatus, GrnStatus } from "../types";
 
 export function StatusPill({ status }: { status: DocumentStatus }) {
   const label = status === "pending" ? "Pending" : status === "verified" ? "Verified" : "Archived";
@@ -19,6 +19,14 @@ export function ExtractionStatusPill({ status }: { status: string }) {
     : status === "failed" ? "Failed"
     : status === "processing" || status === "retrying" ? "Processing"
     : "Unknown";
+  return <span className={`pill ${cls}`}>{label}</span>;
+}
+
+/** Goods-receipt sign-off state. Reuses the same pill classes as the other two. */
+export function GrnStatusPill({ status }: { status: GrnStatus }) {
+  const cls = status === "approved" ? "pill-done" : status === "rejected" ? "pill-failed" : "pill-pending";
+  const label =
+    status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Awaiting approval";
   return <span className={`pill ${cls}`}>{label}</span>;
 }
 

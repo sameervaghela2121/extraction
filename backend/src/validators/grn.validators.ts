@@ -26,3 +26,13 @@ export const draftQuerySchema = z.object({
   // Sent as a single comma-separated value so one upload of several files is one request.
   documentIds: z.string().min(1, "documentIds is required"),
 });
+
+export const listQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional(),
+  search: z.string().max(200).optional(),
+});
+
+export const statusSchema = z.object({
+  status: z.enum(["awaiting", "approved", "rejected"]),
+});
