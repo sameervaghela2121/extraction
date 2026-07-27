@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { UploadCloud } from "lucide-react";
-import { uploadsApi } from "../../api/uploads.api";
+import { uploadsApi, type UploadResult } from "../../api/uploads.api";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 
@@ -11,7 +11,14 @@ interface QueuedFile {
   status: "uploading" | "done" | "error";
 }
 
-export default function FileUploadTab() {
+interface Props {
+  /** When given, the caller handles what happens next instead of the default
+   *  "notify and go to Documents" — used by the GRN page, which stays put. */
+  onUploaded?: (result: UploadResult) => void;
+  purpose?: "invoice" | "grn";
+}
+
+export default function FileUploadTab({ onUploaded, purpose }: Props) {
   const navigate = useNavigate();
   const { notify } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,10 +30,17 @@ export default function FileUploadTab() {
     const list = Array.from(files);
     setQueue(list.map((f) => ({ name: f.name, progress: 0, status: "uploading" as const })));
     try {
-      await uploadsApi.upload(list, (pct) =>
-        setQueue((q) => q.map((item) => ({ ...item, progress: pct }))),
+      const result = await uploadsApi.upload(
+        list,
+        (pct) => setQueue((q) => q.map((item) => ({ ...item, progress: pct }))),
+        undefined,
+        purpose,
       );
       setQueue((q) => q.map((item) => ({ ...item, progress: 100, status: "done" as const })));
+      if (onUploaded) {
+        onUploaded(result);
+        return;
+      }
       notify(`${list.length} document${list.length > 1 ? "s" : ""} queued for extraction`);
       setTimeout(() => navigate("/documents"), 900);
     } catch (err) {

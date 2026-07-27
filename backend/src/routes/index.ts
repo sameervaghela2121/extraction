@@ -5,6 +5,7 @@ import documentsRoutes from "./documents.routes";
 import fieldDefinitionsRoutes from "./fieldDefinitions.routes";
 import usersRoutes from "./users.routes";
 import exportRoutes from "./export.routes";
+import grnRoutes from "./grn.routes";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use("/documents", documentsRoutes);
 router.use("/field-definitions", fieldDefinitionsRoutes);
 router.use("/users", usersRoutes);
 router.use("/export", exportRoutes);
+router.use("/grn", grnRoutes);
 
 export default router;

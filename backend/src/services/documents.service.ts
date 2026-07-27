@@ -1,5 +1,10 @@
 import { Types, type HydratedDocument } from "mongoose";
-import { DocumentModel, type DocumentSource, type IDocument } from "../models/Document.model";
+import {
+  DocumentModel,
+  type DocumentPurpose,
+  type DocumentSource,
+  type IDocument,
+} from "../models/Document.model";
 import { ActivityLog } from "../models/ActivityLog.model";
 import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
@@ -48,6 +53,7 @@ export const documentsService = {
     ownerId: string,
     source: DocumentSource,
     fileCount: number,
+    purpose: DocumentPurpose = "invoice",
   ): Promise<IDocument[]> {
     const files = await findFilesForJob(jobId, fileCount);
     if (files.length === 0) {
@@ -61,11 +67,15 @@ export const documentsService = {
         title: file.title || file.filename || "Untitled document",
         status: "pending",
         source,
+        purpose,
         ownerId: new Types.ObjectId(ownerId),
         uploadedAt: new Date(),
       });
-      await logActivity(doc._id, "System", "Data extraction requested");
-      await logActivity(doc._id, "You", `Uploaded via ${SOURCE_LABEL[source]}`);
+      // GRN scans never reach the review workflow, so there's no timeline to write.
+      if (purpose === "invoice") {
+        await logActivity(doc._id, "System", "Data extraction requested");
+        await logActivity(doc._id, "You", `Uploaded via ${SOURCE_LABEL[source]}`);
+      }
       created.push(doc);
     }
     return created;
@@ -86,7 +96,10 @@ export const documentsService = {
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 10));
 
-    const filter: Record<string, unknown> = {};
+    // GRN scans are not part of the review workflow — they never show up here.
+    // `$ne` rather than `purpose: "invoice"`: documents created before this field existed
+    // have no `purpose` at all, and an equality match would hide every one of them.
+    const filter: Record<string, unknown> = { purpose: { $ne: "grn" } };
     // Staff only see their own documents; admins see all.
     if (auth.role !== "admin") filter.ownerId = new Types.ObjectId(auth.userId);
 

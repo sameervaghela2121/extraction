@@ -1,5 +1,14 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Upload, FolderOpen, Download, Settings, Users, LogOut, type LucideIcon } from "lucide-react";
+import {
+  Upload,
+  FolderOpen,
+  ClipboardList,
+  Download,
+  Settings,
+  Users,
+  LogOut,
+  type LucideIcon,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "../components/ui";
 
@@ -13,6 +22,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/upload", label: "Upload & Scan", icon: Upload },
   { to: "/documents", label: "Documents", icon: FolderOpen },
+  { to: "/grn", label: "GRN", icon: ClipboardList },
   { to: "/export", label: "Export", icon: Download },
   { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },

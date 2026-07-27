@@ -90,6 +90,34 @@ export interface FieldDefinition {
   order: number;
 }
 
+// ---- GRN ----
+// A GRN only records what arrived: the invoice identity plus each line's quantity.
+export interface GrnItem {
+  description: string;
+  // null, not 0 — a blank box means "not counted", not "none received".
+  quantity: number | null;
+}
+
+export interface GrnInvoice {
+  invoiceId: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  items: GrnItem[];
+  saved: boolean;
+}
+
+export interface GrnDraftDocument {
+  documentId: string;
+  title: string;
+  extractionStatus: string;
+  extractionError?: string;
+  invoices: GrnInvoice[];
+}
+
+export interface GrnDraft {
+  documents: GrnDraftDocument[];
+}
+
 export interface ManagedUser {
   id: string;
   name: string;
