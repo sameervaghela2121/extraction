@@ -18,6 +18,9 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  /** Staff only need the GRN workflow — everything else is hidden for them unless
+   *  opted in here. Admins always see the full nav regardless of this flag. */
+  staffVisible?: boolean;
   /** NavLink prefix-matches by default, so "/grn" would light up on "/grn/new" too. */
   end?: boolean;
 }
@@ -25,8 +28,8 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/upload", label: "Upload & Scan", icon: Upload },
   { to: "/documents", label: "Documents", icon: FolderOpen },
-  { to: "/grn/new", label: "Create GRN", icon: ClipboardList },
-  { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true },
+  { to: "/grn/new", label: "Create GRN", icon: ClipboardList, staffVisible: true },
+  { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true, staffVisible: true },
   { to: "/export", label: "Export", icon: Download },
   { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
@@ -35,7 +38,11 @@ const NAV: NavItem[] = [
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const items = NAV.filter((i) => !i.adminOnly || user?.role === "admin");
+  const items = NAV.filter((i) => {
+    if (user?.role === "admin") return true;
+    if (i.adminOnly) return false;
+    return Boolean(i.staffVisible);
+  });
 
   const handleLogout = () => {
     logout();
