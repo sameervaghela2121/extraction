@@ -30,6 +30,20 @@ function toQuantity(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * GRN items only ever persist description/quantity (see `toGrnItems` above) — unit was
+ * never part of what a GRN records, so it's read back for display from the `extracted`
+ * snapshot's original item at the same position rather than stored on the GRN itself.
+ * GRNs saved before `extracted` existed, or invoices Gemini didn't read a unit for,
+ * simply come back with none.
+ */
+function unitOf(extractedItem: Record<string, unknown> | undefined): string | undefined {
+  const raw = extractedItem?.unit;
+  if (raw === null || raw === undefined) return undefined;
+  const s = String(raw).trim();
+  return s || undefined;
+}
+
 const MAX_DOCUMENT_IDS = 20; // matches the upload middleware's file cap
 
 export const grnService = {
@@ -185,13 +199,23 @@ export const grnService = {
     // Reuses the document guard rather than a second rule; also gives us the title.
     const doc = await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
 
+    // `extracted.items` is the original 1:1 line-up the GRN's items were built from
+    // (GRN capture never adds/removes rows, only edits description/quantity), so
+    // position-matching is safe here.
+    const extractedItems = (grn.extracted as { items?: Array<Record<string, unknown>> } | undefined)
+      ?.items;
+
     return {
       id: grn._id.toString(),
       documentId: grn.documentId.toString(),
       title: doc.title,
       invoiceNo: grn.invoiceNo,
       invoiceDate: toDDMMYYYY(grn.invoiceDate),
-      items: grn.items,
+      items: grn.items.map((item, i) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit: unitOf(extractedItems?.[i]),
+      })),
       status: grn.status ?? "awaiting",
       createdAt: toDDMMYYYY(grn.createdAt),
       decidedAt: grn.decidedAt ? toDDMMYYYY(grn.decidedAt) : undefined,
