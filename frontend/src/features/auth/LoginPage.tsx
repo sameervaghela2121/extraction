@@ -17,8 +17,10 @@ export default function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await login(email, password);
-      navigate("/documents");
+      const user = await login(email, password);
+      // Staff can't see /documents (nav hides it, and StaffRestrictedRoute would bounce
+      // them straight back out) — land them on the one section they actually have.
+      navigate(user.role === "staff" ? "/grn" : "/documents");
     } catch (err) {
       setError(apiErrorMessage(err, "Login failed"));
     } finally {

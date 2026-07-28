@@ -124,6 +124,11 @@ export interface GrnDraft {
 /** "awaiting" = not yet reviewed. Switchable in both directions. */
 export type GrnStatus = "awaiting" | "approved" | "rejected";
 
+/** "match"/"mismatch" = received quantities were/weren't identical to the invoice's,
+ *  line for line. "unknown" = nothing to compare (old GRN, no items, or the invoice
+ *  never had a readable quantity) — render as a neutral dot, not a false green/red. */
+export type GrnMatchStatus = "match" | "mismatch" | "unknown";
+
 export interface GrnListItem {
   id: string;
   invoiceNo: string;
@@ -134,6 +139,8 @@ export interface GrnListItem {
   /** Already DD-MM-YYYY, not ISO. Render as-is. */
   createdAt: string;
   status: GrnStatus;
+  /** Received quantities vs. the original invoice, computed server-side. */
+  match: GrnMatchStatus;
 }
 
 export interface GrnListResponse {

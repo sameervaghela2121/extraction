@@ -6,7 +6,9 @@ import type { AuthResult, AuthUser } from "../types";
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  // Returns the freshly-signed-in user so the caller (LoginPage) can route by role
+  // without waiting on a re-render of the `user` state above.
+  login: (email: string, password: string) => Promise<AuthUser>;
   applyAuthResult: (result: AuthResult) => void;
   logout: () => void;
 }
@@ -37,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const result = await authApi.login(email, password);
     applyAuthResult(result);
+    return result.user;
   };
 
   const logout = () => {
