@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
     try {
       const result = await authApi.resetPassword(token!, password);
       applyAuthResult(result);
-      navigate("/documents");
+      navigate(result.user.role === "staff" ? "/grn" : "/documents");
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

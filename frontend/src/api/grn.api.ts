@@ -27,4 +27,9 @@ export const grnApi = {
 
   setStatus: (id: string, status: GrnStatus) =>
     api.patch(`/grn/${id}/status`, { status }).then((r) => r.data),
+
+  /** Staff-only correction of an already-saved GRN's received quantities — one number
+   *  per item, position-matched. Nothing else on the GRN is editable this way. */
+  updateQuantities: (id: string, quantities: number[]) =>
+    api.patch(`/grn/${id}/quantities`, { quantities }).then((r) => r.data),
 };

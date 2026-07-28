@@ -1,6 +1,6 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
-import { ProtectedRoute, AdminRoute } from "./components/guards";
+import { ProtectedRoute, AdminRoute, StaffRestrictedRoute, RoleHome } from "./components/guards";
 import LoginPage from "./features/auth/LoginPage";
 import AcceptInvitePage from "./features/auth/AcceptInvitePage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -24,24 +24,30 @@ export const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { path: "/upload", element: <UploadPage /> },
-          { path: "/documents", element: <DocumentsListPage /> },
-          { path: "/documents/:id", element: <DocumentDetailPage /> },
+          // Staff's whole world — reachable regardless of role.
           { path: "/grn", element: <GrnListPage /> },
           { path: "/grn/new", element: <GrnPage /> },
           { path: "/grn/:id", element: <GrnDetailPage /> },
-          { path: "/export", element: <ExportPage /> },
           {
-            element: <AdminRoute />,
+            element: <StaffRestrictedRoute />,
             children: [
-              { path: "/settings", element: <ExtractionSettingsPage /> },
-              { path: "/users", element: <UserManagementPage /> },
+              { path: "/upload", element: <UploadPage /> },
+              { path: "/documents", element: <DocumentsListPage /> },
+              { path: "/documents/:id", element: <DocumentDetailPage /> },
+              { path: "/export", element: <ExportPage /> },
+              {
+                element: <AdminRoute />,
+                children: [
+                  { path: "/settings", element: <ExtractionSettingsPage /> },
+                  { path: "/users", element: <UserManagementPage /> },
+                ],
+              },
             ],
           },
         ],
       },
     ],
   },
-  { path: "/", element: <Navigate to="/documents" replace /> },
-  { path: "*", element: <Navigate to="/documents" replace /> },
+  { path: "/", element: <RoleHome /> },
+  { path: "*", element: <RoleHome /> },
 ]);

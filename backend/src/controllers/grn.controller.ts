@@ -31,4 +31,8 @@ export const grnController = {
   async setStatus(req: Request, res: Response) {
     res.json(await grnService.setStatus(req.params.id, req.body.status, req.auth!));
   },
+
+  async updateQuantities(req: Request, res: Response) {
+    res.json(await grnService.updateQuantities(req.params.id, req.body.quantities, req.auth!));
+  },
 };

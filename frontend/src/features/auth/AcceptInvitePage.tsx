@@ -25,7 +25,7 @@ export default function AcceptInvitePage() {
     try {
       const result = await authApi.acceptInvite(token, password);
       applyAuthResult(result);
-      navigate("/documents");
+      navigate(result.user.role === "staff" ? "/grn" : "/documents");
     } catch (err) {
       setError(apiErrorMessage(err, "Could not accept invite"));
     } finally {

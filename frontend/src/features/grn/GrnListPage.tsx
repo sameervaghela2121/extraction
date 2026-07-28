@@ -7,7 +7,28 @@ import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { PageHeader, GrnStatusPill, Spinner, EmptyState, Modal } from "../../components/ui";
 import { GrnDetailContent } from "./GrnDetailContent";
-import type { GrnDetail, GrnItem, GrnListResponse, GrnStatus } from "../../types";
+import type { GrnDetail, GrnItem, GrnListResponse, GrnMatchStatus, GrnStatus } from "../../types";
+
+const MATCH_DOT_CLASS: Record<GrnMatchStatus, string> = {
+  match: "dot-high",
+  mismatch: "dot-attention",
+  unknown: "dot-neutral",
+};
+
+const MATCH_TITLE: Record<GrnMatchStatus, string> = {
+  match: "Received quantities match the invoice",
+  mismatch: "Received quantities differ from the invoice",
+  unknown: "No invoice quantity to compare against",
+};
+
+/** Unlike the initial-capture screen (blank = "not yet counted"), clearing the box here
+ *  is a staffer actively correcting a saved GRN — blank means "confirmed zero arrived". */
+function toQuantityOrZero(raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  const n = Number(trimmed.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
 
 export default function GrnListPage() {
   const { user } = useAuth();
@@ -28,6 +49,11 @@ export default function GrnListPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [itemsById, setItemsById] = useState<Record<string, GrnItem[]>>({});
   const [loadingItemIds, setLoadingItemIds] = useState<Set<string>>(new Set());
+
+  // Staff-only: quantities being edited in the dropdown, kept as strings per row so a
+  // half-typed value doesn't get coerced mid-keystroke. Seeded from itemsById on expand.
+  const [editQty, setEditQty] = useState<Record<string, string[]>>({});
+  const [savingQtyId, setSavingQtyId] = useState<string | null>(null);
 
   // Page lives in the URL so opening a GRN and coming back lands on the same page.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -93,6 +119,12 @@ export default function GrnListPage() {
     try {
       const d = await grnApi.detail(id);
       setItemsById((prev) => ({ ...prev, [id]: d.items }));
+      if (user?.role === "staff") {
+        setEditQty((prev) => ({
+          ...prev,
+          [id]: d.items.map((it) => (it.quantity == null ? "" : String(it.quantity))),
+        }));
+      }
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
@@ -101,6 +133,41 @@ export default function GrnListPage() {
         next.delete(id);
         return next;
       });
+    }
+  };
+
+  const updateQtyField = (id: string, index: number, value: string) =>
+    setEditQty((prev) => ({
+      ...prev,
+      [id]: (prev[id] ?? []).map((v, i) => (i === index ? value : v)),
+    }));
+
+  const isQtyDirty = (id: string) => {
+    const edited = editQty[id];
+    const original = itemsById[id];
+    if (!edited || !original) return false;
+    return edited.some((v, i) => v !== (original[i].quantity == null ? "" : String(original[i].quantity)));
+  };
+
+  const saveQuantities = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const edited = editQty[id];
+    if (!edited) return;
+    setSavingQtyId(id);
+    try {
+      const quantities = edited.map(toQuantityOrZero);
+      await grnApi.updateQuantities(id, quantities);
+      setItemsById((prev) => ({
+        ...prev,
+        [id]: prev[id].map((it, i) => ({ ...it, quantity: quantities[i] })),
+      }));
+      setEditQty((prev) => ({ ...prev, [id]: quantities.map(String) }));
+      notify("Quantities updated");
+      load(); // refreshes the row's Match dot, computed server-side from the new quantities
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    } finally {
+      setSavingQtyId(null);
     }
   };
 
@@ -156,7 +223,8 @@ export default function GrnListPage() {
                   {user?.role === "admin" && <th className="hide-narrow">Created by</th>}
                   <th className="hide-narrow">Created</th>
                   <th>Status</th>
-                  <th style={{ width: 90 }}>Actions</th>
+                  <th style={{ width: 50 }}>Match</th>
+                  {user?.role === "admin" && <th style={{ width: 90 }}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -164,7 +232,8 @@ export default function GrnListPage() {
                   const isExpanded = expandedIds.has(g.id);
                   const rowItems = itemsById[g.id];
                   const isLoadingItems = loadingItemIds.has(g.id);
-                  const colCount = 7 + (user?.role === "admin" ? 1 : 0);
+                  // Base columns everyone sees, plus "Created by" and "Actions" — both admin-only.
+                  const colCount = 7 + (user?.role === "admin" ? 2 : 0);
 
                   return (
                     <Fragment key={g.id}>
@@ -186,27 +255,32 @@ export default function GrnListPage() {
                         <td className="muted hide-narrow">{g.createdAt}</td>
                         <td><GrnStatusPill status={g.status} /></td>
                         <td>
-                          <div className="row gap-8 grn-actions-cell" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="btn-icon btn-icon-accept"
-                              disabled={decidingId === g.id || g.status === "approved"}
-                              onClick={(e) => decide(g.id, "approved", e)}
-                              aria-label="Approve"
-                              title="Approve"
-                            >
-                              <Check size={16} />
-                            </button>
-                            <button
-                              className="btn-icon btn-icon-reject"
-                              disabled={decidingId === g.id || g.status === "rejected"}
-                              onClick={(e) => decide(g.id, "rejected", e)}
-                              aria-label="Reject"
-                              title="Reject"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
+                          <span className={`dot ${MATCH_DOT_CLASS[g.match]}`} title={MATCH_TITLE[g.match]} />
                         </td>
+                        {user?.role === "admin" && (
+                          <td>
+                            <div className="row gap-8 grn-actions-cell" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className="btn-icon btn-icon-accept"
+                                disabled={decidingId === g.id || g.status === "approved"}
+                                onClick={(e) => decide(g.id, "approved", e)}
+                                aria-label="Approve"
+                                title="Approve"
+                              >
+                                <Check size={16} />
+                              </button>
+                              <button
+                                className="btn-icon btn-icon-reject"
+                                disabled={decidingId === g.id || g.status === "rejected"}
+                                onClick={(e) => decide(g.id, "rejected", e)}
+                                aria-label="Reject"
+                                title="Reject"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
 
                       {/* Always mounted (not just when expanded) so the accordion animates both
@@ -230,7 +304,7 @@ export default function GrnListPage() {
                                         <th style={{ width: 40 }}>#</th>
                                         <th>Description</th>
                                         <th style={{ width: 80 }}>Unit</th>
-                                        <th style={{ width: 100 }}>Quantity</th>
+                                        <th style={{ width: 110 }}>Quantity</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -239,11 +313,36 @@ export default function GrnListPage() {
                                           <td className="muted">{i + 1}</td>
                                           <td>{it.description}</td>
                                           <td className="muted">{it.unit || "—"}</td>
-                                          <td>{it.quantity == null ? "—" : it.quantity}</td>
+                                          <td>
+                                            {user?.role === "staff" ? (
+                                              <input
+                                                className="input grn-qty-input"
+                                                inputMode="decimal"
+                                                placeholder="0"
+                                                value={editQty[g.id]?.[i] ?? ""}
+                                                onChange={(e) => updateQtyField(g.id, i, e.target.value)}
+                                              />
+                                            ) : it.quantity == null ? (
+                                              "—"
+                                            ) : (
+                                              it.quantity
+                                            )}
+                                          </td>
                                         </tr>
                                       ))}
                                     </tbody>
                                   </table>
+                                  {user?.role === "staff" && (
+                                    <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+                                      <button
+                                        className="btn btn-primary btn-sm"
+                                        disabled={!isQtyDirty(g.id) || savingQtyId === g.id}
+                                        onClick={(e) => saveQuantities(g.id, e)}
+                                      >
+                                        {savingQtyId === g.id ? "Saving…" : "Save quantities"}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -360,6 +459,13 @@ export default function GrnListPage() {
            table instead of sitting flush against the row's edges. */
         .grn-expand-table-wrap {
           padding: 16px 18px;
+        }
+        .grn-qty-input {
+          width: 100%;
+          min-width: 0;
+          padding: 4px 8px;
+          height: 30px;
+          font-size: 13px;
         }
         /* The outer .table-scroll rule forces a 640px min-width on any nested .table
            so it can scroll independently on narrow screens — undo that here since this

@@ -213,6 +213,9 @@ textarea {
 .dot-attention {
   background: var(--danger);
 }
+.dot-neutral {
+  background: var(--text-faint);
+}
 
 /* ---- Toggle switch ---- */
 .switch {

@@ -36,3 +36,18 @@ export const listQuerySchema = z.object({
 export const statusSchema = z.object({
   status: z.enum(["awaiting", "approved", "rejected"]),
 });
+
+/**
+ * Editing an already-saved GRN's received quantity, from the list's inline dropdown.
+ * Blank clears to an explicit 0 here — unlike `quantitySchema` above (used at initial
+ * capture, where blank means "not yet counted"), a staffer correcting a saved GRN who
+ * clears the box is confirming "zero arrived", not leaving it uncounted.
+ */
+const editableQuantitySchema = z.preprocess(
+  (v) => (v === "" || v === undefined || v === null ? 0 : v),
+  z.number().finite(),
+);
+
+export const updateQuantitiesSchema = z.object({
+  quantities: z.array(editableQuantitySchema).min(1),
+});

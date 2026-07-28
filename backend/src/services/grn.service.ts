@@ -44,6 +44,34 @@ function unitOf(extractedItem: Record<string, unknown> | undefined): string | un
   return s || undefined;
 }
 
+/**
+ * "match" = every line's received quantity (`items[i].quantity`, captured on the GRN)
+ * equals what the invoice said was shipped (`extracted.items[i].qty`) — e.g. 10 ordered,
+ * 10 received. "mismatch" = at least one line differs, e.g. 1 arrived damaged and the
+ * staff recorded 9. "unknown" = nothing to compare (pre-`extracted` GRNs, no items, or
+ * the invoice never had a readable quantity), shown as a neutral dot rather than a
+ * false green/red.
+ *
+ * Position-matched for the same reason as `unitOf`: GRN capture never adds/removes rows.
+ */
+export type GrnMatchStatus = "match" | "mismatch" | "unknown";
+
+function matchStatus(
+  items: IGrnItem[],
+  extractedItems: Array<Record<string, unknown>> | undefined,
+): GrnMatchStatus {
+  if (!extractedItems || items.length === 0 || extractedItems.length !== items.length) return "unknown";
+
+  let compared = false;
+  for (let i = 0; i < items.length; i++) {
+    const invoicedQty = toQuantity(extractedItems[i]?.qty);
+    if (invoicedQty === null) continue; // invoice didn't read a quantity for this line — nothing to check it against
+    compared = true;
+    if (items[i].quantity !== invoicedQty) return "mismatch";
+  }
+  return compared ? "match" : "unknown";
+}
+
 const MAX_DOCUMENT_IDS = 20; // matches the upload middleware's file cap
 
 export const grnService = {
@@ -171,8 +199,8 @@ export const grnService = {
         .sort({ createdAt: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
-        // `extracted` is the full invoice snapshot — never send it to a list screen.
-        .select("-extracted")
+        // `extracted` is loaded to compute `match` below but, same as before, is never
+        // itself sent to the list screen — the map() out of here only picks named fields.
         .populate("createdBy", "name")
         .lean(),
       Grn.countDocuments(filter),
@@ -187,6 +215,10 @@ export const grnService = {
         createdBy: (g.createdBy as unknown as { name?: string } | null)?.name ?? "—",
         createdAt: toDDMMYYYY(g.createdAt),
         status: g.status ?? "awaiting",
+        match: matchStatus(
+          g.items,
+          (g.extracted as { items?: Array<Record<string, unknown>> } | undefined)?.items,
+        ),
       })),
       total,
       page,
@@ -222,8 +254,38 @@ export const grnService = {
     };
   },
 
-  /** Approve/reject, switchable in both directions — a mis-tap is undone by tapping the other. */
+  /**
+   * Staff-only correction path: after a GRN is saved, the receiving staff can still fix
+   * a miscounted line from the list's inline dropdown — nothing else there is editable
+   * (description, invoice number/date stay fixed). Admins review and decide; they don't
+   * edit captured data, so this is intentionally staff-only — gated by requireRole on
+   * the route, and re-checked here since a route gate alone is easy to drift out of sync with.
+   */
+  async updateQuantities(id: string, quantities: number[], auth: AuthPayload) {
+    if (auth.role !== "staff") throw ApiError.forbidden("Only staff can edit received quantities");
+
+    const grn = await this.findGrn(id);
+    await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
+
+    if (quantities.length !== grn.items.length) {
+      throw ApiError.badRequest("Quantity count doesn't match the GRN's item count");
+    }
+
+    grn.items = grn.items.map((item, i) => ({ description: item.description, quantity: quantities[i] }));
+    await grn.save();
+
+    return { id: grn._id.toString(), items: grn.items };
+  },
+
+  /**
+   * Approve/reject, switchable in both directions — a mis-tap is undone by tapping the
+   * other. Admin-only: staff capture and correct what arrived, but don't sign off on it —
+   * gated by requireRole on the route, and re-checked here for the same reason as
+   * updateQuantities above.
+   */
   async setStatus(id: string, status: GrnStatus, auth: AuthPayload) {
+    if (auth.role !== "admin") throw ApiError.forbidden("Only admins can approve or reject a GRN");
+
     const grn = await this.findGrn(id);
     await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
 
