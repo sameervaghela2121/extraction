@@ -96,6 +96,9 @@ export interface GrnItem {
   description: string;
   // null, not 0 — a blank box means "not counted", not "none received".
   quantity: number | null;
+  // Read-only, from the original extraction — not something a GRN records or edits.
+  // Absent when the invoice had none, or on a GRN saved before this existed.
+  unit?: string;
 }
 
 export interface GrnInvoice {
