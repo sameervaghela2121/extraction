@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from google import genai
@@ -116,6 +116,37 @@ def store_file(jid: str, idx: int, filename: str, data: bytes, mime: str = "appl
     return f"{GCS_PREFIX}{object_name}"
 
 
+def download_gcs_object(ref: str) -> bytes:
+    """Download bytes for a `gcs://<object>` reference — the counterpart to store_file().
+    Used both for preview streaming (get_file_raw) and, now, for the direct-to-GCS upload
+    path where this service never receives raw bytes over HTTP and must fetch them itself."""
+    if not ref.startswith(GCS_PREFIX):
+        raise ValueError(f"not a gcs:// reference: {ref}")
+    object_name = ref[len(GCS_PREFIX):]
+    blob = _gcs_bucket().blob(object_name)
+    if not blob.exists():
+        raise FileNotFoundError(f"object not found in storage: {object_name}")
+    return blob.download_as_bytes()
+
+
+def merge_images_to_pdf(pages: list[bytes]) -> bytes:
+    """Merge camera-captured photo bytes into one multi-page PDF, one page per image in
+    order — what Node's imagesToPdf() used to do before forwarding to this service. Phone
+    photos carry EXIF orientation rather than physically-rotated pixels, so each image is
+    auto-oriented first (exif_transpose), same as the old sharp().rotate() step."""
+    from PIL import Image, ImageOps
+
+    images = []
+    for data in pages:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        images.append(img)
+    buf = io.BytesIO()
+    images[0].save(buf, format="PDF", save_all=True, append_images=images[1:])
+    return buf.getvalue()
+
+
 def invoice_title(invoices: list[dict]) -> str:
     """Name a document after the invoice(s) inside it — '795/26-27 — Olympic Decor LLP'.
 
@@ -163,6 +194,20 @@ def set_file_status(file_id, status: str):
             coll.update_one({"_id": file_id}, {"$set": {"status": status}})
     except Exception:
         log.exception("could not update status of file %s", file_id)
+
+
+def update_file_storage(file_id, path: str, mime: str, size: int) -> None:
+    """Point a Files doc at its canonical storage location. Only needed for the
+    direct-to-GCS upload path: Node registers the doc before this service has downloaded
+    or (for images) preprocessed anything, so it can only point at the temporary
+    incoming/ staging object — this corrects it to the final store_file() location once
+    that's known, so previews (get_file_raw) and any incoming/ cleanup stay accurate."""
+    try:
+        coll = _mongo_collection(MONGO_FILES_COLLECTION)
+        if coll is not None and file_id is not None:
+            coll.update_one({"_id": file_id}, {"$set": {"path": path, "mime": mime, "size": size}})
+    except Exception:
+        log.exception("could not update storage location of file %s", file_id)
 
 
 def save_invoices_to_db(jid: str, invoices: list[dict], errors: list[dict],
@@ -1213,6 +1258,131 @@ async def extract(files: list[UploadFile] = File(...), custom_fields: str = Form
     return {"job_id": jid}
 
 
+class StorageFileRef(BaseModel):
+    """One file the browser already PUT directly to GCS via a Node-issued signed URL.
+    `id` is the Mongo _id of the Files doc Node already created for it — this service
+    updates that same doc as extraction progresses, it never creates its own."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
+    idx: int
+    filename: str
+    mime: str
+    path: str  # "gcs://<object>" — see download_gcs_object()
+
+
+class ExtractFromStorageBody(BaseModel):
+    job_id: str
+    source: str = "upload"  # "scan" merges every file below into one PDF, same as legacy /extract
+    files: list[StorageFileRef]
+    custom_fields: list[dict] = []
+
+
+@app.post("/extract/from-storage", dependencies=[Depends(require_token)])
+async def extract_from_storage(body: ExtractFromStorageBody):
+    """Direct-to-GCS counterpart to /extract: the browser already uploaded the bytes
+    straight to storage, and Node already registered the Files docs for this job — all
+    that's left here is the actual analysis (download, preprocess, Gemini).
+
+    Mirrors /extract's per-file branching exactly:
+      - PDFs pass straight through.
+      - Standalone images (source="upload") get the same crop/deskew + blur-rejection
+        /extract has always applied.
+      - Camera-scan images (source="scan") are merged into one multi-page PDF first,
+        matching today's behavior where Node pre-merges them before this service ever
+        sees them — no crop/deskew/blur-check applies to scan pages, same as today.
+    """
+    from bson import ObjectId
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not set in environment/.env")
+
+    custom_fields_prompt = build_custom_fields_prompt(body.custom_fields)
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
+    jid = _new_job(body.job_id)
+    total = len(body.files)
+    log.info("=== /extract/from-storage received %d file(s) for job %s ===", total, jid)
+
+    image_mimes = {"image/jpeg", "image/png", "image/webp"}
+
+    async def fetch(ref: StorageFileRef) -> bytes:
+        return await asyncio.to_thread(download_gcs_object, ref.path)
+
+    pre_errors = []
+    file_order = [(f.idx, f.filename) for f in body.files]
+    stored = [{"_id": ObjectId(f.id), "idx": f.idx, "filename": f.filename} for f in body.files]
+
+    chunk = []
+    if body.source == "scan":
+        # every page belongs to one merged document — a failure on any page fails the whole scan,
+        # same as today (Node's imagesToPdf() had no way to drop a single bad page either).
+        try:
+            pages = [await fetch(f) for f in sorted(body.files, key=lambda f: f.idx)]
+            merged = await asyncio.to_thread(merge_images_to_pdf, pages)
+        except Exception as exc:
+            log.exception("job %s: scan merge failed", jid)
+            name = body.files[0].filename if body.files else "scan"
+            pre_errors = [{"source_file": name, "file_idx": body.files[0].idx if body.files else 1,
+                           "error": f"could not read the captured photos: {exc}"}]
+        else:
+            idx = body.files[0].idx
+            chunk.append((idx, body.files[0].filename, merged, "application/pdf"))
+            path = await asyncio.to_thread(store_file, jid, idx, body.files[0].filename, merged, "application/pdf")
+            file_id = ObjectId(body.files[0].id)
+            await asyncio.to_thread(update_file_storage, file_id, path, "application/pdf", len(merged))
+            stored = [{"_id": file_id, "idx": idx, "filename": body.files[0].filename,
+                       "mime": "application/pdf", "size": len(merged), "path": path}]
+    else:
+        for f in body.files:
+            try:
+                data = await fetch(f)
+            except FileNotFoundError as exc:
+                pre_errors.append({"source_file": f.filename, "file_idx": f.idx, "error": str(exc)})
+                continue
+            mime = f.mime
+            if mime == "application/pdf":
+                pass
+            elif mime in image_mimes:
+                raw = data
+                data = await asyncio.to_thread(preprocess_photo, data)
+                # preprocess_photo only re-encodes (to JPEG) when it actually cropped something;
+                # on failure the original bytes — and mime — come back unchanged
+                mime = "image/jpeg" if data is not raw else mime
+                sharpness = await asyncio.to_thread(photo_sharpness, data)
+                if sharpness < BLUR_THRESHOLD:
+                    log.warning("job %s: REJECTED %s — too blurry (sharpness %.0f < %.0f)",
+                                jid, f.filename, sharpness, BLUR_THRESHOLD)
+                    pre_errors.append({"source_file": f.filename, "file_idx": f.idx,
+                                       "error": "photo is too blurry to read — retake it in better "
+                                                "light, holding the phone steady"})
+                    continue
+            else:
+                pre_errors.append({"source_file": f.filename, "file_idx": f.idx,
+                                   "error": f"not a PDF or image (mime: {mime})"})
+                continue
+            chunk.append((f.idx, f.filename, data, mime))
+            # re-store the canonical copy — for images this is the preprocessed bytes, which
+            # differ from what's sitting in the incoming/ staging object.
+            path = await asyncio.to_thread(store_file, jid, f.idx, f.filename, data, mime)
+            await asyncio.to_thread(update_file_storage, ObjectId(f.id), path, mime, len(data))
+            for s in stored:
+                if s["idx"] == f.idx:
+                    s.update(mime=mime, size=len(data), path=path)
+
+    if not chunk and not pre_errors:
+        raise HTTPException(status_code=400, detail="No files could be analyzed")
+
+    pre_error_idx = {e["file_idx"] for e in pre_errors}
+    JOBS[jid]["files"] = [
+        {"name": name, "status": "failed" if idx in pre_error_idx else "queued"}
+        for idx, name in file_order
+    ]
+    JOBS[jid]["task"] = asyncio.create_task(
+        _run_job(jid, client, chunk, pre_errors, total, stored, custom_fields_prompt))
+    return {"job_id": jid, "accepted": True}
+
+
 @app.get("/status/{job_id}", dependencies=[Depends(require_token)])
 def job_status(job_id: str):
     job = JOBS.get(job_id)
@@ -1413,11 +1583,10 @@ def get_file_raw(fid: str):
     doc = _file_or_404(fid)
     raw_path = doc.get("path", "")
     if raw_path.startswith(GCS_PREFIX):
-        object_name = raw_path[len(GCS_PREFIX):]
-        blob = _gcs_bucket().blob(object_name)
-        if not blob.exists():
+        try:
+            data = download_gcs_object(raw_path)
+        except FileNotFoundError:
             raise HTTPException(status_code=404, detail="file is no longer in storage")
-        data = blob.download_as_bytes()
         return StreamingResponse(io.BytesIO(data), media_type=doc.get("mime") or "application/octet-stream")
     path = Path(raw_path).resolve()
     # the path comes from the DB, so treat it as untrusted: it must stay inside STORAGE_DIR

@@ -24,6 +24,9 @@ export const env = {
   invoiceGeneratorAppUser: process.env.INVOICE_GENERATOR_APP_USER ?? "",
   invoiceGeneratorAppPassword: process.env.INVOICE_GENERATOR_APP_PASSWORD ?? "",
 
+  gcsBucket: process.env.GCS_BUCKET ?? "sameerv-docflow-invoices",
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 20 * 1024 * 1024),
+
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
 
   smtp: {
