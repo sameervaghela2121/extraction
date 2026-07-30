@@ -108,6 +108,23 @@ export default function AppLayout() {
         </div>
       </aside>
 
+      {/* Mobile top bar: sidebar (with the only profile/logout UI) is hidden below 900px,
+          so this duplicates just that piece for small screens. */}
+      <header className="app-mobilebar">
+        <div className="row gap-8">
+          <Avatar name={user?.name ?? "?"} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {user?.name}
+            </div>
+            <div className="faint" style={{ fontSize: 12, textTransform: "capitalize" }}>{user?.role}</div>
+          </div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Log out">
+          <LogOut size={16} />
+        </button>
+      </header>
+
       {/* Main content */}
       <main
         className="app-main"
@@ -139,9 +156,17 @@ export default function AppLayout() {
            plain class rule regardless of media query, !important or not. */
         .app-sidebar { display: flex; flex-direction: column; }
         .app-bottomnav { display: none; }
+        .app-mobilebar { display: none; }
         @media (max-width: 900px) {
           .app-sidebar { display: none; }
           .app-main { margin-left: 0 !important; padding: 20px 16px 84px !important; }
+          .app-mobilebar {
+            display: flex; align-items: center; justify-content: space-between;
+            position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 10px 16px;
+          }
+          .app-main { padding-top: 74px !important; }
           .app-bottomnav {
             display: flex; position: fixed; bottom: 0; left: 0; right: 0;
             background: var(--surface); border-top: 1px solid var(--border);
