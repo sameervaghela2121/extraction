@@ -26,6 +26,14 @@ export interface CustomFieldPromptInput {
   description?: string;
 }
 
+export interface StorageFileRef {
+  _id: string;
+  idx: number;
+  filename: string;
+  mime: string;
+  path: string;
+}
+
 let cachedToken: string | null = null;
 
 const http: AxiosInstance = axios.create({
@@ -89,6 +97,33 @@ export const invoiceGeneratorClient = {
         if (err instanceof AxiosError && err.response?.status === 401) throw err; // handled by withAuth
         logger.error("[invoiceGenerator] extract failed", (err as AxiosError).message);
         throw new ApiError(502, "The extraction service rejected the upload");
+      }
+    });
+  },
+
+  /**
+   * Tell the extraction service to analyze files it hasn't seen bytes for yet — they were
+   * uploaded straight to GCS by the browser via a Node-issued signed URL. The service downloads
+   * them itself, runs the same preprocessing/Gemini pipeline as `/extract`, and returns fast
+   * (the actual analysis runs in its own background task, same as today).
+   */
+  async analyzeFromStorage(
+    jobId: string,
+    files: StorageFileRef[],
+    source: "upload" | "scan",
+    customFields?: CustomFieldPromptInput[],
+  ): Promise<void> {
+    return withAuth(async (token) => {
+      try {
+        await http.post(
+          "/extract/from-storage",
+          { job_id: jobId, source, files, custom_fields: customFields ?? [] },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch (err) {
+        if (err instanceof AxiosError && err.response?.status === 401) throw err; // handled by withAuth
+        logger.error("[invoiceGenerator] analyzeFromStorage failed", (err as AxiosError).message);
+        throw new ApiError(502, "The extraction service rejected the job");
       }
     });
   },

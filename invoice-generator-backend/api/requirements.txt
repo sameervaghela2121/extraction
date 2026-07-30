@@ -6,6 +6,7 @@ google-genai
 openpyxl
 opencv-python-headless
 numpy
+Pillow
 pymongo
 pypdf
 google-cloud-storage
