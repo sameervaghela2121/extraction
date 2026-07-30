@@ -254,6 +254,8 @@ export const grnService = {
       // panel — undefined for GRNs saved before `extracted` existed.
       invoice: extracted
         ? {
+            invoiceNo: extracted.invoice_no as string | undefined,
+            invoiceDate: extracted.invoice_date ? toDDMMYYYY(extracted.invoice_date) : undefined,
             sellerName: extracted.seller_name as string | undefined,
             sellerGstin: extracted.seller_gstin as string | undefined,
             buyerName: extracted.buyer_name as string | undefined,

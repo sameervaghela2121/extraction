@@ -94,14 +94,14 @@ export function GrnDetailContent({ grn, loading }: GrnDetailContentProps) {
         {grn.items.length === 0 ? (
           <p className="muted" style={{ fontSize: 13 }}>No line items were captured.</p>
         ) : (
-          <div className="table-scroll">
-            <table className="table">
+          <div className="table-scroll grn-compare-scroll">
+            <table className="table grn-compare-table">
               <thead>
                 <tr>
-                  <th style={{ width: 40 }}>#</th>
+                  <th style={{ width: 28 }}>#</th>
                   <th>Description</th>
-                  <th style={{ width: 80 }}>Unit</th>
-                  <th style={{ width: 100 }}>Quantity</th>
+                  <th style={{ width: 70 }}>Quantity</th>
+                  <th style={{ width: 60 }}>Unit</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,8 +109,8 @@ export function GrnDetailContent({ grn, loading }: GrnDetailContentProps) {
                   <tr key={i}>
                     <td className="muted">{i + 1}</td>
                     <td>{it.description}</td>
-                    <td className="muted">{it.unit || "—"}</td>
                     <td>{it.quantity == null ? "—" : it.quantity}</td>
+                    <td className="muted">{it.unit || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -119,6 +119,8 @@ export function GrnDetailContent({ grn, loading }: GrnDetailContentProps) {
         )}
 
         <style>{`
+          .grn-compare-scroll .grn-compare-table { min-width: 0 !important; }
+          .grn-compare-table th, .grn-compare-table td { padding: 8px 8px; }
           .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
           .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: min(900px, calc(80vh + 24px)); box-sizing: border-box; }
           .grn-detail-card, .grn-invoice-card { overflow-y: auto; }

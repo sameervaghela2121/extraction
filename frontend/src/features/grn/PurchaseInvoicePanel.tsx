@@ -21,9 +21,11 @@ function textDiffers(a: unknown, b: unknown): boolean {
 }
 
 /** Middle column of the GRN detail views: just the invoice's items table, restricted to
- *  the same three columns the goods-receipt table shows (description/unit/quantity) so
- *  the two line up for a direct visual comparison — any cell that differs from what was
- *  actually received gets a grey highlight. */
+ *  the same three columns the goods-receipt table shows (description/quantity/unit) so
+ *  the two line up for a direct visual comparison — any row that differs from what was
+ *  actually received gets a grey highlight. The invoice-number/date row above the table
+ *  exists purely so this card's header is the same height as the goods-receipt card's —
+ *  otherwise the two item tables start at different vertical offsets. */
 export function PurchaseInvoicePanel({ invoice, grnItems }: PurchaseInvoicePanelProps) {
   if (!invoice) {
     return (
@@ -40,18 +42,29 @@ export function PurchaseInvoicePanel({ invoice, grnItems }: PurchaseInvoicePanel
     <div className="card grn-invoice-card" style={{ padding: 18 }}>
       <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>Purchase invoice</h2>
 
-      <label className="field-label">Items ({invoice.items.length})</label>
+      <div className="grn-meta">
+        <div>
+          <label className="field-label">Invoice number</label>
+          <div style={{ fontWeight: 600 }}>{invoice.invoiceNo || "—"}</div>
+        </div>
+        <div>
+          <label className="field-label">Invoice date</label>
+          <div style={{ fontWeight: 600 }}>{invoice.invoiceDate || "—"}</div>
+        </div>
+      </div>
+
+      <label className="field-label" style={{ marginTop: 18 }}>Items ({invoice.items.length})</label>
       {invoice.items.length === 0 ? (
         <p className="muted" style={{ fontSize: 13 }}>No line items were captured.</p>
       ) : (
-        <div className="table-scroll">
-          <table className="table">
+        <div className="table-scroll grn-compare-scroll">
+          <table className="table grn-compare-table">
             <thead>
               <tr>
-                <th style={{ width: 40 }}>#</th>
+                <th style={{ width: 28 }}>#</th>
                 <th>Description</th>
-                <th style={{ width: 80 }}>Unit</th>
-                <th style={{ width: 100 }}>Quantity</th>
+                <th style={{ width: 70 }}>Quantity</th>
+                <th style={{ width: 60 }}>Unit</th>
               </tr>
             </thead>
             <tbody>
@@ -67,8 +80,8 @@ export function PurchaseInvoicePanel({ invoice, grnItems }: PurchaseInvoicePanel
                   <tr key={i} className={rowMismatch ? "grn-invoice-row-mismatch" : undefined}>
                     <td className="muted">{i + 1}</td>
                     <td>{(item.description as string) ?? ""}</td>
-                    <td>{unit || "—"}</td>
                     <td>{qty == null ? "—" : qty}</td>
+                    <td>{unit || "—"}</td>
                   </tr>
                 );
               })}
@@ -78,7 +91,9 @@ export function PurchaseInvoicePanel({ invoice, grnItems }: PurchaseInvoicePanel
       )}
 
       <style>{`
-        .grn-invoice-row-mismatch td { background: var(--border-strong); }
+        .grn-invoice-row-mismatch td { background: var(--danger-soft); }
+        .grn-compare-scroll .grn-compare-table { min-width: 0 !important; }
+        .grn-compare-table th, .grn-compare-table td { padding: 8px 8px; }
       `}</style>
     </div>
   );

@@ -153,6 +153,9 @@ export interface GrnListResponse {
 /** The purchase invoice a GRN was built from — the extraction snapshot, for the
  *  side-by-side comparison panel. Undefined for GRNs saved before this existed. */
 export interface GrnSourceInvoice {
+  invoiceNo?: string;
+  /** Already DD-MM-YYYY, not ISO. Render as-is. */
+  invoiceDate?: string;
   sellerName?: string;
   sellerGstin?: string;
   buyerName?: string;

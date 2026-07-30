@@ -137,13 +137,14 @@ export default function GrnDetailPage() {
           {grn.items.length === 0 ? (
             <p className="muted" style={{ fontSize: 13 }}>No line items were captured.</p>
           ) : (
-            <div className="table-scroll">
-              <table className="table">
+            <div className="table-scroll grn-compare-scroll">
+              <table className="table grn-compare-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>#</th>
+                    <th style={{ width: 28 }}>#</th>
                     <th>Description</th>
-                    <th style={{ width: 100 }}>Quantity</th>
+                    <th style={{ width: 70 }}>Quantity</th>
+                    <th style={{ width: 60 }}>Unit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -153,6 +154,7 @@ export default function GrnDetailPage() {
                       <td>{it.description}</td>
                       {/* Blank stays blank — a null quantity means "not counted", not zero. */}
                       <td>{it.quantity == null ? "—" : it.quantity}</td>
+                      <td className="muted">{it.unit || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,6 +185,8 @@ export default function GrnDetailPage() {
         /* Same widening trick as the document detail page — .app-main's 1200px cap is an
            inline style, so only !important can beat it. Scoped to this page's lifetime. */
         .app-main { max-width: 1800px !important; }
+        .grn-compare-scroll .grn-compare-table { min-width: 0 !important; }
+        .grn-compare-table th, .grn-compare-table td { padding: 8px 8px; }
         .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
         .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
         .grn-detail-card, .grn-invoice-card { overflow-y: auto; }
