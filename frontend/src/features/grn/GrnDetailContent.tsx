@@ -6,6 +6,7 @@ import { GrnStatusPill, Spinner } from "../../components/ui";
 import { isMobileDevice } from "../../utils/device";
 import { useEffect, useState } from "react";
 import type { GrnDetail } from "../../types";
+import { PurchaseInvoicePanel } from "./PurchaseInvoicePanel";
 
 interface GrnDetailContentProps {
   grn: GrnDetail | null;
@@ -69,6 +70,8 @@ export function GrnDetailContent({ grn, loading }: GrnDetailContentProps) {
         )}
       </div>
 
+      <PurchaseInvoicePanel invoice={grn.invoice} grnItems={grn.items} />
+
       <div className="card grn-detail-card" style={{ padding: 18 }}>
         <div className="row" style={{ marginBottom: 16 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700 }}>Goods receipt</h2>
@@ -116,15 +119,19 @@ export function GrnDetailContent({ grn, loading }: GrnDetailContentProps) {
         )}
 
         <style>{`
-          .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
-          .grn-preview-card, .grn-detail-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
-          .grn-detail-card { overflow-y: auto; }
+          .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
+          .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: min(900px, calc(80vh + 24px)); box-sizing: border-box; }
+          .grn-detail-card, .grn-invoice-card { overflow-y: auto; }
           .grn-preview-iframe { height: 100%; }
           .grn-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+          @media (max-width: 1200px) {
+            .grn-detail-grid { grid-template-columns: 1fr 1fr; }
+            .grn-invoice-card { grid-column: 1 / -1; height: auto; }
+          }
           @media (max-width: 900px) {
             .grn-detail-grid { grid-template-columns: 1fr; }
-            .grn-preview-card, .grn-detail-card { height: auto; }
-            .grn-detail-card { overflow-y: visible; }
+            .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: auto; }
+            .grn-detail-card, .grn-invoice-card { overflow-y: visible; }
           }
         `}</style>
       </div>

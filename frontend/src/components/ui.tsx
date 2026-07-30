@@ -168,7 +168,7 @@ export function Modal({
           border: 1px solid var(--border);
           border-radius: var(--radius);
           box-shadow: var(--shadow-md);
-          max-height: 90vh;
+          max-height: 94vh;
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -211,8 +211,8 @@ export function Modal({
           max-width: 900px;
         }
         .modal-xlarge {
-          width: 100%;
-          max-width: 1500px;
+          width: 96vw;
+          max-width: 1900px;
         }
         .modal-header {
           display: flex;

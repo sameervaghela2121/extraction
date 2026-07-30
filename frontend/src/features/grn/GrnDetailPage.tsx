@@ -8,6 +8,7 @@ import { apiErrorMessage } from "../../api/client";
 import { GrnStatusPill, Spinner } from "../../components/ui";
 import { isMobileDevice } from "../../utils/device";
 import type { GrnDetail, GrnStatus } from "../../types";
+import { PurchaseInvoicePanel } from "./PurchaseInvoicePanel";
 
 export default function GrnDetailPage() {
   const { id = "" } = useParams();
@@ -111,6 +112,8 @@ export default function GrnDetailPage() {
           )}
         </div>
 
+        <PurchaseInvoicePanel invoice={grn.invoice} grnItems={grn.items} />
+
         {/* Right: what was received */}
         <div className="card grn-detail-card" style={{ padding: 18 }}>
           <div className="row" style={{ marginBottom: 16 }}>
@@ -179,17 +182,21 @@ export default function GrnDetailPage() {
       <style>{`
         /* Same widening trick as the document detail page — .app-main's 1200px cap is an
            inline style, so only !important can beat it. Scoped to this page's lifetime. */
-        .app-main { max-width: 1600px !important; }
-        .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
-        .grn-preview-card, .grn-detail-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
-        .grn-detail-card { overflow-y: auto; }
+        .app-main { max-width: 1800px !important; }
+        .grn-detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
+        .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
+        .grn-detail-card, .grn-invoice-card { overflow-y: auto; }
         .grn-preview-iframe { height: 100%; }
         .grn-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 1300px) {
+          .grn-detail-grid { grid-template-columns: 1fr 1fr; }
+          .grn-invoice-card { grid-column: 1 / -1; height: auto; }
+        }
         @media (max-width: 900px) {
           .app-main { max-width: none !important; }
           .grn-detail-grid { grid-template-columns: 1fr; }
-          .grn-preview-card, .grn-detail-card { height: auto; }
-          .grn-detail-card { overflow-y: visible; }
+          .grn-preview-card, .grn-detail-card, .grn-invoice-card { height: auto; }
+          .grn-detail-card, .grn-invoice-card { overflow-y: visible; }
           .grn-decide .btn { flex: 1; min-height: 48px; justify-content: center; font-size: 15px; }
         }
       `}</style>

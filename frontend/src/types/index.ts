@@ -150,6 +150,26 @@ export interface GrnListResponse {
   totalPages: number;
 }
 
+/** The purchase invoice a GRN was built from — the extraction snapshot, for the
+ *  side-by-side comparison panel. Undefined for GRNs saved before this existed. */
+export interface GrnSourceInvoice {
+  sellerName?: string;
+  sellerGstin?: string;
+  buyerName?: string;
+  buyerGstin?: string;
+  taxableValue?: number;
+  cgstRate?: string;
+  cgstAmount?: number;
+  sgstRate?: string;
+  sgstAmount?: number;
+  igstRate?: string;
+  igstAmount?: number;
+  roundOff?: number;
+  grandTotal?: number;
+  /** Columns vary by invoice layout — same reason `Document.invoices[].items` is untyped. */
+  items: Array<Record<string, unknown>>;
+}
+
 export interface GrnDetail {
   id: string;
   /** The uploaded invoice this GRN came from — what the preview pane loads. */
@@ -162,6 +182,7 @@ export interface GrnDetail {
   status: GrnStatus;
   createdAt: string;
   decidedAt?: string;
+  invoice?: GrnSourceInvoice;
 }
 
 export interface ManagedUser {

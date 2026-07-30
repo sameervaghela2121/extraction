@@ -231,11 +231,10 @@ export const grnService = {
     // Reuses the document guard rather than a second rule; also gives us the title.
     const doc = await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
 
-    // `extracted.items` is the original 1:1 line-up the GRN's items were built from
-    // (GRN capture never adds/removes rows, only edits description/quantity), so
-    // position-matching is safe here.
-    const extractedItems = (grn.extracted as { items?: Array<Record<string, unknown>> } | undefined)
-      ?.items;
+    // Whatever the extraction actually read, straight from the snapshot — GRNs saved
+    // before `extracted` existed simply have none of this.
+    const extracted = grn.extracted as Record<string, unknown> | undefined;
+    const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
 
     return {
       id: grn._id.toString(),
@@ -251,6 +250,26 @@ export const grnService = {
       status: grn.status ?? "awaiting",
       createdAt: toDDMMYYYY(grn.createdAt),
       decidedAt: grn.decidedAt ? toDDMMYYYY(grn.decidedAt) : undefined,
+      // The purchase invoice this GRN was built from, for the side-by-side comparison
+      // panel — undefined for GRNs saved before `extracted` existed.
+      invoice: extracted
+        ? {
+            sellerName: extracted.seller_name as string | undefined,
+            sellerGstin: extracted.seller_gstin as string | undefined,
+            buyerName: extracted.buyer_name as string | undefined,
+            buyerGstin: extracted.buyer_gstin as string | undefined,
+            taxableValue: extracted.taxable_value as number | undefined,
+            cgstRate: extracted.cgst_rate as string | undefined,
+            cgstAmount: extracted.cgst_amount as number | undefined,
+            sgstRate: extracted.sgst_rate as string | undefined,
+            sgstAmount: extracted.sgst_amount as number | undefined,
+            igstRate: extracted.igst_rate as string | undefined,
+            igstAmount: extracted.igst_amount as number | undefined,
+            roundOff: extracted.round_off as number | undefined,
+            grandTotal: extracted.grand_total as number | undefined,
+            items: extractedItems ?? [],
+          }
+        : undefined,
     };
   },
 
