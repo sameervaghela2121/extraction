@@ -47,7 +47,7 @@ export const uploadsApi = {
   /** Step 3: tell Node every file landed in storage, so it can register the job and hand it
    *  to the extraction service. Node already knows which objects this jobId covers (it
    *  recorded that itself at presign time) — nothing storage-related is sent here. */
-  confirm: (jobId: string, source: "upload" | "scan", purpose?: "invoice" | "grn") =>
+  confirm: (jobId: string, source: "upload" | "scan", purpose?: "invoice" | "grn" | "voucher") =>
     api
       .post<UploadResult>("/documents/upload/confirm", { jobId, source, purpose: purpose ?? "invoice" })
       .then((r) => r.data),
@@ -58,7 +58,7 @@ export const uploadsApi = {
     files: File[],
     onProgress?: (pct: number) => void,
     source: "upload" | "scan" = "upload",
-    purpose?: "invoice" | "grn",
+    purpose?: "invoice" | "grn" | "voucher",
   ): Promise<UploadResult> {
     const { jobId, uploads } = await uploadsApi.presign(files);
     const progress = new Array(files.length).fill(0);

@@ -12,8 +12,14 @@ export function confidenceFromValidation(validation?: string): Confidence {
   return validation && validation.trim().toUpperCase() === "OK" ? "high" : "needs_attention";
 }
 
-/** Fixed, non-field keys that should never be surfaced as editable "extracted fields". */
-const NON_FIELD_KEYS = new Set([
+/**
+ * Fixed, non-field keys that should never be surfaced as editable "extracted fields" —
+ * also reused by updateFields() in documents.service.ts / generalVouchers.service.ts as
+ * the write-side guard, so a client can never mass-assign a structural field like
+ * `file_id` (which would silently re-parent an invoice onto a different document/owner)
+ * by including it in an update payload.
+ */
+export const NON_FIELD_KEYS = new Set([
   "_id",
   "job_id",
   "file_id",

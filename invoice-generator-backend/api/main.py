@@ -65,12 +65,15 @@ MAX_INVOICES_PER_CALL = int(os.environ.get("MAX_INVOICES_PER_CALL", "5"))
 # Where the uploaded PDFs/photos are kept so the library can show them again later.
 # Must be a persistent volume in production, or files vanish on redeploy.
 STORAGE_DIR = Path(os.environ.get("STORAGE_DIR", "storage")).resolve()
-# New uploads go to this private GCS bucket instead of local disk (files uploaded before
-# this change stay on STORAGE_DIR and keep working via the local-disk path below). The
-# bucket has no public access — /files/{fid}/raw streams bytes through this service, so
-# viewing still requires a valid portal login, same as before.
+# New uploads go to this GCS bucket instead of local disk (files uploaded before this
+# change stay on STORAGE_DIR and keep working via the local-disk path below).
+# The bucket was originally private — /files/{fid}/raw downloaded bytes server-side so
+# viewing still required a valid portal login. It's since been made public, so `path` can
+# now also hold the bucket's own public URL for a migrated record (see
+# GCS_PUBLIC_URL_PREFIX below); either form downloads the same way.
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "sameerv-docflow-invoices")
 GCS_PREFIX = "gcs://"
+GCS_PUBLIC_URL_PREFIX = f"https://storage.googleapis.com/{GCS_BUCKET}/"
 # Only these are ever accepted for upload — anything else (text/html, image/svg+xml, etc.)
 # is stored as inert bytes so a malicious upload can never be served back as active content.
 ALLOWED_UPLOAD_MIMES = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
@@ -100,8 +103,10 @@ def _mongo_collection(name: str = None):
 
 
 def store_file(jid: str, idx: int, filename: str, data: bytes, mime: str = "application/octet-stream") -> str:
-    """Upload to the private GCS bucket under <job>/<idx>_<name> and return a "gcs://<object>"
-    reference (never a public URL — the bucket has no public access; see get_file_raw).
+    """Upload to the GCS bucket under <job>/<idx>_<name> and return its public
+    `https://storage.googleapis.com/<bucket>/<object>` URL — the bucket is public now, so
+    this is directly usable by a client with no proxying through this service required
+    (get_file_raw still accepts either form, for files stored before this change).
 
     The idx prefix keeps two uploads with the same name from colliding, and the
     name is stripped of anything that could climb out of the directory. The stored
@@ -113,16 +118,21 @@ def store_file(jid: str, idx: int, filename: str, data: bytes, mime: str = "appl
     safe_mime = mime if mime in ALLOWED_UPLOAD_MIMES else "application/octet-stream"
     blob = _gcs_bucket().blob(object_name)
     blob.upload_from_string(data, content_type=safe_mime)
-    return f"{GCS_PREFIX}{object_name}"
+    return f"{GCS_PUBLIC_URL_PREFIX}{object_name}"
 
 
 def download_gcs_object(ref: str) -> bytes:
-    """Download bytes for a `gcs://<object>` reference — the counterpart to store_file().
-    Used both for preview streaming (get_file_raw) and, now, for the direct-to-GCS upload
-    path where this service never receives raw bytes over HTTP and must fetch them itself."""
-    if not ref.startswith(GCS_PREFIX):
-        raise ValueError(f"not a gcs:// reference: {ref}")
-    object_name = ref[len(GCS_PREFIX):]
+    """Download bytes for a `gcs://<object>` reference (the counterpart to store_file()) or
+    for the bucket's own public `https://storage.googleapis.com/<bucket>/<object>` form
+    (what a migrated `path` looks like post-migration, now that the bucket is public).
+    Used both for preview streaming (get_file_raw) and for the direct-to-GCS upload path
+    where this service never receives raw bytes over HTTP and must fetch them itself."""
+    if ref.startswith(GCS_PREFIX):
+        object_name = ref[len(GCS_PREFIX):]
+    elif ref.startswith(GCS_PUBLIC_URL_PREFIX):
+        object_name = ref[len(GCS_PUBLIC_URL_PREFIX):]
+    else:
+        raise ValueError(f"not a gcs:// or public storage reference: {ref}")
     blob = _gcs_bucket().blob(object_name)
     if not blob.exists():
         raise FileNotFoundError(f"object not found in storage: {object_name}")
@@ -1574,15 +1584,13 @@ def get_file(fid: str):
 def get_file_raw(fid: str):
     """Stream the original upload back for the preview pane.
 
-    Newer uploads live in the private GCS bucket — this endpoint downloads the bytes
-    server-side (the bucket itself has no public access) and streams them back, so
-    viewing still requires a valid portal login via require_token, same as before.
-    Older uploads (from before this change) still sit on local disk and are streamed
-    exactly as before.
+    `path` may be a `gcs://` reference, the bucket's public URL form (post-migration, now
+    that the bucket is public), or — for uploads from before either of those — a local-disk
+    path under STORAGE_DIR, streamed exactly as before.
     """
     doc = _file_or_404(fid)
     raw_path = doc.get("path", "")
-    if raw_path.startswith(GCS_PREFIX):
+    if raw_path.startswith(GCS_PREFIX) or raw_path.startswith(GCS_PUBLIC_URL_PREFIX):
         try:
             data = download_gcs_object(raw_path)
         except FileNotFoundError:

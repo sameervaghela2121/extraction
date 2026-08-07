@@ -2,15 +2,26 @@ import { randomUUID } from "crypto";
 import type { Request, Response } from "express";
 import { invoiceGeneratorClient, type StorageFileRef, type UploadedFile } from "../services/invoiceGeneratorClient.service";
 import { documentsService } from "../services/documents.service";
+import { generalVouchersService } from "../services/generalVouchers.service";
 import { fieldDefinitionsService } from "../services/fieldDefinitions.service";
 import { presignUploads, getObjectSize } from "../services/gcsUpload.service";
 import { imagesToPdf } from "../utils/imagesToPdf";
 import { ApiError } from "../utils/ApiError";
 import { SharedFile } from "../models/SharedFiles.model";
 import { PendingUpload } from "../models/PendingUpload.model";
-import type { DocumentPurpose, DocumentSource } from "../models/Document.model";
+import type { DocumentSource } from "../models/Document.model";
 import type { presignSchema, confirmUploadSchema } from "../validators/uploads.validators";
 import type { z } from "zod";
+import { env } from "../config/env";
+
+type UploadPurpose = "invoice" | "grn" | "voucher";
+
+/** The bucket is public, so this is directly usable by a client with no proxying —
+ *  same public-URL form the Python service's store_file() now writes for its own
+ *  post-processing copy (see invoice-generator-backend/api/main.py). */
+function gcsPublicUrl(objectPath: string): string {
+  return `https://storage.googleapis.com/${env.gcsBucket}/${objectPath}`;
+}
 
 function toUploadedFiles(files?: Express.Multer.File[]): UploadedFile[] {
   if (!files || files.length === 0) throw ApiError.badRequest("No files provided");
@@ -21,8 +32,23 @@ function parseSource(value: unknown): DocumentSource {
   return value === "scan" ? "scan" : "upload";
 }
 
-function parsePurpose(value: unknown): DocumentPurpose {
-  return value === "grn" ? "grn" : "invoice";
+function parsePurpose(value: unknown): UploadPurpose {
+  return value === "grn" || value === "voucher" ? value : "invoice";
+}
+
+/** General Vouchers have no separate confirmed-capture step, so they never go through
+ *  documentsService — they get their own tracking row via generalVouchersService instead. */
+function createRecords(
+  purpose: UploadPurpose,
+  jobId: string,
+  ownerId: string,
+  source: DocumentSource,
+  fileCount: number,
+) {
+  if (purpose === "voucher") {
+    return generalVouchersService.createFromExtraction(jobId, ownerId, source, fileCount);
+  }
+  return documentsService.createFromExtraction(jobId, ownerId, source, fileCount, purpose);
 }
 
 export const uploadsController = {
@@ -49,13 +75,7 @@ export const uploadsController = {
 
     const customFields = await fieldDefinitionsService.listEnabledCustomForPrompt();
     const { jobId } = await invoiceGeneratorClient.extract(files, customFields);
-    const docs = await documentsService.createFromExtraction(
-      jobId,
-      req.auth!.userId,
-      source,
-      files.length,
-      purpose,
-    );
+    const docs = await createRecords(purpose, jobId, req.auth!.userId, source, files.length);
     res.status(201).json({
       jobId,
       documents: docs.map((d) => ({ id: d._id.toString(), title: d.title, status: d.status })),
@@ -122,7 +142,7 @@ export const uploadsController = {
             filename: scanTitle,
             mime: "application/pdf",
             size: 0,
-            path: `gcs://${files[0].objectPath}`,
+            path: gcsPublicUrl(files[0].objectPath),
             idx: 1,
             status: "processing" as const,
             invoice_count: 0,
@@ -136,7 +156,7 @@ export const uploadsController = {
           filename: f.filename,
           mime: f.mimetype,
           size: sizes[i]!,
-          path: `gcs://${f.objectPath}`,
+          path: gcsPublicUrl(f.objectPath),
           idx: i + 1,
           status: "processing" as const,
           invoice_count: 0,
@@ -158,7 +178,7 @@ export const uploadsController = {
           idx: i + 1,
           filename: scanTitle,
           mime: f.mimetype,
-          path: `gcs://${f.objectPath}`,
+          path: gcsPublicUrl(f.objectPath),
         }))
       : inserted.map((doc, i) => ({
           _id: doc._id.toString(),
@@ -171,13 +191,7 @@ export const uploadsController = {
     const customFields = await fieldDefinitionsService.listEnabledCustomForPrompt();
     await invoiceGeneratorClient.analyzeFromStorage(jobId, storageRefs, source, customFields);
 
-    const docs = await documentsService.createFromExtraction(
-      jobId,
-      req.auth!.userId,
-      source,
-      isScan ? 1 : files.length,
-      purpose,
-    );
+    const docs = await createRecords(purpose, jobId, req.auth!.userId, source, isScan ? 1 : files.length);
     res.status(201).json({
       jobId,
       documents: docs.map((d) => ({ id: d._id.toString(), title: d.title, status: d.status })),

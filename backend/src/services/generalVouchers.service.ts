@@ -1,10 +1,6 @@
 import { Types, type HydratedDocument } from "mongoose";
-import {
-  DocumentModel,
-  type DocumentPurpose,
-  type DocumentSource,
-  type IDocument,
-} from "../models/Document.model";
+import { GeneralVoucher, type IGeneralVoucher } from "../models/GeneralVoucher.model";
+import type { DocumentSource } from "../models/Document.model";
 import { ActivityLog } from "../models/ActivityLog.model";
 import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
@@ -27,48 +23,41 @@ const SOURCE_LABEL: Record<DocumentSource, string> = {
 };
 
 async function logActivity(
-  documentId: Types.ObjectId,
+  voucherId: Types.ObjectId,
   actor: string,
   action: string,
   meta?: Record<string, unknown>,
 ): Promise<void> {
-  await ActivityLog.create({ documentId, actor, action, timestamp: new Date(), meta });
+  await ActivityLog.create({ documentId: voucherId, actor, action, timestamp: new Date(), meta });
 }
 
-export const documentsService = {
-  /**
-   * Shared intake path used by upload and scan-complete: given a jobId returned by
-   * the extraction service, create one portal Document per registered file.
-   */
+export const generalVouchersService = {
+  /** Same intake path as Documents: one General Voucher row per registered file, created
+   *  immediately after upload — extraction runs in the background and is polled separately. */
   async createFromExtraction(
     jobId: string,
     ownerId: string,
     source: DocumentSource,
     fileCount: number,
-    purpose: DocumentPurpose = "invoice",
-  ): Promise<IDocument[]> {
+  ): Promise<IGeneralVoucher[]> {
     const files = await findFilesForJob(jobId, fileCount);
     if (files.length === 0) {
       throw new ApiError(502, "Extraction service did not register any files for this job");
     }
-    const created: IDocument[] = [];
+    const created: IGeneralVoucher[] = [];
     for (const file of files) {
-      const doc = await DocumentModel.create({
+      const voucher = await GeneralVoucher.create({
         fileId: file._id,
         jobId,
-        title: file.title || file.filename || "Untitled document",
+        title: file.title || file.filename || "Untitled voucher",
         status: "pending",
         source,
-        purpose,
         ownerId: new Types.ObjectId(ownerId),
         uploadedAt: new Date(),
       });
-      // GRN scans never reach the review workflow, so there's no timeline to write.
-      if (purpose === "invoice") {
-        await logActivity(doc._id, "System", "Data extraction requested");
-        await logActivity(doc._id, "You", `Uploaded via ${SOURCE_LABEL[source]}`);
-      }
-      created.push(doc);
+      await logActivity(voucher._id, "System", "Data extraction requested");
+      await logActivity(voucher._id, "You", `Uploaded via ${SOURCE_LABEL[source]}`);
+      created.push(voucher);
     }
     return created;
   },
@@ -88,11 +77,8 @@ export const documentsService = {
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 10));
 
-    // GRN scans are not part of the review workflow — they never show up here.
-    // `$ne` rather than `purpose: "invoice"`: documents created before this field existed
-    // have no `purpose` at all, and an equality match would hide every one of them.
-    const filter: Record<string, unknown> = { purpose: { $ne: "grn" } };
-    // Staff only see their own documents; admins see all.
+    const filter: Record<string, unknown> = {};
+    // Staff only see their own vouchers; admins see all.
     if (auth.role !== "admin") filter.ownerId = new Types.ObjectId(auth.userId);
 
     if (opts.status) {
@@ -111,18 +97,17 @@ export const documentsService = {
     const sortDir = opts.order === "asc" ? 1 : -1;
 
     const [docs, total] = await Promise.all([
-      DocumentModel.find(filter)
+      GeneralVoucher.find(filter)
         .sort({ [sortField]: sortDir })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate("ownerId", "name email")
         .lean(),
-      DocumentModel.countDocuments(filter),
+      GeneralVoucher.countDocuments(filter),
     ]);
 
-    // Join each document's first extracted invoice for amount/vendor/confidence display,
-    // and its Files record for the live extraction-progress status (separate from the
-    // portal's own review-workflow `status` field).
+    // Join each voucher's first extracted record for amount/vendor/confidence display, and
+    // its Files record for the live extraction-progress status.
     const fileIds = docs.map((d) => d.fileId);
     const [invoices, files] = await Promise.all([
       SharedInvoice.find({ file_id: { $in: fileIds } }).lean(),
@@ -156,55 +141,32 @@ export const documentsService = {
     return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   },
 
-  async getOwnedOrAdmin(id: string, auth: AuthPayload): Promise<HydratedDocument<IDocument>> {
-    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid document id");
-    const doc = await DocumentModel.findById(id);
-    if (!doc) throw ApiError.notFound("Document not found");
-    if (auth.role !== "admin" && doc.ownerId.toString() !== auth.userId) {
-      throw ApiError.forbidden("You do not have access to this document");
+  async getOwnedOrAdmin(id: string, auth: AuthPayload): Promise<HydratedDocument<IGeneralVoucher>> {
+    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid voucher id");
+    const voucher = await GeneralVoucher.findById(id);
+    if (!voucher) throw ApiError.notFound("General voucher not found");
+    if (auth.role !== "admin" && voucher.ownerId.toString() !== auth.userId) {
+      throw ApiError.forbidden("You do not have access to this voucher");
     }
-    return doc;
-  },
-
-  // No ownership check — only for callers on a deliberately public path (e.g. the
-  // unauthenticated GRN endpoint) that already decided an owner check doesn't apply.
-  async getById(id: string): Promise<HydratedDocument<IDocument>> {
-    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid document id");
-    const doc = await DocumentModel.findById(id);
-    if (!doc) throw ApiError.notFound("Document not found");
-    return doc;
-  },
-
-  // Batched title+fileId lookup for list responses that would otherwise fire one findById
-  // per row — a document that no longer exists is simply absent from the map rather than
-  // failing the whole list. fileId rides along so callers can also resolve the file's
-  // storage location without a second per-row query.
-  async getSummariesByIds(ids: string[]): Promise<Map<string, { title: string; fileId: Types.ObjectId }>> {
-    const validIds = [...new Set(ids)].filter((id) => Types.ObjectId.isValid(id));
-    if (validIds.length === 0) return new Map();
-    const docs = await DocumentModel.find({ _id: { $in: validIds } }, { title: 1, fileId: 1 }).lean();
-    return new Map(docs.map((d) => [d._id.toString(), { title: d.title, fileId: d.fileId }]));
+    return voucher;
   },
 
   async detail(id: string, auth: AuthPayload) {
-    const doc = await this.getOwnedOrAdmin(id, auth);
-    // One uploaded file can contain multiple invoices back-to-back — the extraction
-    // service writes one Invoice record per invoice it finds, all sharing this file_id.
-    // Sort by page so multi-invoice documents render in the same order as the PDF.
+    const voucher = await this.getOwnedOrAdmin(id, auth);
     const [file, invoices, activity] = await Promise.all([
-      SharedFile.findById(doc.fileId).lean(),
-      SharedInvoice.find({ file_id: doc.fileId }).sort({ page: 1 }).lean(),
-      ActivityLog.find({ documentId: doc._id }).sort({ timestamp: 1 }).lean(),
+      SharedFile.findById(voucher.fileId).lean(),
+      SharedInvoice.find({ file_id: voucher.fileId }).sort({ page: 1 }).lean(),
+      ActivityLog.find({ documentId: voucher._id }).sort({ timestamp: 1 }).lean(),
     ]);
 
     return {
-      id: doc._id.toString(),
-      title: doc.title,
-      status: doc.status,
-      source: doc.source,
-      uploadedAt: doc.uploadedAt,
-      verifiedAt: doc.verifiedAt,
-      fileId: doc.fileId.toString(),
+      id: voucher._id.toString(),
+      title: voucher.title,
+      status: voucher.status,
+      source: voucher.source,
+      uploadedAt: voucher.uploadedAt,
+      verifiedAt: voucher.verifiedAt,
+      fileId: voucher.fileId.toString(),
       extractionStatus: file?.status ?? "unknown",
       extractionError: file?.error,
       invoices: invoices.map((invoice) => ({
@@ -228,12 +190,11 @@ export const documentsService = {
     updates: Record<string, string | number>,
     auth: AuthPayload,
   ) {
-    const doc = await this.getOwnedOrAdmin(id, auth);
+    const voucher = await this.getOwnedOrAdmin(id, auth);
     if (!Types.ObjectId.isValid(invoiceId)) throw ApiError.badRequest("Invalid invoice id");
     const invoice = await SharedInvoice.findById(invoiceId);
-    // Must actually belong to this document — otherwise the id could target any invoice.
-    if (!invoice || invoice.file_id?.toString() !== doc.fileId.toString()) {
-      throw ApiError.notFound("No extracted data found for this document");
+    if (!invoice || invoice.file_id?.toString() !== voucher.fileId.toString()) {
+      throw ApiError.notFound("No extracted data found for this voucher");
     }
 
     const known = new Set(Object.keys(invoice.toObject()));
@@ -245,7 +206,6 @@ export const documentsService = {
       if (known.has(key) && key !== "other_fields") {
         invoice.set(key, value);
       } else {
-        // Unknown key → store under other_fields so it survives round-trips.
         invoice.set(`other_fields.${key}`, value);
       }
     }
@@ -253,7 +213,7 @@ export const documentsService = {
     invoice.set("editedAt", new Date());
     await invoice.save();
 
-    await logActivity(doc._id, auth.name, "Edited extracted fields", { keys: Object.keys(updates) });
+    await logActivity(voucher._id, auth.name, "Edited extracted fields", { keys: Object.keys(updates) });
     return this.detail(id, auth);
   },
 
@@ -262,29 +222,29 @@ export const documentsService = {
     auth: AuthPayload,
     action: "verify" | "unverify" | "archive" | "restore",
   ) {
-    const doc = await this.getOwnedOrAdmin(id, auth);
+    const voucher = await this.getOwnedOrAdmin(id, auth);
     switch (action) {
       case "verify":
-        doc.status = "verified";
-        doc.verifiedAt = new Date();
-        doc.verifiedBy = new Types.ObjectId(auth.userId);
-        await logActivity(doc._id, auth.name, "Approved & verified");
+        voucher.status = "verified";
+        voucher.verifiedAt = new Date();
+        voucher.verifiedBy = new Types.ObjectId(auth.userId);
+        await logActivity(voucher._id, auth.name, "Approved & verified");
         break;
       case "unverify":
-        doc.status = "pending";
-        await logActivity(doc._id, auth.name, "Marked as pending");
+        voucher.status = "pending";
+        await logActivity(voucher._id, auth.name, "Marked as pending");
         break;
       case "archive":
-        doc.status = "archived";
-        await logActivity(doc._id, auth.name, "Archived");
+        voucher.status = "archived";
+        await logActivity(voucher._id, auth.name, "Archived");
         break;
       case "restore":
-        doc.status = "pending";
-        await logActivity(doc._id, auth.name, "Restored from archive");
+        voucher.status = "pending";
+        await logActivity(voucher._id, auth.name, "Restored from archive");
         break;
     }
-    await doc.save();
-    return { id: doc._id.toString(), status: doc.status };
+    await voucher.save();
+    return { id: voucher._id.toString(), status: voucher.status };
   },
 
   async bulkTransition(
@@ -297,15 +257,15 @@ export const documentsService = {
       try {
         results.push(await this.transition(id, auth, action));
       } catch {
-        // Skip documents the user can't touch; report the rest.
+        // Skip vouchers the user can't touch; report the rest.
       }
     }
     return { updated: results.length, results };
   },
 
   async activity(id: string, auth: AuthPayload) {
-    const doc = await this.getOwnedOrAdmin(id, auth);
-    const activity = await ActivityLog.find({ documentId: doc._id }).sort({ timestamp: 1 }).lean();
+    const voucher = await this.getOwnedOrAdmin(id, auth);
+    const activity = await ActivityLog.find({ documentId: voucher._id }).sort({ timestamp: 1 }).lean();
     return activity.map((a) => ({ actor: a.actor, action: a.action, timestamp: a.timestamp }));
   },
 };
