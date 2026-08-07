@@ -12,6 +12,7 @@ import {
   extractedItems,
   invoiceAmount,
   invoiceVendor,
+  NON_FIELD_KEYS,
 } from "../utils/invoiceMapping";
 import type { AuthPayload } from "../types/express";
 
@@ -86,7 +87,10 @@ export const generalVouchersService = {
       filter.status = { $ne: "archived" };
     }
     if (opts.search) {
-      filter.title = { $regex: opts.search, $options: "i" };
+      // Escaped before it reaches RegExp — an unescaped search term (regex metacharacters,
+      // or a pathological pattern like `(a+)+`) could otherwise throw or hang the query.
+      const rx = new RegExp(opts.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.title = rx;
     }
 
     const sortField = opts.sort === "date" ? "uploadedAt" : opts.sort === "title" ? "title" : "uploadedAt";
@@ -195,6 +199,10 @@ export const generalVouchersService = {
 
     const known = new Set(Object.keys(invoice.toObject()));
     for (const [key, value] of Object.entries(updates)) {
+      // Structural/system fields (file_id, _id, editedBy, ...) are never client-settable —
+      // otherwise a caller could re-parent this invoice onto a different document/owner
+      // just by including e.g. "file_id" in the update payload.
+      if (NON_FIELD_KEYS.has(key)) continue;
       if (known.has(key) && key !== "other_fields") {
         invoice.set(key, value);
       } else {
