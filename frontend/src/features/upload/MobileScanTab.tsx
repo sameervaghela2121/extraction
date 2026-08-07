@@ -14,10 +14,12 @@ interface Props {
   /** When given, the caller handles what happens next instead of the default
    *  "notify and go to Documents" — used by the GRN page, which stays put. */
   onUploaded?: (result: UploadResult) => void;
-  purpose?: "invoice" | "grn";
+  purpose?: "invoice" | "grn" | "voucher";
+  /** Where the default (no `onUploaded`) flow navigates after a successful upload. */
+  redirectTo?: string;
 }
 
-export default function MobileScanTab({ onUploaded, purpose }: Props) {
+export default function MobileScanTab({ onUploaded, purpose, redirectTo = "/documents" }: Props) {
   const navigate = useNavigate();
   const { notify } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,8 +58,8 @@ export default function MobileScanTab({ onUploaded, purpose }: Props) {
         onUploaded(result);
         return;
       }
-      notify("Sent to Documents as an invoice");
-      setTimeout(() => navigate("/documents"), 900);
+      notify(purpose === "voucher" ? "Sent to General Vouchers" : "Sent to Documents as an invoice");
+      setTimeout(() => navigate(redirectTo), 900);
     } catch (err) {
       notify(apiErrorMessage(err, "Upload failed"), "error");
     } finally {

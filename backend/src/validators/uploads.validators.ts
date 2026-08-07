@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const ALLOWED_MIMES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
 
-const purposeSchema = z.enum(["invoice", "grn"]).default("invoice");
+const purposeSchema = z.enum(["invoice", "grn", "voucher"]).default("invoice");
 const sourceSchema = z.enum(["upload", "scan"]).default("upload");
 
 export const presignSchema = z.object({

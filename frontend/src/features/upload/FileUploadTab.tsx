@@ -15,10 +15,12 @@ interface Props {
   /** When given, the caller handles what happens next instead of the default
    *  "notify and go to Documents" — used by the GRN page, which stays put. */
   onUploaded?: (result: UploadResult) => void;
-  purpose?: "invoice" | "grn";
+  purpose?: "invoice" | "grn" | "voucher";
+  /** Where the default (no `onUploaded`) flow navigates after a successful upload. */
+  redirectTo?: string;
 }
 
-export default function FileUploadTab({ onUploaded, purpose }: Props) {
+export default function FileUploadTab({ onUploaded, purpose, redirectTo = "/documents" }: Props) {
   const navigate = useNavigate();
   const { notify } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +44,7 @@ export default function FileUploadTab({ onUploaded, purpose }: Props) {
         return;
       }
       notify(`${list.length} document${list.length > 1 ? "s" : ""} queued for extraction`);
-      setTimeout(() => navigate("/documents"), 900);
+      setTimeout(() => navigate(redirectTo), 900);
     } catch (err) {
       setQueue((q) => q.map((item) => ({ ...item, status: "error" as const })));
       notify(apiErrorMessage(err, "Upload failed"), "error");

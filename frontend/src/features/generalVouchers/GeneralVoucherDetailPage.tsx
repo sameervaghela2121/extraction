@@ -1,0 +1,342 @@
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, FileText } from "lucide-react";
+import { generalVouchersApi } from "../../api/generalVouchers.api";
+import { useToast } from "../../context/ToastContext";
+import { apiErrorMessage } from "../../api/client";
+import { StatusPill, Spinner } from "../../components/ui";
+import { isMobileDevice } from "../../utils/device";
+import type { DocumentDetail } from "../../types";
+
+export default function GeneralVoucherDetailPage() {
+  const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const { notify } = useToast();
+
+  const [doc, setDoc] = useState<DocumentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  // Keyed by invoiceId — a voucher can hold multiple extracted records, each edited independently.
+  const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
+  const [savingInvoiceId, setSavingInvoiceId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Desktop Chrome renders a PDF inline for <iframe src="...">; mobile browsers
+  // deliberately don't (they show a generic "tap to open" placeholder instead), so
+  // mobile gets a real "open" action routed through the OS's own PDF handling instead.
+  const [isMobile] = useState(isMobileDevice);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await generalVouchersApi.detail(id);
+      setDoc(d);
+      setEdits({});
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [id, notify]);
+
+  // Same fetch as `load`, but never flips the page-level `loading` flag — used after an
+  // in-place action (verify/unverify/restore) so the page just updates where it changed
+  // instead of unmounting into a full-page spinner and back.
+  const refresh = useCallback(async () => {
+    try {
+      const d = await generalVouchersApi.detail(id);
+      setDoc(d);
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    }
+  }, [id, notify]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // The iframe can't carry the JWT header itself, so fetch the file as an authenticated
+  // blob and point the iframe at the resulting local object URL instead. Keyed on id +
+  // extractionStatus (not the whole `doc`) so saving a field doesn't re-fetch the PDF.
+  useEffect(() => {
+    if (!doc || doc.extractionStatus === "failed") return;
+    // If the component unmounts (e.g. navigating away) before this resolves, `cancelled`
+    // stops it touching state or leaking the blob URL — otherwise the fetch still finishes
+    // after cleanup already ran with objectUrl still null, so nothing gets revoked.
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    generalVouchersApi
+      .getFilePreviewUrl(doc.id)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setPreviewUrl(url);
+      })
+      .catch((err) => {
+        if (!cancelled) notify(apiErrorMessage(err), "error");
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc?.id, doc?.extractionStatus, notify]);
+
+  const saveFields = async (invoiceId: string) => {
+    const invoiceEdits = edits[invoiceId];
+    if (!invoiceEdits || Object.keys(invoiceEdits).length === 0) return;
+    setSavingInvoiceId(invoiceId);
+    try {
+      const updated = await generalVouchersApi.updateFields(id, invoiceId, invoiceEdits);
+      setDoc(updated);
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[invoiceId];
+        return next;
+      });
+      notify("Fields saved");
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    } finally {
+      setSavingInvoiceId(null);
+    }
+  };
+
+  const act = async (action: "verify" | "unverify" | "archive" | "restore") => {
+    try {
+      if (action === "verify") await generalVouchersApi.verify(id);
+      if (action === "unverify") await generalVouchersApi.unverify(id);
+      if (action === "archive") await generalVouchersApi.archive(id);
+      if (action === "restore") await generalVouchersApi.restore(id);
+      notify(
+        action === "verify"
+          ? "Voucher verified"
+          : action === "unverify"
+            ? "Marked as pending"
+            : action === "archive"
+              ? "Voucher deleted"
+              : "Voucher restored",
+      );
+      if (action === "archive") {
+        navigate("/general-vouchers");
+        return;
+      }
+      refresh();
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+    }
+  };
+
+  if (loading) return <Spinner label="Loading voucher…" />;
+  if (!doc) return null;
+
+  return (
+    <div>
+      <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 14 }}>
+        <ArrowLeft size={14} /> Back to general vouchers
+      </button>
+
+      <div className="detail-grid">
+        {/* Left column: file preview + action buttons */}
+        <div className="stack" style={{ gap: 16 }}>
+          <div className="card preview-card" style={{ padding: 12, overflow: "hidden" }}>
+            {doc.extractionStatus === "failed" ? (
+              <div className="stack" style={{ padding: 24, gap: 8 }}>
+                <strong style={{ color: "var(--danger)" }}>Extraction failed</strong>
+                <span className="muted" style={{ fontSize: 13 }}>{doc.extractionError}</span>
+              </div>
+            ) : !previewUrl ? (
+              <Spinner label="Loading preview…" />
+            ) : isMobile ? (
+              <div className="stack" style={{ alignItems: "center", textAlign: "center", padding: "40px 20px", gap: 10 }}>
+                <FileText size={40} style={{ color: "var(--text-muted)" }} />
+                <div style={{ fontWeight: 600 }}>{doc.title}</div>
+                <button className="btn btn-primary" onClick={() => window.open(previewUrl, "_blank")}>
+                  Open document
+                </button>
+              </div>
+            ) : (
+              <iframe
+                title="Voucher preview"
+                src={previewUrl}
+                className="preview-iframe"
+                style={{ width: "100%", border: "none", borderRadius: 8 }}
+              />
+            )}
+          </div>
+
+          <div className="row gap-8" style={{ flexWrap: "wrap" }}>
+            {doc.status === "archived" ? (
+              <button className="btn btn-primary" onClick={() => act("restore")}>Restore voucher</button>
+            ) : doc.status === "verified" ? (
+              <>
+                <button className="btn" onClick={() => act("unverify")}>Mark Unverified</button>
+                <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-primary" onClick={() => act("verify")}>Approve & verify</button>
+                <button className="btn btn-danger" onClick={() => act("archive")}>Delete</button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Middle column: fields */}
+        <div className="card detail-fields-card" style={{ padding: 18 }}>
+          <div className="row" style={{ marginBottom: 4, flexWrap: "wrap", rowGap: 4 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, minWidth: 0, overflowWrap: "break-word" }}>{doc.title}</h2>
+            <div className="spacer" />
+            <StatusPill status={doc.status} />
+          </div>
+          <div className="row gap-12" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+            <span className="faint" style={{ fontSize: 12 }}>
+              Voucher · via {doc.source} · {new Date(doc.uploadedAt).toLocaleDateString()}
+              {doc.invoices.length > 1 ? ` · ${doc.invoices.length} records in this voucher` : ""}
+            </span>
+          </div>
+
+          {doc.invoices.length === 0 && (
+            <div className="muted" style={{ fontSize: 13 }}>
+              {doc.extractionStatus === "processing"
+                ? "Extraction in progress — check back shortly."
+                : "No data extracted."}
+            </div>
+          )}
+
+          {doc.invoices.map((invoice, idx) => {
+            // Line items don't have a fixed shape (different documents extract different
+            // columns), so the table's columns are whatever keys actually show up.
+            const itemColumns = Array.from(new Set(invoice.items.flatMap((item) => Object.keys(item))));
+            const invoiceEdits = edits[invoice.invoiceId] ?? {};
+            const hasEdits = Object.keys(invoiceEdits).length > 0;
+
+            return (
+              <div
+                key={invoice.invoiceId}
+                style={idx > 0 ? { marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--border)" } : undefined}
+              >
+                {doc.invoices.length > 1 && (
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Record {idx + 1}</div>
+                )}
+
+                {invoice.validation && invoice.confidence !== "high" && (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      padding: "8px 12px",
+                      background: "var(--danger-soft)",
+                      color: "oklch(40% 0.16 25)",
+                      borderRadius: "var(--radius-sm)",
+                      marginBottom: 14,
+                    }}
+                  >
+                    {invoice.validation}
+                  </div>
+                )}
+
+                <div className="stack" style={{ gap: 12 }}>
+                  {invoice.fields.map((f) => (
+                    <div key={f.key}>
+                      <label className="field-label" style={{ textTransform: "capitalize" }}>
+                        {f.key.replace(/_/g, " ")}
+                      </label>
+                      <input
+                        className="input"
+                        value={invoiceEdits[f.key] ?? (f.value ?? "").toString()}
+                        onChange={(e) =>
+                          setEdits((prev) => ({
+                            ...prev,
+                            [invoice.invoiceId]: { ...prev[invoice.invoiceId], [f.key]: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                  {invoice.fields.length === 0 && (
+                    <div className="muted" style={{ fontSize: 13 }}>No fields extracted.</div>
+                  )}
+                </div>
+
+                {hasEdits && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginTop: 16 }}
+                    onClick={() => saveFields(invoice.invoiceId)}
+                    disabled={savingInvoiceId === invoice.invoiceId}
+                  >
+                    {savingInvoiceId === invoice.invoiceId ? "Saving…" : "Save changes"}
+                  </button>
+                )}
+
+                {invoice.items.length > 0 && (
+                  <div style={{ marginTop: 20 }}>
+                    <label className="field-label">Line items</label>
+                    <div className="table-scroll">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            {itemColumns.map((col) => (
+                              <th key={col} style={{ textTransform: "capitalize" }}>
+                                {col.replace(/_/g, " ")}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoice.items.map((item, i) => (
+                            <tr key={i}>
+                              {itemColumns.map((col) => (
+                                <td key={col}>{item[col] ?? ""}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Right column: activity */}
+        <div className="card detail-fields-card" style={{ padding: 18 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Activity</h3>
+          <div className="stack" style={{ gap: 12 }}>
+            {doc.activity.map((a, i) => (
+              <div key={i} className="row gap-8" style={{ alignItems: "flex-start" }}>
+                <span className="dot dot-high" style={{ marginTop: 6 }} />
+                <div>
+                  <div style={{ fontSize: 13 }}>
+                    <strong>{a.action}</strong> · {a.actor}
+                  </div>
+                  <div className="faint" style={{ fontSize: 12 }}>{new Date(a.timestamp).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        /* This page needs more width than the app's default 1200px content cap (that cap is an
+           inline style on .app-main, so overriding it from here needs !important — a plain class
+           rule can't win against an inline style). Only applies while this page is mounted. */
+        .app-main { max-width: 1600px !important; }
+        .detail-grid { display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr; gap: 20px; align-items: start; }
+        .preview-card, .detail-fields-card { height: min(824px, calc(75vh + 24px)); box-sizing: border-box; }
+        .detail-fields-card { overflow-y: auto; }
+        .preview-iframe { height: 100%; }
+        @media (max-width: 900px) {
+          .app-main { max-width: none !important; }
+          .detail-grid { grid-template-columns: 1fr; }
+          .preview-card, .detail-fields-card { height: auto; }
+          .preview-iframe { height: 65vh; }
+          .detail-fields-card { overflow-y: visible; }
+        }
+      `}</style>
+    </div>
+  );
+}
