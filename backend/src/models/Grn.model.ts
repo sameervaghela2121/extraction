@@ -28,6 +28,13 @@ export interface IGrn {
   decidedBy?: Types.ObjectId;
   decidedAt?: Date;
   /**
+   * Free-form status set by an external client via the public update endpoint
+   * (PATCH /api/public/grn/:id) — deliberately not the same field as `status` above,
+   * which is this app's own admin approve/reject workflow. Null until a client sets it;
+   * no fixed enum, since the external system defines what values it sends.
+   */
+  grnStatus: string | null;
+  /**
    * Snapshot of the WHOLE extracted invoice as it was read, kept alongside the
    * confirmed values above. The GRN screen shows only a few fields, but everything
    * else (seller, buyer, GSTINs, taxes, totals, other_fields, item rate/hsn/amount)
@@ -62,6 +69,7 @@ const grnSchema = new Schema<IGrn>(
     status: { type: String, enum: ["awaiting", "approved", "rejected"], default: "awaiting", index: true },
     decidedBy: { type: Schema.Types.ObjectId, ref: "User" },
     decidedAt: { type: Date },
+    grnStatus: { type: String, default: null, index: true },
     // Mixed: mirrors how SharedInvoice models Gemini's open-ended output, so fields we
     // don't know about yet survive without a schema change.
     extracted: { type: Schema.Types.Mixed },

@@ -9,6 +9,7 @@ import { ActivityLog } from "../models/ActivityLog.model";
 import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
 import { ApiError } from "../utils/ApiError";
+import { findFilesForJob } from "../utils/findFilesForJob";
 import {
   confidenceFromValidation,
   extractedFields,
@@ -31,16 +32,6 @@ async function logActivity(
   meta?: Record<string, unknown>,
 ): Promise<void> {
   await ActivityLog.create({ documentId, actor, action, timestamp: new Date(), meta });
-}
-
-/** Wait briefly for the Python service to register Files docs under a job_id (they're written synchronously in /extract). */
-async function findFilesForJob(jobId: string, expected: number) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const files = await SharedFile.find({ job_id: jobId }).sort({ idx: 1 });
-    if (files.length >= expected) return files;
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  return SharedFile.find({ job_id: jobId }).sort({ idx: 1 });
 }
 
 export const documentsService = {
@@ -169,6 +160,26 @@ export const documentsService = {
       throw ApiError.forbidden("You do not have access to this document");
     }
     return doc;
+  },
+
+  // No ownership check — only for callers on a deliberately public path (e.g. the
+  // unauthenticated GRN endpoint) that already decided an owner check doesn't apply.
+  async getById(id: string): Promise<HydratedDocument<IDocument>> {
+    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid document id");
+    const doc = await DocumentModel.findById(id);
+    if (!doc) throw ApiError.notFound("Document not found");
+    return doc;
+  },
+
+  // Batched title+fileId lookup for list responses that would otherwise fire one findById
+  // per row — a document that no longer exists is simply absent from the map rather than
+  // failing the whole list. fileId rides along so callers can also resolve the file's
+  // storage location without a second per-row query.
+  async getSummariesByIds(ids: string[]): Promise<Map<string, { title: string; fileId: Types.ObjectId }>> {
+    const validIds = [...new Set(ids)].filter((id) => Types.ObjectId.isValid(id));
+    if (validIds.length === 0) return new Map();
+    const docs = await DocumentModel.find({ _id: { $in: validIds } }, { title: 1, fileId: 1 }).lean();
+    return new Map(docs.map((d) => [d._id.toString(), { title: d.title, fileId: d.fileId }]));
   },
 
   async detail(id: string, auth: AuthPayload) {

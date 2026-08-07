@@ -1,8 +1,9 @@
-import { Types } from "mongoose";
-import { Grn, type GrnStatus, type IGrnItem } from "../models/Grn.model";
+import { Types, type HydratedDocument } from "mongoose";
+import { Grn, type GrnStatus, type IGrn, type IGrnItem } from "../models/Grn.model";
 import { SharedFile } from "../models/SharedFiles.model";
 import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.model";
 import { documentsService } from "./documents.service";
+import { invoiceGeneratorClient } from "./invoiceGeneratorClient.service";
 import { ApiError } from "../utils/ApiError";
 import { toDDMMYYYY } from "../utils/grnDate";
 import type { AuthPayload } from "../types/express";
@@ -72,7 +73,125 @@ function matchStatus(
   return compared ? "match" : "unknown";
 }
 
+/** Same parsing PurchaseInvoicePanel.tsx used to do client-side — kept identical so a
+ *  "1,086" on the invoice still compares equal to the number 1086 captured on the GRN. */
+function parseQty(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(String(value).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function textDiffers(a: unknown, b: unknown): boolean {
+  return String(a ?? "").trim().toLowerCase() !== String(b ?? "").trim().toLowerCase();
+}
+
+/**
+ * Per-row mismatch flag for the public endpoint's invoice-items array — the same
+ * description/unit/quantity comparison PurchaseInvoicePanel.tsx used to run in the
+ * browser, moved server-side so an external client never has to diff two arrays itself.
+ * Position-matched against `grnItems`, same assumption as `matchStatus`/`unitOf` above.
+ */
+function withRowMismatch(
+  extractedItems: Array<Record<string, unknown>>,
+  grnItems: Array<{ description: string; quantity: number | null; unit?: string }>,
+) {
+  return extractedItems.map((item, i) => {
+    const grnItem = grnItems[i] as { description: string; quantity: number | null; unit?: string } | undefined;
+    const unit = (item.unit as string | undefined) ?? "";
+    const qty = parseQty(item.qty);
+    const descMismatch = Boolean(grnItem) && textDiffers(item.description, grnItem!.description);
+    const unitMismatch = Boolean(grnItem) && textDiffers(unit, grnItem!.unit ?? "");
+    const qtyMismatch = Boolean(grnItem) && qty !== (grnItem!.quantity ?? null);
+    return { ...item, mismatch: descMismatch || unitMismatch || qtyMismatch };
+  });
+}
+
 const MAX_DOCUMENT_IDS = 20; // matches the upload middleware's file cap
+
+/** Shared by `detail` (auth-checked) and `publicDetail` (unauthenticated) — same shape,
+ *  different callers decide whether an ownership check happens before this runs. */
+function toDetailResponse(grn: HydratedDocument<IGrn>, title: string) {
+  // Whatever the extraction actually read, straight from the snapshot — GRNs saved
+  // before `extracted` existed simply have none of this.
+  const extracted = grn.extracted as Record<string, unknown> | undefined;
+  const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
+
+  return {
+    id: grn._id.toString(),
+    documentId: grn.documentId.toString(),
+    title,
+    invoiceNo: grn.invoiceNo,
+    invoiceDate: toDDMMYYYY(grn.invoiceDate),
+    items: grn.items.map((item, i) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unit: unitOf(extractedItems?.[i]),
+    })),
+    status: grn.status ?? "awaiting",
+    // External-client-owned status, set via PATCH /api/public/grn/:id — separate from
+    // `status` above, which is this app's own admin approve/reject decision.
+    grnStatus: grn.grnStatus ?? null,
+    createdAt: toDDMMYYYY(grn.createdAt),
+    decidedAt: grn.decidedAt ? toDDMMYYYY(grn.decidedAt) : undefined,
+    // The purchase invoice this GRN was built from, for the side-by-side comparison
+    // panel — undefined for GRNs saved before `extracted` existed.
+    invoice: extracted
+      ? {
+          invoiceNo: extracted.invoice_no as string | undefined,
+          invoiceDate: extracted.invoice_date ? toDDMMYYYY(extracted.invoice_date) : undefined,
+          sellerName: extracted.seller_name as string | undefined,
+          sellerGstin: extracted.seller_gstin as string | undefined,
+          buyerName: extracted.buyer_name as string | undefined,
+          buyerGstin: extracted.buyer_gstin as string | undefined,
+          taxableValue: extracted.taxable_value as number | undefined,
+          cgstRate: extracted.cgst_rate as string | undefined,
+          cgstAmount: extracted.cgst_amount as number | undefined,
+          sgstRate: extracted.sgst_rate as string | undefined,
+          sgstAmount: extracted.sgst_amount as number | undefined,
+          igstRate: extracted.igst_rate as string | undefined,
+          igstAmount: extracted.igst_amount as number | undefined,
+          roundOff: extracted.round_off as number | undefined,
+          grandTotal: extracted.grand_total as number | undefined,
+          items: extractedItems ?? [],
+        }
+      : undefined,
+  };
+}
+
+/**
+ * The bucket is public now, so a file whose stored `path` is already a
+ * `https://storage.googleapis.com/...` URL (every current upload, and every migrated
+ * record) can be handed straight to the client — no hop through our own `/file` proxy.
+ * Only a handful of records from before GCS was used at all (local-disk-only, on the
+ * Python service's disk, never in the bucket) fall back to the proxy, since no direct
+ * public URL exists for those.
+ */
+function resolveFileUrl(storedPath: string | undefined, fallbackProxyUrl: string): string {
+  return storedPath && storedPath.startsWith("https://") ? storedPath : fallbackProxyUrl;
+}
+
+/**
+ * Adds what the public endpoint promises on top of `toDetailResponse`'s shape: a
+ * directly-usable `fileUrl`, a plain boolean `match` (not the 3-state
+ * match/mismatch/unknown the internal list screen's dot uses — an external client gets
+ * a single true/false), and per-row `mismatch` flags on the invoice items so nothing
+ * needs to be recomputed client-side.
+ */
+function toPublicDetailResponse(grn: HydratedDocument<IGrn>, title: string, fileUrl: string) {
+  const base = toDetailResponse(grn, title);
+  const extracted = grn.extracted as Record<string, unknown> | undefined;
+  const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
+
+  return {
+    ...base,
+    fileUrl,
+    match: matchStatus(grn.items, extractedItems) === "match",
+    invoice:
+      base.invoice && extractedItems
+        ? { ...base.invoice, items: withRowMismatch(extractedItems, base.items) }
+        : base.invoice,
+  };
+}
 
 export const grnService = {
   /**
@@ -162,7 +281,10 @@ export const grnService = {
           // the next time they're saved.
           extracted: invoice,
         },
-        $setOnInsert: { createdBy: new Types.ObjectId(auth.userId) },
+        // Insert-only: grnStatus is owned by the external client via the public update
+        // endpoint from here on — a later re-save (staff correcting a line) must never
+        // reset a value that client already set.
+        $setOnInsert: { createdBy: new Types.ObjectId(auth.userId), grnStatus: null },
       },
       { new: true, upsert: true },
     ).lean();
@@ -230,49 +352,84 @@ export const grnService = {
     const grn = await this.findGrn(id);
     // Reuses the document guard rather than a second rule; also gives us the title.
     const doc = await documentsService.getOwnedOrAdmin(grn.documentId.toString(), auth);
+    return toDetailResponse(grn, doc.title);
+  },
 
-    // Whatever the extraction actually read, straight from the snapshot — GRNs saved
-    // before `extracted` existed simply have none of this.
-    const extracted = grn.extracted as Record<string, unknown> | undefined;
-    const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
+  /**
+   * Unauthenticated equivalent of `detail`, for the public one-shot integration endpoint
+   * (`/api/public/grn/:id`) — same response shape, minus the owner/admin gate, plus a
+   * `fileUrl` the caller can hit directly with no auth either. Intentionally public per
+   * product decision: anyone holding a GRN id can read it, no session required.
+   */
+  async publicDetail(id: string, fallbackFileUrl: string) {
+    const grn = await this.findGrn(id);
+    const doc = await documentsService.getById(grn.documentId.toString());
+    const file = await SharedFile.findById(doc.fileId, { path: 1 }).lean();
+    return toPublicDetailResponse(grn, doc.title, resolveFileUrl(file?.path, fallbackFileUrl));
+  },
 
-    return {
-      id: grn._id.toString(),
-      documentId: grn.documentId.toString(),
-      title: doc.title,
-      invoiceNo: grn.invoiceNo,
-      invoiceDate: toDDMMYYYY(grn.invoiceDate),
-      items: grn.items.map((item, i) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unit: unitOf(extractedItems?.[i]),
-      })),
-      status: grn.status ?? "awaiting",
-      createdAt: toDDMMYYYY(grn.createdAt),
-      decidedAt: grn.decidedAt ? toDDMMYYYY(grn.decidedAt) : undefined,
-      // The purchase invoice this GRN was built from, for the side-by-side comparison
-      // panel — undefined for GRNs saved before `extracted` existed.
-      invoice: extracted
-        ? {
-            invoiceNo: extracted.invoice_no as string | undefined,
-            invoiceDate: extracted.invoice_date ? toDDMMYYYY(extracted.invoice_date) : undefined,
-            sellerName: extracted.seller_name as string | undefined,
-            sellerGstin: extracted.seller_gstin as string | undefined,
-            buyerName: extracted.buyer_name as string | undefined,
-            buyerGstin: extracted.buyer_gstin as string | undefined,
-            taxableValue: extracted.taxable_value as number | undefined,
-            cgstRate: extracted.cgst_rate as string | undefined,
-            cgstAmount: extracted.cgst_amount as number | undefined,
-            sgstRate: extracted.sgst_rate as string | undefined,
-            sgstAmount: extracted.sgst_amount as number | undefined,
-            igstRate: extracted.igst_rate as string | undefined,
-            igstAmount: extracted.igst_amount as number | undefined,
-            roundOff: extracted.round_off as number | undefined,
-            grandTotal: extracted.grand_total as number | undefined,
-            items: extractedItems ?? [],
-          }
-        : undefined,
-    };
+  /**
+   * The main public integration endpoint (`GET /api/public/grn`) — every GRN matching the
+   * given filters, each with full detail (file url, purchase invoice, goods receipt,
+   * boolean match), in a single response. No filters means no filter: every GRN that
+   * exists. No auth, same as `publicDetail`.
+   *
+   * `date` is an exact single day. `grnStatus` is an exact match against the
+   * external-client-set field (case-sensitive, whatever the client itself sends).
+   */
+  async publicList(
+    filters: { date?: string; grnStatus?: string },
+    buildFallbackFileUrl: (id: string) => string,
+  ) {
+    const filter: Record<string, unknown> = {};
+    if (filters.date) {
+      const start = new Date(`${filters.date}T00:00:00.000Z`);
+      if (Number.isNaN(start.getTime())) {
+        throw ApiError.badRequest("Invalid date — use YYYY-MM-DD");
+      }
+      filter.createdAt = { $gte: start, $lt: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+    }
+    if (filters.grnStatus) {
+      filter.grnStatus = filters.grnStatus;
+    }
+
+    const grns = await Grn.find(filter).sort({ createdAt: -1 });
+    // Two batched lookups instead of two queries per GRN (one for the doc, one for its file).
+    const summaryByDocId = await documentsService.getSummariesByIds(grns.map((g) => g.documentId.toString()));
+    const fileIds = [...summaryByDocId.values()].map((s) => s.fileId.toString());
+    const files = await SharedFile.find({ _id: { $in: fileIds } }, { path: 1 }).lean();
+    const pathByFileId = new Map(files.map((f) => [f._id.toString(), f.path as string | undefined]));
+
+    return grns.map((grn) => {
+      const summary = summaryByDocId.get(grn.documentId.toString());
+      const path = summary ? pathByFileId.get(summary.fileId.toString()) : undefined;
+      return toPublicDetailResponse(
+        grn,
+        summary?.title ?? "",
+        resolveFileUrl(path, buildFallbackFileUrl(grn._id.toString())),
+      );
+    });
+  },
+
+  /** Raw file bytes for the public detail endpoint's `fileUrl` — same proxy-from-the-
+   *  extraction-service approach as documents.controller's authenticated `/file` route. */
+  async publicFile(id: string) {
+    const grn = await this.findGrn(id);
+    const doc = await documentsService.getById(grn.documentId.toString());
+    return invoiceGeneratorClient.getRawFile(doc.fileId.toString());
+  },
+
+  /**
+   * PATCH /api/public/grn/:id — lets the external client set its own status on a GRN.
+   * No auth, same as the rest of this router; no ownership check either, same reasoning
+   * as `publicDetail`. Whatever string the client sends is stored as-is — no fixed enum,
+   * since this field belongs to the calling system, not this app's own workflow.
+   */
+  async publicUpdateGrnStatus(id: string, grnStatus: string) {
+    const grn = await this.findGrn(id);
+    grn.grnStatus = grnStatus;
+    await grn.save();
+    return { id: grn._id.toString(), grnStatus: grn.grnStatus };
   },
 
   /**
