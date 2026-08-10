@@ -1,8 +1,28 @@
 # GRN Data Sharing API — Overview
 
-This document explains the two API endpoints built so your system can automatically read Goods Receipt Note (GRN) data from our platform, and send back a status update for each record. No login or API key is required to use these — they're built to be called directly by your system.
+This document explains the two API endpoints built so your system can automatically read Goods Receipt Note (GRN) data from our platform, and send back a status update for each record. No login is required — just the API key below, passed on every request — so these can be called directly by your system.
 
-Replace `https://your-domain.com` in every example below with our actual server address once you have it.
+**Base URL:** `https://docflow-backend-1081873675658.asia-south1.run.app`
+
+---
+
+## Authentication
+
+Both endpoints below require an API key. Send it on **every** request as a header called `df-api-key`.
+
+**Your API Key:** `df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a`
+
+Treat this key like a password — anyone who has it can read and update your GRN data. Don't share it outside your dev team, and don't commit it to a public repository. If it's ever exposed, let us know and we'll issue a new one and disable this one.
+
+| Header | Required | Example |
+|---|---|---|
+| `df-api-key` | Yes | `df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a` |
+
+A request without this header, or with an incorrect key, gets back:
+
+```json
+{ "error": "Missing df-api-key header" }
+```
 
 ---
 
@@ -22,9 +42,15 @@ Every GRN record returned by these APIs includes, in one response:
 
 Use this to pull all GRN records created on a given day.
 
-**Endpoint:** `GET https://your-domain.com/api/public/grn`
+**Endpoint:** `GET https://docflow-backend-1081873675658.asia-south1.run.app/api/public/grn`
 
 **Method:** `GET`
+
+**Headers:**
+
+| Header | Required | Example |
+|---|---|---|
+| `df-api-key` | Yes | `df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a` |
 
 **Query parameters:**
 
@@ -36,13 +62,15 @@ Use this to pull all GRN records created on a given day.
 **Example — get everything from a specific date:**
 
 ```bash
-curl "https://your-domain.com/api/public/grn?date=2026-07-28"
+curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/public/grn?date=2026-07-28' \
+--header 'df-api-key: df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a'
 ```
 
 **Example — get only records from that date with a specific status already set:**
 
 ```bash
-curl "https://your-domain.com/api/public/grn?date=2026-07-28&grnStatus=DISPATCHED"
+curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/public/grn?date=2026-07-28&grnStatus=DISPATCHED' \
+--header 'df-api-key: df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a'
 ```
 
 **Response** — a list of matching records, each shaped like this:
@@ -89,11 +117,18 @@ curl "https://your-domain.com/api/public/grn?date=2026-07-28&grnStatus=DISPATCHE
 
 Once your system has processed a record (from Endpoint 1), use this to write your own status back onto it.
 
-**Endpoint:** `PATCH https://your-domain.com/api/public/grn/{id}`
+**Endpoint:** `PATCH https://docflow-backend-1081873675658.asia-south1.run.app/api/public/grn/{id}`
 
 Replace `{id}` with the `id` value from the record you got back from Endpoint 1.
 
 **Method:** `PATCH`
+
+**Headers:**
+
+| Header | Required | Example |
+|---|---|---|
+| `df-api-key` | Yes | `df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a` |
+| `Content-Type` | Yes | `application/json` |
 
 **Body** (JSON):
 
@@ -104,9 +139,10 @@ Replace `{id}` with the `id` value from the record you got back from Endpoint 1.
 **Example:**
 
 ```bash
-curl -X PATCH "https://your-domain.com/api/public/grn/68f4a1b2c3d4e5f678901234" \
-  -H "Content-Type: application/json" \
-  -d '{"grnStatus": "DISPATCHED"}'
+curl --location --request PATCH 'https://docflow-backend-1081873675658.asia-south1.run.app/api/public/grn/68f4a1b2c3d4e5f678901234' \
+--header 'df-api-key: df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a' \
+--header 'Content-Type: application/json' \
+--data '{"grnStatus": "DISPATCHED"}'
 ```
 
 **Response** — confirms what was saved:
@@ -122,6 +158,7 @@ curl -X PATCH "https://your-domain.com/api/public/grn/68f4a1b2c3d4e5f678901234" 
 
 | Situation | What you'll get back |
 |---|---|
+| `df-api-key` header missing or incorrect | Authentication error — the request never reaches your data. |
 | `grnStatus` left blank or missing from the request | An error response — this field can't be empty. |
 | The `id` in the URL doesn't match any GRN record | "Not found" error. |
 
@@ -129,6 +166,7 @@ curl -X PATCH "https://your-domain.com/api/public/grn/68f4a1b2c3d4e5f678901234" 
 
 ## Quick summary for your dev team
 
-1. Call **Endpoint 1** with a date to pull that day's GRN records — each one already includes the invoice, the received items, the document link, and a match flag, so no extra lookups are needed.
-2. Once your system has done whatever it needs to with a record, call **Endpoint 2** with that record's `id` to write your own status back onto it.
-3. Calling Endpoint 1 again later — optionally with `&grnStatus=...` — lets you check which records you've already marked, versus which are still pending.
+1. Include the `df-api-key` header (see **Authentication** above) on every request to either endpoint.
+2. Call **Endpoint 1** with a date to pull that day's GRN records — each one already includes the invoice, the received items, the document link, and a match flag, so no extra lookups are needed.
+3. Once your system has done whatever it needs to with a record, call **Endpoint 2** with that record's `id` to write your own status back onto it.
+4. Calling Endpoint 1 again later — optionally with `&grnStatus=...` — lets you check which records you've already marked, versus which are still pending.
