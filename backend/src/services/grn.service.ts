@@ -5,6 +5,7 @@ import { SharedInvoice, type ISharedInvoice } from "../models/SharedInvoice.mode
 import { documentsService } from "./documents.service";
 import { invoiceGeneratorClient } from "./invoiceGeneratorClient.service";
 import { ApiError } from "../utils/ApiError";
+import { normaliseOtherFields } from "../utils/fieldKey";
 import { toDDMMYYYY } from "../utils/grnDate";
 import type { AuthPayload } from "../types/express";
 
@@ -152,6 +153,7 @@ function toDetailResponse(grn: HydratedDocument<IGrn>, title: string) {
           igstAmount: extracted.igst_amount as number | undefined,
           roundOff: extracted.round_off as number | undefined,
           grandTotal: extracted.grand_total as number | undefined,
+          otherFields: extracted.other_fields as Record<string, string> | undefined,
           items: extractedItems ?? [],
         }
       : undefined,
@@ -178,18 +180,28 @@ function resolveFileUrl(storedPath: string | undefined, fallbackProxyUrl: string
  * needs to be recomputed client-side.
  */
 function toPublicDetailResponse(grn: HydratedDocument<IGrn>, title: string, fileUrl: string) {
-  const base = toDetailResponse(grn, title);
+  const { items: grnItems, invoice, ...rest } = toDetailResponse(grn, title);
   const extracted = grn.extracted as Record<string, unknown> | undefined;
   const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
 
+  let publicInvoice;
+  if (invoice) {
+    const { items: rawItems, otherFields, ...header } = invoice;
+    publicInvoice = {
+      ...header,
+      ...normaliseOtherFields(otherFields),
+      invoiceItems: extractedItems ? withRowMismatch(extractedItems, grnItems) : rawItems,
+    };
+  }
+
   return {
-    ...base,
+    ...rest,
     fileUrl,
     match: matchStatus(grn.items, extractedItems) === "match",
-    invoice:
-      base.invoice && extractedItems
-        ? { ...base.invoice, items: withRowMismatch(extractedItems, base.items) }
-        : base.invoice,
+    /** What was actually received and counted by staff. */
+    grnItems,
+    /** The purchase invoice this GRN was built from; its lines are `invoiceItems`. */
+    invoice: publicInvoice,
   };
 }
 
