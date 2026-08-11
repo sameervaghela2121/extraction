@@ -87,12 +87,18 @@ function textDiffers(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Per-row mismatch flag for the public endpoint's invoice-items array — the same
- * description/unit/quantity comparison PurchaseInvoicePanel.tsx used to run in the
- * browser, moved server-side so an external client never has to diff two arrays itself.
+ * The public endpoint's single item list. Description, hsn, unit and rate are the same on
+ * both sides of the comparison — only the quantity can differ — so rather than ship two
+ * near-identical arrays and make the caller diff them, each row carries both numbers:
+ * `qty` as printed on the invoice, `receivedQty` as counted by staff on the GRN.
+ *
+ * `mismatch` still covers description and unit too, not just quantity: those come from
+ * the same extraction, so a difference there means the rows have drifted out of
+ * alignment and the quantity comparison on that row can't be trusted either.
+ *
  * Position-matched against `grnItems`, same assumption as `matchStatus`/`unitOf` above.
  */
-function withRowMismatch(
+function withReceivedQty(
   extractedItems: Array<Record<string, unknown>>,
   grnItems: Array<{ description: string; quantity: number | null; unit?: string }>,
 ) {
@@ -103,7 +109,13 @@ function withRowMismatch(
     const descMismatch = Boolean(grnItem) && textDiffers(item.description, grnItem!.description);
     const unitMismatch = Boolean(grnItem) && textDiffers(unit, grnItem!.unit ?? "");
     const qtyMismatch = Boolean(grnItem) && qty !== (grnItem!.quantity ?? null);
-    return { ...item, mismatch: descMismatch || unitMismatch || qtyMismatch };
+    return {
+      ...item,
+      // null, not 0, when the row was never counted — "not counted" and "none received"
+      // are different answers.
+      receivedQty: grnItem?.quantity ?? null,
+      mismatch: descMismatch || unitMismatch || qtyMismatch,
+    };
   });
 }
 
@@ -180,28 +192,32 @@ function resolveFileUrl(storedPath: string | undefined, fallbackProxyUrl: string
  * needs to be recomputed client-side.
  */
 function toPublicDetailResponse(grn: HydratedDocument<IGrn>, title: string, fileUrl: string) {
-  const { items: grnItems, invoice, ...rest } = toDetailResponse(grn, title);
+  const base = toDetailResponse(grn, title);
   const extracted = grn.extracted as Record<string, unknown> | undefined;
   const extractedItems = extracted?.items as Array<Record<string, unknown>> | undefined;
 
-  let publicInvoice;
-  if (invoice) {
-    const { items: rawItems, otherFields, ...header } = invoice;
-    publicInvoice = {
-      ...header,
-      ...normaliseOtherFields(otherFields),
-      invoiceItems: extractedItems ? withRowMismatch(extractedItems, grnItems) : rawItems,
-    };
+  // One flat record, not a GRN wrapping an invoice: an external client is reading one
+  // receipt, and the internal split between "our GRN" and "the invoice we built it from"
+  // is our concern, not theirs. `invoiceNo`/`invoiceDate` are dropped from the invoice
+  // half because the GRN's own copies (kept below) are the values staff confirmed.
+  let invoiceFields: Record<string, unknown> = {};
+  let invoiceItems: unknown[] = [];
+  if (base.invoice) {
+    const { items: rawItems, otherFields, invoiceNo, invoiceDate, ...header } = base.invoice;
+    invoiceFields = { ...header, ...normaliseOtherFields(otherFields) };
+    invoiceItems = extractedItems ? withReceivedQty(extractedItems, base.items) : rawItems;
   }
 
   return {
-    ...rest,
+    id: base.id,
     fileUrl,
+    grnStatus: base.grnStatus,
+    createdAt: base.createdAt,
     match: matchStatus(grn.items, extractedItems) === "match",
-    /** What was actually received and counted by staff. */
-    grnItems,
-    /** The purchase invoice this GRN was built from; its lines are `invoiceItems`. */
-    invoice: publicInvoice,
+    invoiceNo: base.invoiceNo,
+    invoiceDate: base.invoiceDate,
+    ...invoiceFields,
+    invoiceItems,
   };
 }
 
