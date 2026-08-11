@@ -73,30 +73,67 @@ curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/p
 --header 'df-api-key: df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a'
 ```
 
-**Response** — a list of matching records, each shaped like this:
+**Response** — a list of matching records. The field names below are exactly what you'll receive; the values are made up.
 
 ```json
 {
   "items": [
     {
       "id": "68f4a1b2c3d4e5f678901234",
-      "title": "scan-1784886663317.pdf",
-      "fileUrl": "https://storage.googleapis.com/.../original-document.pdf",
-      "invoiceNo": "793/26-27",
-      "invoiceDate": "04-06-2026",
-      "status": "approved",
+      "documentId": "68f4a1b2c3d4e5f678904321",
+      "title": "sample-invoice.pdf",
+      "fileUrl": "https://storage.googleapis.com/<bucket>/<folder>/sample-invoice.pdf",
+      "invoiceNo": "INV/001/2026-27",
+      "invoiceDate": "15-07-2026",
+      "status": "awaiting",
       "grnStatus": null,
+      "createdAt": "07-08-2026",
       "match": true,
-      "createdAt": "24-07-2026",
-      "items": [
-        { "description": "Item name", "quantity": 540, "unit": "Kgs" }
+
+      "grnItems": [
+        { "description": "Sample Product A Batch : 100001", "quantity": 200, "unit": "Mtr" },
+        { "description": "Sample Product B Batch : 100002", "quantity": 150, "unit": "Mtr" }
       ],
+
       "invoice": {
-        "sellerName": "Example Seller LLP",
+        "invoiceNo": "INV/001/2026-27",
+        "invoiceDate": "15-07-2026",
+        "sellerName": "Example Seller Pvt. Ltd.",
+        "sellerGstin": "24AAAAA0000A1Z5",
         "buyerName": "Example Buyer LLP",
-        "grandTotal": 472410,
-        "items": [
-          { "description": "Item name", "qty": 540, "unit": "Kgs", "rate": 435, "amount": 472410, "mismatch": false }
+        "buyerGstin": "24BBBBB1111B1Z5",
+        "taxableValue": 17500,
+        "cgstRate": "2.50%",
+        "cgstAmount": 437.5,
+        "sgstRate": "2.50%",
+        "sgstAmount": 437.5,
+        "igstRate": "",
+        "igstAmount": 0,
+        "roundOff": 0,
+        "grandTotal": 18375,
+
+        "pan_number": "AAAAA0000A",
+        "hsn_code": "12345678",
+        "bank_details": "Bank Name : Example Bank A/c No. : 000000000000 Branch & IFS Code : Example Branch & EXMP0000000",
+        "payment_terms": "SAME DAY - NETT PAYMENT",
+        "mode_terms_of_payment": "SAME DAY",
+        "delivery_note": "INV/001/2026-27",
+        "delivery_note_date": "15-Jul-26",
+        "transport_dispatch_details": "Dispatched through EXAMPLE TRANSPORT Dispatch Doc No. ORDER NO. 100",
+        "other_references": "Example Contact Name",
+        "e_way_bill": "",
+        "purchase_order_po_number": "",
+        "sales_order": "",
+        "o_a_no": "",
+        "o_a_date": "",
+        "d_c_date": "",
+        "date_time_of_issue": "",
+        "import_export_code_iec": "",
+        "loase_holder_code": "",
+
+        "invoiceItems": [
+          { "description": "Sample Product A Batch : 100001", "hsn": "12345678", "qty": 200, "unit": "Mtr", "rate": 50, "amount": 10000, "mismatch": false },
+          { "description": "Sample Product B Batch : 100002", "hsn": "12345678", "qty": 150, "unit": "Mtr", "rate": 50, "amount": 7500, "mismatch": false }
         ]
       }
     }
@@ -108,6 +145,13 @@ curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/p
 **In plain terms:**
 - `fileUrl` — open this directly in a browser or embed it in your own screen to show the original document.
 - `match` — quick true/false check: did the received quantities line up with the invoice.
+- `grnItems` — what was **actually received** and counted by our staff.
+- `invoice.invoiceItems` — what the **invoice said was shipped**. Same order as `grnItems`, one entry per line, each with its own `mismatch` flag so you can see exactly which line disagrees.
+- **Extra invoice fields** (`pan_number`, `bank_details`, `delivery_note`, `e_way_bill`, `transport_dispatch_details`, …) — anything printed on the document that has no fixed field of its own sits directly on the `invoice` object, alongside the standard fields. The key is the printed label, lowercased with underscores: "Ack No." becomes `ack_no`, "Company's PAN" becomes `companys_pan`.
+
+  An empty string means the label was printed on the document but had no value against it. A field the document didn't mention at all is simply absent.
+
+  **These keys vary from invoice to invoice**, because they come from what that particular document actually printed. Read them defensively — check whether a key is present, don't assume it always is. Older records may carry none at all. If there's a field you need on *every* record, tell us and we'll add it to the extraction settings, which pins it to a fixed key.
 - `grnStatus` — currently whatever your system last set it to (see Endpoint 2), or empty if you haven't set it yet.
 - `total` — how many records matched your date (and status, if you filtered by one).
 
