@@ -31,8 +31,8 @@ A request without this header, or with an incorrect key, gets back:
 Every GRN record returned by these APIs includes, in one response:
 
 - The **original document** — a direct link to the scanned invoice/receipt file (PDF or image), viewable in a browser
-- The **purchase invoice details** — seller, buyer, GSTINs, invoice number/date, tax amounts, and the full list of items on the invoice
-- The **goods actually received** — the item list and quantities as recorded on our side
+- The **invoice details** — seller, buyer, GSTINs, invoice number/date, tax amounts, totals, and everything else printed on the document
+- The **line items** — one list, `invoiceItems`. Each row carries both quantities: `qty` as printed on the invoice, and `receivedQty` as counted by our staff. The rest of the row (description, HSN, unit, rate, amount) is the same on both sides, so it isn't repeated.
 - A **match indicator** — `true` if what was received matches what the invoice says was shipped, `false` if there's a discrepancy on any line
 - A **status field** (`grnStatus`) — this is yours to set. It starts empty (`null`) on our side, and your system sets it to whatever value makes sense to you (e.g. `"DISPATCHED"`, `"RECEIVED"`, `"PROCESSED"`) using the second endpoint below.
 
@@ -73,69 +73,57 @@ curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/p
 --header 'df-api-key: df_1ed61b2d333f1033bec3a27012221271363e67d6f9e93e1a'
 ```
 
-**Response** — a list of matching records. The field names below are exactly what you'll receive; the values are made up.
+**Response** — a list of matching records. The field names below are exactly what you'll receive; the values are made up. A fuller two-record sample you can load straight into your code is in [`grn-public-api-example.json`](grn-public-api-example.json).
 
 ```json
 {
   "items": [
     {
       "id": "68f4a1b2c3d4e5f678901234",
-      "documentId": "68f4a1b2c3d4e5f678904321",
-      "title": "sample-invoice.pdf",
       "fileUrl": "https://storage.googleapis.com/<bucket>/<folder>/sample-invoice.pdf",
-      "invoiceNo": "INV/001/2026-27",
-      "invoiceDate": "15-07-2026",
-      "status": "awaiting",
       "grnStatus": null,
       "createdAt": "07-08-2026",
-      "match": true,
+      "match": false,
 
-      "grnItems": [
-        { "description": "Sample Product A Batch : 100001", "quantity": 200, "unit": "Mtr" },
-        { "description": "Sample Product B Batch : 100002", "quantity": 150, "unit": "Mtr" }
-      ],
+      "invoiceNo": "INV/001/2026-27",
+      "invoiceDate": "15-07-2026",
+      "sellerName": "Example Seller Pvt. Ltd.",
+      "sellerGstin": "24AAAAA0000A1Z5",
+      "buyerName": "Example Buyer LLP",
+      "buyerGstin": "24BBBBB1111B1Z5",
+      "taxableValue": 17500,
+      "cgstRate": "2.50%",
+      "cgstAmount": 437.5,
+      "sgstRate": "2.50%",
+      "sgstAmount": 437.5,
+      "igstRate": "",
+      "igstAmount": 0,
+      "roundOff": 0,
+      "grandTotal": 18375,
 
-      "invoice": {
-        "invoiceNo": "INV/001/2026-27",
-        "invoiceDate": "15-07-2026",
-        "sellerName": "Example Seller Pvt. Ltd.",
-        "sellerGstin": "24AAAAA0000A1Z5",
-        "buyerName": "Example Buyer LLP",
-        "buyerGstin": "24BBBBB1111B1Z5",
-        "taxableValue": 17500,
-        "cgstRate": "2.50%",
-        "cgstAmount": 437.5,
-        "sgstRate": "2.50%",
-        "sgstAmount": 437.5,
-        "igstRate": "",
-        "igstAmount": 0,
-        "roundOff": 0,
-        "grandTotal": 18375,
+      "pan_number": "AAAAA0000A",
+      "hsn_code": "12345678",
+      "bank_details": "Bank Name : Example Bank A/c No. : 000000000000 Branch & IFS Code : Example Branch & EXMP0000000",
+      "payment_terms": "SAME DAY - NETT PAYMENT",
+      "mode_terms_of_payment": "SAME DAY",
+      "delivery_note": "INV/001/2026-27",
+      "delivery_note_date": "15-Jul-26",
+      "transport_dispatch_details": "Dispatched through EXAMPLE TRANSPORT Dispatch Doc No. ORDER NO. 100",
+      "other_references": "Example Contact Name",
+      "e_way_bill": "",
+      "purchase_order_po_number": "",
+      "sales_order": "",
+      "o_a_no": "",
+      "o_a_date": "",
+      "d_c_date": "",
+      "date_time_of_issue": "",
+      "import_export_code_iec": "",
+      "loase_holder_code": "",
 
-        "pan_number": "AAAAA0000A",
-        "hsn_code": "12345678",
-        "bank_details": "Bank Name : Example Bank A/c No. : 000000000000 Branch & IFS Code : Example Branch & EXMP0000000",
-        "payment_terms": "SAME DAY - NETT PAYMENT",
-        "mode_terms_of_payment": "SAME DAY",
-        "delivery_note": "INV/001/2026-27",
-        "delivery_note_date": "15-Jul-26",
-        "transport_dispatch_details": "Dispatched through EXAMPLE TRANSPORT Dispatch Doc No. ORDER NO. 100",
-        "other_references": "Example Contact Name",
-        "e_way_bill": "",
-        "purchase_order_po_number": "",
-        "sales_order": "",
-        "o_a_no": "",
-        "o_a_date": "",
-        "d_c_date": "",
-        "date_time_of_issue": "",
-        "import_export_code_iec": "",
-        "loase_holder_code": "",
-
-        "invoiceItems": [
-          { "description": "Sample Product A Batch : 100001", "hsn": "12345678", "qty": 200, "unit": "Mtr", "rate": 50, "amount": 10000, "mismatch": false },
-          { "description": "Sample Product B Batch : 100002", "hsn": "12345678", "qty": 150, "unit": "Mtr", "rate": 50, "amount": 7500, "mismatch": false }
-        ]
-      }
+      "invoiceItems": [
+        { "description": "Sample Product A Batch : 100001", "hsn": "12345678", "qty": 200, "unit": "Mtr", "rate": 50, "amount": 10000, "receivedQty": 200, "mismatch": false },
+        { "description": "Sample Product B Batch : 100002", "hsn": "12345678", "qty": 150, "unit": "Mtr", "rate": 50, "amount": 7500, "receivedQty": 148, "mismatch": true }
+      ]
     }
   ],
   "total": 9
@@ -145,8 +133,10 @@ curl --location 'https://docflow-backend-1081873675658.asia-south1.run.app/api/p
 **In plain terms:**
 - `fileUrl` — open this directly in a browser or embed it in your own screen to show the original document.
 - `match` — quick true/false check: did the received quantities line up with the invoice.
-- `grnItems` — what was **actually received** and counted by our staff.
-- `invoice.invoiceItems` — what the **invoice said was shipped**. Same order as `grnItems`, one entry per line, each with its own `mismatch` flag so you can see exactly which line disagrees.
+- `invoiceItems` — one row per line on the invoice, carrying both quantities:
+  - `qty` — what the **invoice says was shipped**.
+  - `receivedQty` — what our staff **actually counted** on arrival. `null` means that line was never counted, which is not the same as zero received.
+  - `mismatch` — `true` when that specific row disagrees. In the example above, the second line was invoiced at 150 but only 148 arrived, so `mismatch` is `true` on that row and the record-level `match` is `false`.
 - **Extra invoice fields** (`pan_number`, `bank_details`, `delivery_note`, `e_way_bill`, `transport_dispatch_details`, …) — anything printed on the document that has no fixed field of its own sits directly on the `invoice` object, alongside the standard fields. The key is the printed label, lowercased with underscores: "Ack No." becomes `ack_no`, "Company's PAN" becomes `companys_pan`.
 
   An empty string means the label was printed on the document but had no value against it. A field the document didn't mention at all is simply absent.
