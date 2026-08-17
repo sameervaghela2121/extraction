@@ -18,7 +18,17 @@ const BARCODE_SEQUENCE = "rollBarcode";
  * issued at, or came back at — so the column reads consistently down the ledger.
  */
 interface RollHistoryEvent {
+  /**
+   * What happened. RECEIVED and IN are both the roll arriving, kept apart because one is
+   * the roll entering the warehouse for the first time and the other is it coming back
+   * from a client with consumption attached.
+   */
   type: "RECEIVED" | "OUT" | "IN" | "ADJUSTED";
+  /**
+   * Which way the roll moved, for a ledger that reads IN / OUT down the column. ADJUSTED
+   * is neither — the roll did not move, only the recorded figure changed.
+   */
+  direction: "IN" | "OUT" | null;
   at: Date;
   weightKg: number;
   clientName: string | null;
@@ -59,6 +69,9 @@ async function toRollResponse(roll: IRoll) {
   };
 }
 
+/** The hydrated document, as findByBarcodeOrThrow returns it — needs .populate() and .save(). */
+type RollDocument = Awaited<ReturnType<typeof findByBarcodeOrThrow>>;
+
 async function findByBarcodeOrThrow(barcodeId: string) {
   const roll = await Roll.findOne({ barcodeId: barcodeId.toUpperCase() });
   if (!roll) throw ApiError.notFound("Roll not found");
@@ -78,7 +91,10 @@ export const rollsService = {
     const roll = await Roll.findOne({
       $or: [{ barcodeId: pattern }, { supplierBarcodeValue: pattern }, { supplierRollNo: pattern }],
     });
-    return roll ? await toRollResponse(roll) : null;
+    if (!roll) return null;
+    // The ledger travels with the roll: the scan screen shows both, and a second request
+    // over warehouse wifi is a second chance to fail.
+    return { ...(await toRollResponse(roll)), history: await buildHistory(roll) };
   },
 
   /**
@@ -174,6 +190,7 @@ export const rollsService = {
       ...(await toRollResponse(roll)),
       // Answers "where is this roll right now" in the same call the Scan tab already makes.
       issuedTo: openIssue ? { clientName: openIssue.clientId.name, since: openIssue.issuedAt } : null,
+      history: await buildHistory(roll),
     };
   },
 
@@ -336,83 +353,9 @@ export const rollsService = {
     };
   },
 
-  /**
-   * GET /rolls/:barcodeId/history — every movement of this roll, newest first.
-   *
-   * One entry per event, not per cycle: the roll being received, each time it went out, and
-   * each time it came back. A cycle row would hide the fact that a roll currently at a
-   * client has left but not returned, and the screen this feeds is a ledger the operator
-   * reads top-down.
-   *
-   * `issueId` pairs an IN with the OUT it closes, so the app can group them if it wants to.
-   */
+  /** GET /rolls/:barcodeId/history — every movement of this roll, newest first. */
   async history(barcodeId: string) {
-    const roll = await findByBarcodeOrThrow(barcodeId);
-    await roll.populate<{ registeredBy: { name: string } }>("registeredBy", "name");
-
-    const issues = await RollIssue.find({ rollId: roll._id })
-      .sort({ issuedAt: 1 })
-      .populate<{ clientId: { name: string } }>("clientId", "name")
-      .populate<{ issuedBy: { name: string } }>("issuedBy", "name")
-      .populate<{ returnedBy: { name: string } }>("returnedBy", "name");
-
-    const events: RollHistoryEvent[] = [
-      {
-        type: "RECEIVED",
-        at: roll.receivedDate,
-        weightKg: roll.receivedWeightKg,
-        clientName: null,
-        consumedKg: null,
-        byName: (roll.registeredBy as unknown as { name?: string })?.name ?? null,
-        issueId: null,
-      },
-    ];
-
-    for (const issue of issues) {
-      events.push({
-        type: "OUT",
-        at: issue.issuedAt,
-        weightKg: issue.issuedWeightKg,
-        clientName: issue.clientId.name,
-        consumedKg: null,
-        byName: (issue.issuedBy as unknown as { name?: string })?.name ?? null,
-        issueId: issue._id.toString(),
-      });
-
-      // Only once it is actually back — an OPEN issue has an OUT and no IN, which is
-      // precisely what "still with the client" looks like on the screen.
-      if (issue.returnedAt) {
-        events.push({
-          type: "IN",
-          at: issue.returnedAt,
-          weightKg: issue.returnedWeightKg ?? 0,
-          clientName: issue.clientId.name,
-          consumedKg: issue.consumedKg ?? null,
-          byName: (issue.returnedBy as unknown as { name?: string })?.name ?? null,
-          issueId: issue._id.toString(),
-        });
-      }
-    }
-
-    const adjustments = await RollAdjustment.find({ rollId: roll._id }).populate<{
-      adjustedBy: { name: string };
-    }>("adjustedBy", "name");
-
-    for (const adjustment of adjustments) {
-      events.push({
-        type: "ADJUSTED",
-        at: adjustment.adjustedAt,
-        weightKg: adjustment.newWeightKg,
-        clientName: null,
-        // The delta, not a client's consumption — signed, so the ledger still adds up.
-        consumedKg: adjustment.deltaKg,
-        byName: (adjustment.adjustedBy as unknown as { name?: string })?.name ?? null,
-        issueId: null,
-        reason: adjustment.reason,
-      });
-    }
-
-    return events.sort((a, b) => b.at.getTime() - a.at.getTime());
+    return buildHistory(await findByBarcodeOrThrow(barcodeId));
   },
 
   /** GET /rolls/:barcodeId/barcode/print — ZPL for the paired Zebra printer. */
@@ -433,3 +376,85 @@ export const rollsService = {
     };
   },
 };
+
+/**
+ * GET /rolls/:barcodeId/history — every movement of this roll, newest first.
+ *
+ * One entry per event, not per cycle: the roll being received, each time it went out, and
+ * each time it came back. A cycle row would hide the fact that a roll currently at a
+ * client has left but not returned, and the screen this feeds is a ledger the operator
+ * reads top-down.
+ *
+ * `issueId` pairs an IN with the OUT it closes, so the app can group them if it wants to.
+ */
+async function buildHistory(roll: RollDocument): Promise<RollHistoryEvent[]> {
+  await roll.populate<{ registeredBy: { name: string } }>("registeredBy", "name");
+
+  const issues = await RollIssue.find({ rollId: roll._id })
+    .sort({ issuedAt: 1 })
+    .populate<{ clientId: { name: string } }>("clientId", "name")
+    .populate<{ issuedBy: { name: string } }>("issuedBy", "name")
+    .populate<{ returnedBy: { name: string } }>("returnedBy", "name");
+
+  const events: RollHistoryEvent[] = [
+    {
+      type: "RECEIVED",
+      direction: "IN",
+      at: roll.receivedDate,
+      weightKg: roll.receivedWeightKg,
+      clientName: null,
+      consumedKg: null,
+      byName: (roll.registeredBy as unknown as { name?: string })?.name ?? null,
+      issueId: null,
+    },
+  ];
+
+  for (const issue of issues) {
+    events.push({
+      type: "OUT",
+      direction: "OUT",
+      at: issue.issuedAt,
+      weightKg: issue.issuedWeightKg,
+      clientName: issue.clientId.name,
+      consumedKg: null,
+      byName: (issue.issuedBy as unknown as { name?: string })?.name ?? null,
+      issueId: issue._id.toString(),
+    });
+
+    // Only once it is actually back — an OPEN issue has an OUT and no IN, which is
+    // precisely what "still with the client" looks like on the screen.
+    if (issue.returnedAt) {
+      events.push({
+        type: "IN",
+        direction: "IN",
+        at: issue.returnedAt,
+        weightKg: issue.returnedWeightKg ?? 0,
+        clientName: issue.clientId.name,
+        consumedKg: issue.consumedKg ?? null,
+        byName: (issue.returnedBy as unknown as { name?: string })?.name ?? null,
+        issueId: issue._id.toString(),
+      });
+    }
+  }
+
+  const adjustments = await RollAdjustment.find({ rollId: roll._id }).populate<{
+    adjustedBy: { name: string };
+  }>("adjustedBy", "name");
+
+  for (const adjustment of adjustments) {
+    events.push({
+      type: "ADJUSTED",
+      direction: null,
+      at: adjustment.adjustedAt,
+      weightKg: adjustment.newWeightKg,
+      clientName: null,
+      // The delta, not a client's consumption — signed, so the ledger still adds up.
+      consumedKg: adjustment.deltaKg,
+      byName: (adjustment.adjustedBy as unknown as { name?: string })?.name ?? null,
+      issueId: null,
+      reason: adjustment.reason,
+    });
+  }
+
+  return events.sort((a, b) => b.at.getTime() - a.at.getTime());
+}
