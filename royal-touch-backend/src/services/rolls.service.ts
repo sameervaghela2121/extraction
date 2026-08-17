@@ -7,10 +7,27 @@ import { nextSequence } from "../models/Counter.model";
 import { ApiError } from "../utils/ApiError";
 import { escapeRegex } from "../utils/escapeRegex";
 import { formatBarcodeId, buildZpl } from "../utils/barcode";
-import { settleReturn } from "../utils/consumption";
+import { settleReturn, WEIGHT_EPSILON_KG } from "../utils/consumption";
+import { RollAdjustment } from "../models/RollAdjustment.model";
 import { mediaService } from "./media.service";
 
 const BARCODE_SEQUENCE = "rollBarcode";
+
+/**
+ * One movement of a roll. `weightKg` means what it weighed at that moment — received at,
+ * issued at, or came back at — so the column reads consistently down the ledger.
+ */
+interface RollHistoryEvent {
+  type: "RECEIVED" | "OUT" | "IN" | "ADJUSTED";
+  at: Date;
+  weightKg: number;
+  clientName: string | null;
+  consumedKg: number | null;
+  byName: string | null;
+  issueId: string | null;
+  /** Only on ADJUSTED — why someone changed the figure. */
+  reason?: string;
+}
 
 async function toRollResponse(roll: IRoll) {
   return {
@@ -253,23 +270,149 @@ export const rollsService = {
     };
   },
 
-  /** GET /rolls/:barcodeId/history — every out-and-back cycle, newest first. */
+  /**
+   * PATCH /rolls/:barcodeId/weight — correct the weight of a roll sitting in stock.
+   *
+   * Deliberately refused while the roll is ISSUED: the roll is not on the premises, so
+   * nobody can have weighed it, and the return flow already captures the real figure. An
+   * adjustment accepted mid-issue would also be double-counted, since consumption is
+   * computed from the weight the roll left at.
+   */
+  async adjustWeight(
+    barcodeId: string,
+    newWeightKg: number,
+    reason: string,
+    userId: string,
+  ) {
+    const roll = await findByBarcodeOrThrow(barcodeId);
+    if (roll.status === "ISSUED") {
+      throw ApiError.conflict(
+        "This roll is out with a client — record the corrected weight when it is returned",
+      );
+    }
+    if (roll.status === "CONSUMED") {
+      throw ApiError.conflict("This roll has been fully consumed");
+    }
+
+    const previousWeightKg = roll.currentWeightKg;
+
+    // Submitting the weight already on record is a confirmation, not a mistake — the
+    // operator re-weighed and it matched. Nothing to store, nothing to complain about.
+    if (Math.abs(newWeightKg - previousWeightKg) < WEIGHT_EPSILON_KG) {
+      return {
+        rollId: roll._id.toString(),
+        status: roll.status,
+        changed: false,
+        message: "Weight is already up to date",
+        previousWeightKg,
+        currentWeightKg: previousWeightKg,
+        deltaKg: 0,
+      };
+    }
+
+    const adjustment = await RollAdjustment.create({
+      rollId: roll._id,
+      previousWeightKg,
+      newWeightKg,
+      deltaKg: newWeightKg - previousWeightKg,
+      reason,
+      adjustedBy: new Types.ObjectId(userId),
+    });
+
+    roll.currentWeightKg = newWeightKg;
+    // A roll corrected to zero is spent, the same as one returned empty — leaving it
+    // IN_STOCK would offer the operator a roll with nothing on it.
+    if (newWeightKg <= WEIGHT_EPSILON_KG) roll.status = "CONSUMED";
+    await roll.save();
+
+    return {
+      rollId: roll._id.toString(),
+      status: roll.status,
+      changed: true,
+      message: "Weight updated",
+      previousWeightKg,
+      currentWeightKg: roll.currentWeightKg,
+      deltaKg: adjustment.deltaKg,
+    };
+  },
+
+  /**
+   * GET /rolls/:barcodeId/history — every movement of this roll, newest first.
+   *
+   * One entry per event, not per cycle: the roll being received, each time it went out, and
+   * each time it came back. A cycle row would hide the fact that a roll currently at a
+   * client has left but not returned, and the screen this feeds is a ledger the operator
+   * reads top-down.
+   *
+   * `issueId` pairs an IN with the OUT it closes, so the app can group them if it wants to.
+   */
   async history(barcodeId: string) {
     const roll = await findByBarcodeOrThrow(barcodeId);
-    const issues = await RollIssue.find({ rollId: roll._id })
-      .sort({ issuedAt: -1 })
-      .populate<{ clientId: { name: string } }>("clientId", "name");
+    await roll.populate<{ registeredBy: { name: string } }>("registeredBy", "name");
 
-    return issues.map((issue) => ({
-      id: issue._id.toString(),
-      clientName: issue.clientId.name,
-      issuedWeightKg: issue.issuedWeightKg,
-      issuedAt: issue.issuedAt,
-      returnedWeightKg: issue.returnedWeightKg ?? null,
-      returnedAt: issue.returnedAt ?? null,
-      consumedKg: issue.consumedKg ?? null,
-      status: issue.status,
-    }));
+    const issues = await RollIssue.find({ rollId: roll._id })
+      .sort({ issuedAt: 1 })
+      .populate<{ clientId: { name: string } }>("clientId", "name")
+      .populate<{ issuedBy: { name: string } }>("issuedBy", "name")
+      .populate<{ returnedBy: { name: string } }>("returnedBy", "name");
+
+    const events: RollHistoryEvent[] = [
+      {
+        type: "RECEIVED",
+        at: roll.receivedDate,
+        weightKg: roll.receivedWeightKg,
+        clientName: null,
+        consumedKg: null,
+        byName: (roll.registeredBy as unknown as { name?: string })?.name ?? null,
+        issueId: null,
+      },
+    ];
+
+    for (const issue of issues) {
+      events.push({
+        type: "OUT",
+        at: issue.issuedAt,
+        weightKg: issue.issuedWeightKg,
+        clientName: issue.clientId.name,
+        consumedKg: null,
+        byName: (issue.issuedBy as unknown as { name?: string })?.name ?? null,
+        issueId: issue._id.toString(),
+      });
+
+      // Only once it is actually back — an OPEN issue has an OUT and no IN, which is
+      // precisely what "still with the client" looks like on the screen.
+      if (issue.returnedAt) {
+        events.push({
+          type: "IN",
+          at: issue.returnedAt,
+          weightKg: issue.returnedWeightKg ?? 0,
+          clientName: issue.clientId.name,
+          consumedKg: issue.consumedKg ?? null,
+          byName: (issue.returnedBy as unknown as { name?: string })?.name ?? null,
+          issueId: issue._id.toString(),
+        });
+      }
+    }
+
+    const adjustments = await RollAdjustment.find({ rollId: roll._id }).populate<{
+      adjustedBy: { name: string };
+    }>("adjustedBy", "name");
+
+    for (const adjustment of adjustments) {
+      events.push({
+        type: "ADJUSTED",
+        at: adjustment.adjustedAt,
+        weightKg: adjustment.newWeightKg,
+        clientName: null,
+        // The delta, not a client's consumption — signed, so the ledger still adds up.
+        consumedKg: adjustment.deltaKg,
+        byName: (adjustment.adjustedBy as unknown as { name?: string })?.name ?? null,
+        issueId: null,
+        reason: adjustment.reason,
+      });
+    }
+
+    return events.sort((a, b) => b.at.getTime() - a.at.getTime());
   },
 
   /** GET /rolls/:barcodeId/barcode/print — ZPL for the paired Zebra printer. */

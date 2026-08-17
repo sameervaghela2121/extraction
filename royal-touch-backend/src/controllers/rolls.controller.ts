@@ -36,6 +36,18 @@ export const rollsController = {
     res.json(result);
   },
 
+  async adjustWeight(req: Request, res: Response) {
+    const { currentWeightKg, reason } = req.body;
+    res.json(
+      await rollsService.adjustWeight(
+        req.params.barcodeId,
+        currentWeightKg,
+        reason,
+        req.auth!.userId,
+      ),
+    );
+  },
+
   async history(req: Request, res: Response) {
     res.json({ history: await rollsService.history(req.params.barcodeId) });
   },
