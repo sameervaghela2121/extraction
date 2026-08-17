@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import multer from "multer";
 import { ApiError } from "../utils/ApiError";
 import { logger } from "../utils/logger";
 
@@ -12,6 +13,16 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(err.statusCode).json({ error: err.message, details: err.details });
     return;
   }
+  // Oversized or too many files, and the fileFilter's rejection: caller errors, not faults.
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  if (err instanceof Error && err.message.startsWith("Unsupported file type")) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+
   logger.error("Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });
 }

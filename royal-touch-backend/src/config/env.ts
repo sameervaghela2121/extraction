@@ -22,4 +22,10 @@ export const env = {
   // and vice versa.
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   jwtRefreshSecret: required("JWT_REFRESH_SECRET"),
+
+  // Its own bucket, not the portal's: these are shop-floor roll photos, unrelated to
+  // invoice documents, with a different retention story.
+  gcsBucket: process.env.GCS_BUCKET ?? "sameerv-royaltouch-rolls",
+  // A phone camera photo, not a document scan. 15MB covers a 12MP JPEG comfortably.
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 15 * 1024 * 1024),
 };
