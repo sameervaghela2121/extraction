@@ -8,6 +8,7 @@ import {
   barcodeParamsSchema,
   createRollSchema,
   updateStatusSchema,
+  adjustWeightSchema,
 } from "../validators/rolls.validators";
 
 const router = Router();
@@ -28,6 +29,11 @@ router.patch(
   "/:barcodeId/status",
   validate({ params: barcodeParamsSchema, body: updateStatusSchema }),
   asyncHandler(rollsController.updateStatus),
+);
+router.patch(
+  "/:barcodeId/weight",
+  validate({ params: barcodeParamsSchema, body: adjustWeightSchema }),
+  asyncHandler(rollsController.adjustWeight),
 );
 router.get(
   "/:barcodeId/history",

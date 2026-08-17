@@ -1,5 +1,5 @@
 /** Scales report grams; anything below this is noise, not a real weight difference. */
-const WEIGHT_EPSILON_KG = 0.001;
+export const WEIGHT_EPSILON_KG = 0.001;
 
 export type ReturnOutcome = {
   consumedKg: number;

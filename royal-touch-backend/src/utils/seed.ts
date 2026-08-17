@@ -64,6 +64,11 @@ async function main() {
   for (const data of CLIENTS) {
     if (!(await Client.findOne({ code: data.code }))) await Client.create(data);
   }
+  // Backfill for rows created before nameKey existed. Without it those documents index as
+  // null, and more than one null breaks the unique index the find-or-create relies on.
+  for (const client of await Client.find({ nameKey: { $exists: false } })) {
+    await client.save(); // pre("validate") derives nameKey
+  }
   logger.info(`clients: ${CLIENTS.length}`);
 
   const batchByCode = new Map<string, mongoose.Types.ObjectId>();

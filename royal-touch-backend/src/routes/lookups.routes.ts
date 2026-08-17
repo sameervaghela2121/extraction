@@ -3,7 +3,11 @@ import { lookupsController } from "../controllers/lookups.controller";
 import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/auth.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { lookupQuerySchema, batchQuerySchema } from "../validators/lookups.validators";
+import {
+  lookupQuerySchema,
+  batchQuerySchema,
+  createClientSchema,
+} from "../validators/lookups.validators";
 
 /**
  * Master-data lists for the app's dropdowns. Mounted at the root of /v1 rather than under
@@ -25,6 +29,12 @@ router.get(
   asyncHandler(lookupsController.batches),
 );
 router.get("/clients", requireAuth, query, asyncHandler(lookupsController.clients));
+router.post(
+  "/clients",
+  requireAuth,
+  validate({ body: createClientSchema }),
+  asyncHandler(lookupsController.createClient),
+);
 router.get("/suppliers", requireAuth, query, asyncHandler(lookupsController.suppliers));
 
 export default router;

@@ -48,6 +48,16 @@ export const createRollSchema = z.object({
 });
 
 /**
+ * A correction to a roll sitting in stock. The reason is mandatory and free text: the person
+ * reading this in six months needs to know whether 40kg was written off as damage or simply
+ * mis-keyed at registration.
+ */
+export const adjustWeightSchema = z.object({
+  currentWeightKg: weightKg,
+  reason: z.string().trim().min(3, "A reason is required").max(500),
+});
+
+/**
  * OUT and IN carry different payloads — OUT needs the client, IN needs what came back on
  * the scale. A discriminated union rejects the wrong combination at the boundary rather
  * than leaving the service to guess.
