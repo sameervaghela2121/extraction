@@ -2,7 +2,26 @@ import { z } from "zod";
 import { BARCODE_ID_PATTERN } from "../utils/barcode";
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid id");
-const weightKg = z.coerce.number().nonnegative().finite();
+/**
+ * Accepts "240" as well as 240, because form fields arrive as strings.
+ *
+ * The preprocess is what makes a *missing* field say "Required": z.coerce.number() would
+ * run Number(undefined) and report "expected number, received nan", which reads like a
+ * malformed value and sends the caller hunting for the wrong bug.
+ */
+/**
+ * Coerce here rather than with z.coerce so that a missing field stays `undefined` and Zod
+ * reports "Required". z.coerce.number() runs Number(undefined) → NaN, turning an absent
+ * field into "expected number, received nan" — which reads like a bad value and sends the
+ * caller looking for the wrong bug.
+ */
+const toNumberOrUndefined = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  return typeof value === "string" ? Number(value) : value;
+};
+
+const weightKg = z.preprocess(toNumberOrUndefined, z.number().nonnegative().finite());
+const positiveWeightKg = z.preprocess(toNumberOrUndefined, z.number().positive().finite());
 const mediaPath = z.string().trim().regex(/^rolls\/\d{4}\/\d{2}\/[\w-]+\.[a-z]{2,8}$/, "Invalid media path");
 
 export const searchQuerySchema = z.object({
@@ -19,7 +38,7 @@ export const createRollSchema = z.object({
   // The canonical stock figure — net when the label prints one, gross otherwise. The app
   // resolves that before submitting; the server stores what it is told alongside the raw
   // supplier numbers.
-  receivedWeightKg: weightKg.positive(),
+  receivedWeightKg: positiveWeightKg,
   grossWeightKg: weightKg.optional(),
   netWeightKg: weightKg.optional(),
   chargeableWeightKg: weightKg.optional(),

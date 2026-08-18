@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { ZodError, type ZodTypeAny } from "zod";
 import { ApiError } from "../utils/ApiError";
+import { toReadableValidationError } from "../utils/validationMessage";
 
 type Sources = {
   body?: ZodTypeAny;
@@ -18,7 +19,8 @@ export function validate(schemas: Sources) {
       next();
     } catch (err) {
       if (err instanceof ZodError) {
-        throw ApiError.badRequest("Validation failed", err.flatten());
+        const { message, fields } = toReadableValidationError(err);
+        throw ApiError.badRequest(message, { fields });
       }
       throw err;
     }
