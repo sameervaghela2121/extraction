@@ -1,6 +1,7 @@
 import { Schema, model, Types } from "mongoose";
 
-export type UserRole = "staff" | "admin";
+export const USER_ROLES = ["staff", "admin", "store_manager"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = "invited" | "active" | "suspended";
 
 export interface IUser {
@@ -22,7 +23,7 @@ const userSchema = new Schema<IUser>(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, select: false },
-    role: { type: String, enum: ["staff", "admin"], default: "staff" },
+    role: { type: String, enum: [...USER_ROLES], default: "staff" },
     status: { type: String, enum: ["invited", "active", "suspended"], default: "invited" },
     invitedAt: { type: Date },
     resetToken: { type: String, select: false },

@@ -1709,6 +1709,13 @@ async def _on_startup():
         log.exception("resume of interrupted jobs failed (server still starting normally)")
 
 
+# Roll-label OCR lives in its own module (no Gemini, no API key) and is mounted with the
+# same bearer-token dependency as everything else here.
+from roll_label_ocr import build_router as build_ocr_router  # noqa: E402
+
+app.include_router(build_ocr_router(require_token))
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

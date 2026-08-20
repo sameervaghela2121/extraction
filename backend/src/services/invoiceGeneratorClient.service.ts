@@ -36,6 +36,13 @@ export interface StorageFileRef {
 
 let cachedToken: string | null = null;
 
+// CPU inference on a 1600px photo measures ~11s; the default 120s client timeout would
+// leave a phone waiting far too long before it gave up.
+const OCR_TIMEOUT_MS = 45_000;
+
+/** One recognised word with its box, as api/roll_label_ocr.py returns it. */
+type RollLabelWord = { text: string; x: number; y: number; w: number; h: number; conf: number };
+
 const http: AxiosInstance = axios.create({
   baseURL: env.invoiceGeneratorBaseUrl,
   timeout: 120_000,
@@ -124,6 +131,37 @@ export const invoiceGeneratorClient = {
         if (err instanceof AxiosError && err.response?.status === 401) throw err; // handled by withAuth
         logger.error("[invoiceGenerator] analyzeFromStorage failed", (err as AxiosError).message);
         throw new ApiError(502, "The extraction service rejected the job");
+      }
+    });
+  },
+
+  /**
+   * Read a roll label photo with the service's local OCR (api/roll_label_ocr.py).
+   * Returns the raw text lines and mean confidence — the field parsing stays on this
+   * side, in ocr.service, so all three engines share one parser.
+   */
+  async readRollLabel(
+    image: Buffer,
+    filename = "label.jpg",
+  ): Promise<{ lines: string[]; confidence: number; words?: RollLabelWord[] }> {
+    return withAuth(async (token) => {
+      const form = new FormData();
+      form.append("photo", new Blob([new Uint8Array(image)], { type: "image/jpeg" }), filename);
+      try {
+        const { data } = await http.post<{
+          lines: string[];
+          confidence: number;
+          words?: RollLabelWord[];
+        }>(
+          "/ocr/roll-label",
+          form,
+          { headers: { Authorization: `Bearer ${token}` }, timeout: OCR_TIMEOUT_MS },
+        );
+        return data;
+      } catch (err) {
+        if (err instanceof AxiosError && err.response?.status === 401) throw err; // handled by withAuth
+        logger.error("[invoiceGenerator] roll-label OCR failed", (err as AxiosError).message);
+        throw new ApiError(502, "The label could not be read by the extraction service");
       }
     });
   },
