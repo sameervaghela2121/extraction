@@ -36,9 +36,10 @@ export interface StorageFileRef {
 
 let cachedToken: string | null = null;
 
-// CPU inference on a 1600px photo measures ~11s; the default 120s client timeout would
-// leave a phone waiting far too long before it gave up.
-const OCR_TIMEOUT_MS = 45_000;
+// CPU-only inference is slow and varies with the host: ~11s on a dev laptop, 52s on a
+// 2-vCPU Cloud Run instance. The timeout has to clear the slow case, or a successful read
+// gets thrown away and the caller sees a failure the logs say never happened.
+const OCR_TIMEOUT_MS = 120_000;
 
 /** One recognised word with its box, as api/roll_label_ocr.py returns it. */
 type RollLabelWord = { text: string; x: number; y: number; w: number; h: number; conf: number };
