@@ -1,4 +1,6 @@
-export type UserRole = "staff" | "admin";
+// store_manager exists on the backend for the mobile app. The web UI never offers it
+// as a choice — it's here only so the auth pages can recognise one and stay put.
+export type UserRole = "staff" | "admin" | "store_manager";
 export type UserStatus = "invited" | "active" | "suspended";
 export type DocumentSource = "upload" | "scan" | "email";
 export type DocumentStatus = "pending" | "verified" | "archived";

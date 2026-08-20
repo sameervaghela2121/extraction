@@ -12,6 +12,7 @@ export default function AcceptInvitePage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
@@ -24,6 +25,12 @@ export default function AcceptInvitePage() {
     setBusy(true);
     try {
       const result = await authApi.acceptInvite(token, password);
+      // A store manager's account is for the mobile app — the password is set, but we
+      // don't start a web session or send them into pages built for other roles.
+      if (result.user.role === "store_manager") {
+        setNotice("Password set. Sign in from the mobile app.");
+        return;
+      }
       applyAuthResult(result);
       navigate(result.user.role === "staff" ? "/grn" : "/documents");
     } catch (err) {
@@ -35,6 +42,9 @@ export default function AcceptInvitePage() {
 
   return (
     <AuthLayout title="Accept your invite" subtitle="Set a password to activate your account.">
+      {notice ? (
+        <div style={{ fontSize: 14 }}>{notice}</div>
+      ) : (
       <form onSubmit={submit} className="stack" style={{ gap: 14 }}>
         <div>
           <label className="field-label">New password</label>
@@ -49,6 +59,7 @@ export default function AcceptInvitePage() {
           {busy ? "Activating…" : "Activate account"}
         </button>
       </form>
+      )}
     </AuthLayout>
   );
 }

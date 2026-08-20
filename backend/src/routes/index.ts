@@ -8,6 +8,12 @@ import exportRoutes from "./export.routes";
 import grnRoutes from "./grn.routes";
 import publicGrnRoutes from "./publicGrn.routes";
 import generalVouchersRoutes from "./generalVouchers.routes";
+import vendorsRoutes from "./vendors.routes";
+import rawMaterialsRoutes from "./rawMaterials.routes";
+import materialRollsRoutes from "./materialRolls.routes";
+import stockRoutes from "./stock.routes";
+import ocrRoutes from "./ocr.routes";
+import mediaRoutes from "./media.routes";
 
 const router = Router();
 
@@ -27,5 +33,11 @@ router.use("/users", usersRoutes);
 router.use("/export", exportRoutes);
 router.use("/grn", grnRoutes);
 router.use("/general-vouchers", generalVouchersRoutes);
+router.use("/vendors", vendorsRoutes);
+router.use("/raw-materials", rawMaterialsRoutes);
+router.use("/material-rolls", materialRollsRoutes);
+router.use("/stock", stockRoutes);
+router.use("/ocr", ocrRoutes);
+router.use("/media", mediaRoutes);
 
 export default router;

@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +18,14 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const user = await login(email, password);
+      // Store managers belong to the mobile app. login() has already stored the tokens,
+      // so drop the session again rather than leaving them signed in on a UI with
+      // nothing for them.
+      if (user.role === "store_manager") {
+        logout();
+        setError("This account is for the mobile app.");
+        return;
+      }
       // Staff can't see /documents (nav hides it, and StaffRestrictedRoute would bounce
       // them straight back out) — land them on the one section they actually have.
       navigate(user.role === "staff" ? "/grn" : "/documents");

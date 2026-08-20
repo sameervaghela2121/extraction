@@ -37,6 +37,11 @@ export default function ResetPasswordPage() {
     setBusy(true);
     try {
       const result = await authApi.resetPassword(token!, password);
+      // Same as accept-invite: a store manager signs in on mobile, not here.
+      if (result.user.role === "store_manager") {
+        setMessage("Password set. Sign in from the mobile app.");
+        return;
+      }
       applyAuthResult(result);
       navigate(result.user.role === "staff" ? "/grn" : "/documents");
     } catch (err) {
@@ -49,6 +54,9 @@ export default function ResetPasswordPage() {
   if (token) {
     return (
       <AuthLayout title="Set a new password">
+        {message ? (
+          <div style={{ fontSize: 14 }}>{message}</div>
+        ) : (
         <form onSubmit={doReset} className="stack" style={{ gap: 14 }}>
           <div>
             <label className="field-label">New password</label>
@@ -59,6 +67,7 @@ export default function ResetPasswordPage() {
             {busy ? "Saving…" : "Save password"}
           </button>
         </form>
+        )}
       </AuthLayout>
     );
   }
