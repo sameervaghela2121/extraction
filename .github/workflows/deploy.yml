@@ -178,3 +178,20 @@ jobs:
         run: |
           FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(status.url)')
           gcloud run services update docflow-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL
+
+  # Keep `development` level with `main` after a successful deploy, so branching from it
+  # is never stale. This is a fast-forward push, not a merge or rebase: if anyone has
+  # committed to `development` directly, the push is rejected and this job goes red
+  # rather than rewriting or clobbering their work.
+  sync-development:
+    needs: [deploy-ai-backend, deploy-backend, deploy-royal-touch, deploy-frontend]
+    if: ${{ github.event_name == 'push' && !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast-forward development to main
+        run: git push origin ${{ github.sha }}:refs/heads/development
