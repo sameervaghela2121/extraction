@@ -2,6 +2,15 @@ import { z } from "zod";
 import { TRANSACTION_TYPES } from "../models/StockTransaction.model";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
+// Only paths this API minted: "rolls/YYYY/MM/<uuid>.<ext>". Rejecting anything else stops
+// a client attaching — and then getting a signed read URL for — an arbitrary object in the
+// bucket, which also holds invoice scans.
+const objectPath = z
+  .string()
+  .regex(/^rolls\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{1,8}$/i, "Not a valid upload path");
+
+/** Enough for a couple of angles per movement without turning the ledger into an album. */
+const MAX_MOVEMENT_PHOTOS = 4;
 
 export const recordMovementSchema = z
   .object({
@@ -22,6 +31,9 @@ export const recordMovementSchema = z
     location: z.string().trim().min(1).optional(),
     issued_to: z.string().trim().optional(),
     remarks: z.string().trim().optional(),
+    // OUT/RETURN: photos of the roll taken as it leaves and as it comes back. GCS object
+    // paths returned by POST /media/upload — not URLs, and not raw files.
+    photo_paths: z.array(objectPath).max(MAX_MOVEMENT_PHOTOS).optional(),
   })
   .superRefine((v, ctx) => {
     // A whole roll goes out to a place; nothing is consumed yet, so no quantity.

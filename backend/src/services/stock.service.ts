@@ -11,6 +11,7 @@ import { Vendor } from "../models/Vendor.model";
 import { ApiError } from "../utils/ApiError";
 import { paginated } from "../utils/crud";
 import { refreshSummary } from "./stockSummary.service";
+import { mediaService } from "./media.service";
 
 type MovementInput = {
   transaction_type: TransactionType;
@@ -30,6 +31,9 @@ type MovementInput = {
   location?: string;
   issued_to?: string;
   remarks?: string;
+  /** OUT/RETURN: photos of the roll captured at the movement, already uploaded via
+   *  POST /media/upload. Object paths, not URLs. */
+  photo_paths?: string[];
 };
 
 /** Each ref carries its own natural label, not all of them a "name". */
@@ -81,7 +85,11 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
   }
 }
 
-function toResponse(t: PopulatedTransaction) {
+async function toResponse(t: PopulatedTransaction) {
+  // Signing is local crypto, no network call, so doing it per row is cheap.
+  const photoPaths = t.photo_paths ?? [];
+  const photoUrls = await Promise.all(photoPaths.map((p) => mediaService.signedReadUrl(p)));
+
   return {
     id: t._id.toString(),
     transaction_type: t.transaction_type,
@@ -102,6 +110,9 @@ function toResponse(t: PopulatedTransaction) {
     material_weight_after: t.material_weight_after,
     issued_to: t.issued_to,
     remarks: t.remarks,
+    // Paths round-trip, URLs render — same split as the roll's registration photos.
+    photo_paths: photoPaths,
+    photo_urls: photoUrls,
     created_by: refResponse(t.created_by, "name"),
     createdAt: t.createdAt,
   };
@@ -275,6 +286,7 @@ export const stockService = {
       from_location: effect.from_location,
       to_location: effect.to_location,
       remarks: input.remarks,
+      photo_paths: input.photo_paths?.length ? input.photo_paths : undefined,
       created_by: new Types.ObjectId(actingUserId),
     });
 
@@ -307,7 +319,7 @@ export const stockService = {
       StockTransaction.countDocuments(filter),
     ]);
 
-    return paginated(items.map(toResponse), total, page, pageSize);
+    return paginated(await Promise.all(items.map((t) => toResponse(t))), total, page, pageSize);
   },
 
   /**

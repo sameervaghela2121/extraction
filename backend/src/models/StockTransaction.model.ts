@@ -38,6 +38,10 @@ export interface IStockTransaction {
   from_location?: string;
   to_location?: string;
   remarks?: string;
+  /** GCS object paths for photos taken at the moment of the movement — the roll as it
+   *  left, and the roll as it came back. Evidence for a disputed weight, so they hang off
+   *  the movement rather than the roll: the roll only ever shows its latest state. */
+  photo_paths?: string[];
   created_by: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -65,6 +69,9 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     from_location: { type: String, trim: true },
     to_location: { type: String, trim: true },
     remarks: { type: String, trim: true },
+    // Paths, not URLs — a stored URL expires, a path does not. Read URLs are signed per
+    // response, same as the roll's registration photos.
+    photo_paths: { type: [String], default: undefined },
     created_by: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true, collection: "stock_transactions" },
