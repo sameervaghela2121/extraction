@@ -1716,8 +1716,12 @@ async def _on_startup():
 # Roll-label OCR lives in its own module (no Gemini, no API key) and is mounted with the
 # same bearer-token dependency as everything else here.
 from roll_label_ocr import build_router as build_ocr_router, warm_up as warm_up_ocr  # noqa: E402
+# Second engine on its own route (/ocr/roll-label-ai). Additive: the EasyOCR path above
+# is the one in production use and does not change.
+from roll_label_gemini import build_router as build_ocr_ai_router  # noqa: E402
 
 app.include_router(build_ocr_router(require_token))
+app.include_router(build_ocr_ai_router(require_token))
 
 
 @app.get("/health")
