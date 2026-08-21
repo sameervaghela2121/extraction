@@ -39,6 +39,26 @@ _reader = None
 _reader_lock = Lock()
 
 
+def warm_up() -> bool:
+    """Load the model at server startup instead of inside the first request.
+
+    Deserializing 94MB of weights takes ~30s on a cold CPU instance. Paid here, it lands
+    in Cloud Run's startup window — which is CPU-boosted and which the platform waits on
+    before routing traffic. Paid lazily, it lands on whichever operator happens to scan
+    the first label, turning an 11s read into a 50s one.
+
+    Never fatal: this service's main job is Gemini invoice extraction, which does not
+    touch OCR at all. Broken weights must not stop it from starting — the lazy path in
+    _get_reader() still runs, and only roll-label reads are slow or fail.
+    """
+    try:
+        _get_reader()
+        return True
+    except Exception:
+        log.exception("[ocr] model warm-up failed; falling back to loading on first use")
+        return False
+
+
 def _get_reader():
     """Load the model once, on first use.
 
@@ -130,9 +150,14 @@ def build_router(require_token) -> APIRouter:
     """Router factory so the auth dependency stays owned by main.py."""
     router = APIRouter(prefix="/ocr", tags=["ocr"])
 
+    # Deliberately `def`, not `async def`. read_label() is ~11s of blocking CPU work, and
+    # on the event loop it would freeze the whole service — health checks and in-flight
+    # invoice extractions included — for the duration of every scan. Declared sync,
+    # FastAPI runs it in a threadpool instead. The read is .file.read() for the same
+    # reason: no await available in a sync endpoint.
     @router.post("/roll-label", dependencies=[Depends(require_token)])
-    async def roll_label(photo: UploadFile = File(...)) -> dict:
-        content = await photo.read()
+    def roll_label(photo: UploadFile = File(...)) -> dict:
+        content = photo.file.read()
         if not content:
             raise HTTPException(status_code=400, detail="empty upload")
         return read_label(content)

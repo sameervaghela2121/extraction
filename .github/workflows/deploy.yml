@@ -60,7 +60,11 @@ jobs:
       - name: Deploy
         # EasyOCR (api/roll_label_ocr.py) loads torch plus a ~94MB model, so this service
         # needs far more than the other three: 1Gi OOMs, and 1 CPU turns an 11s read into
-        # 52s. cpu-boost covers the model load, which happens inside the first request.
+        # 52s. cpu-boost covers the model load, which now happens at startup.
+        #
+        # min-instances=1 because that load costs ~30s: scaling to zero means the next
+        # operator to scan a label pays it, which is the difference between an 11s read
+        # and a 50s one. With cpu-throttling the idle instance bills at the idle CPU rate.
         run: |
           gcloud run deploy docflow-ai-backend \
             --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
@@ -68,7 +72,7 @@ jobs:
             --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --memory=4Gi --cpu=4 --timeout=600 \
-            --min-instances=0 --max-instances=1 --cpu-throttling --cpu-boost \
+            --min-instances=1 --max-instances=1 --cpu-throttling --cpu-boost \
             --set-env-vars=GCS_BUCKET=sameerv-docflow-invoices \
             --set-secrets=GEMINI_API_KEY=ai-backend-gemini-api-key:latest,MONGODB_URI=ai-backend-mongodb-uri:latest,APP_USER=ai-backend-app-user:latest,APP_PASSWORD=ai-backend-app-password:latest
 
