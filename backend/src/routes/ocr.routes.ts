@@ -16,4 +16,13 @@ router.post(
   asyncHandler(ocrController.readRollLabel),
 );
 
+// Gemini instead of OCR: the model is asked for the fields directly, so nothing on this
+// side has to work out which value sits under which caption. Same response shape as
+// /roll-label, with engine "gemini".
+router.post(
+  "/roll-label-ai",
+  uploadMemory.single("photo"),
+  asyncHandler(ocrController.readRollLabelAi),
+);
+
 export default router;
