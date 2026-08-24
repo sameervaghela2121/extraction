@@ -3,31 +3,26 @@ import { matchMasters, type MasterMatch } from "./labelMatch.service";
 import { ApiError } from "../utils/ApiError";
 
 /**
- * Roll label reading through the extraction service's Gemini route.
+ * Roll label reading through the extraction service's Gemini route — the only reader.
  *
- * The other readers OCR the photo into text and this side works out which value belongs
- * to which caption by pixel geometry. That parser is fitted to the label layouts we had
- * to hand, so a supplier whose label we have never seen reads the wrong column. Here the
- * model is asked for the fields directly and there is nothing on this side to fit.
- *
- * Its own module rather than another engine inside ocr.service for one reason: that
- * service's engines all return {lines, words} and share one parser. This one returns
- * fields and skips the parser entirely, so folding it in would mean two code paths
- * pretending to be one.
+ * The engines this replaced (easyocr, Google Vision, tesseract) OCR'd the photo into text
+ * and this side worked out which value belonged to which caption by pixel geometry. That
+ * parser was fitted to the label layouts we had to hand, so a supplier whose label we had
+ * never seen read the wrong column. Here the model is asked for the fields directly and
+ * there is nothing on this side to fit.
  */
 
-/** Below this the read is not worth pre-filling a form with. Same floor the OCR reader
- *  uses, so "reliable" means the same thing on every route. */
+/** Below this the read is not worth pre-filling a form with. */
 const MIN_RELIABLE_CONFIDENCE = 0.7;
 
-/** Mirrors ocr.service's RollLabelFields so the response is drop-in, but declared here
- *  rather than imported: this route must not be able to change that module. */
+/** The shape the app fills its add-roll form from. Field names match POST /material-rolls
+ *  exactly, so a reliable read can be posted through unchanged. */
 export type AiRollLabelFields = {
   roll_number: string | null;
   gsm: number | null;
-  width_mm: number | null;
-  weight_kg: number | null;
-  batch_no: string | null;
+  width: number | null;
+  weight: number | null;
+  date: string | null;
   material: MasterMatch;
   vendor: MasterMatch;
   confidence: number;
@@ -53,9 +48,9 @@ export const rollLabelAiService = {
     const fields = {
       roll_number: read.roll_number,
       gsm: read.gsm,
-      width_mm: read.width_mm,
-      weight_kg: read.weight_kg,
-      batch_no: read.batch_no,
+      width: read.width,
+      weight: read.weight,
+      date: read.date,
     };
 
     const found = Object.values(fields).filter((v) => v !== null).length;
@@ -68,9 +63,9 @@ export const rollLabelAiService = {
       return {
         roll_number: null,
         gsm: null,
-        width_mm: null,
-        weight_kg: null,
-        batch_no: null,
+        width: null,
+        weight: null,
+        date: null,
         material: null,
         vendor: null,
         confidence: read.confidence,

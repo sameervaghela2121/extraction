@@ -6,16 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY api/requirements.txt ./requirements.txt
-# CPU-only torch first: easyocr's dependency is then already satisfied, so pip never
-# reaches for the CUDA build from PyPI.
-RUN pip install --no-cache-dir torch torchvision \
-        --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r requirements.txt
-
-# Bake the OCR weights (~94MB) into the image. Otherwise every fresh container downloads
-# them on the first roll-label request — a slow first call, and a hard failure wherever
-# egress is locked down.
-RUN python -c "import easyocr; easyocr.Reader(['en'], gpu=False, verbose=False)"
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api ./api
 

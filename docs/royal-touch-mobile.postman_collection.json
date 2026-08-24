@@ -1,0 +1,508 @@
+{
+  "info": {
+    "name": "Royal Touch \u2014 Mobile App",
+    "description": "Only the endpoints the Android app calls, in the order it calls them.\n\nSetup: set `base_url`, then run '1. Login' \u2014 the token is stored and reused.\n\nTypical add-roll flow: 2 (scan label) \u2192 5 (upload photos) \u2192 6 (create roll).\nTypical movement flow: 8 (scan roll) \u2192 9 or 10 \u2192 12 (history).\n\nOCR field names match the create-roll body exactly; only `location` is typed by hand.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "material_id",
+      "value": ""
+    },
+    {
+      "key": "vendor_id",
+      "value": ""
+    },
+    {
+      "key": "roll_id",
+      "value": ""
+    },
+    {
+      "key": "roll_number",
+      "value": ""
+    },
+    {
+      "key": "photo_path",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const b = pm.response.json();",
+              "const token = b.token || b.data?.token || b.accessToken;",
+              "if (token) pm.collectionVariables.set('token', token);",
+              "pm.test('logged in', () => pm.expect(token).to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Stores the token in a collection variable; every request below uses it automatically.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"\",\n  \"password\": \"\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Read roll label (OCR)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const r = pm.response.json();",
+              "pm.test('ok', () => pm.response.to.have.status(200));",
+              "if (r.reliable) {",
+              "  ['weight','width','gsm','date','roll_number'].forEach(k =>",
+              "    pm.test('read ' + k, () => pm.expect(r).to.have.property(k)));",
+              "  if (r.material?.id) pm.collectionVariables.set('material_id', r.material.id);",
+              "  if (r.vendor?.id) pm.collectionVariables.set('vendor_id', r.vendor.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/ocr/roll-label",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ocr",
+            "roll-label"
+          ]
+        },
+        "description": "Attach the label photo as form-data key `photo`.\n\nReturns roll_number, gsm, width, weight, date, plus matched material and vendor.\nField names match 'Create roll' exactly \u2014 post them straight through.\n\nIMPORTANT: when `reliable` is false every field is null. Do NOT pre-fill the form; show the operator the retake message instead.\n\n`location` is never on a label \u2014 always entered by hand.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "photo",
+              "type": "file",
+              "src": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. List materials",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const b = pm.response.json();",
+              "const list = b.items ?? b.data?.items ?? b.data ?? b;",
+              "if (list[0]) pm.collectionVariables.set('material_id', list[0].id ?? list[0]._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/raw-materials",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "raw-materials"
+          ]
+        },
+        "description": "Dropdown source: Tissue, Base Paper, Barrier. Use the id as material_id."
+      }
+    },
+    {
+      "name": "4. List vendors",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const b = pm.response.json();",
+              "const list = b.items ?? b.data?.items ?? b.data ?? b;",
+              "if (list[0]) pm.collectionVariables.set('vendor_id', list[0].id ?? list[0]._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/vendors",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "vendors"
+          ]
+        },
+        "description": "Dropdown source. The vendor's code becomes the prefix of the roll's royal_touche_code (ITC-0001, SCHATT-0001)."
+      }
+    },
+    {
+      "name": "5. Upload image",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const b = pm.response.json();",
+              "const path = b.path ?? b.data?.path ?? b.object_path;",
+              "if (path) pm.collectionVariables.set('photo_path', path);",
+              "pm.test('returns an object path', () => pm.expect(path).to.match(/^rolls\\/\\d{4}\\/\\d{2}\\//));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/media/upload",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "media",
+            "upload"
+          ]
+        },
+        "description": "Attach the image as form-data key `file`. Returns a GCS object path (rolls/YYYY/MM/<uuid>.<ext>).\n\nSend that PATH \u2014 not a URL, not the file \u2014 in the roll's *_photo_path fields or a movement's photo_paths.\n\nUpload each photo separately so a failed shot is retried alone. Compress to ~1600px before uploading: 4MB drops to ~300KB, and this is the slowest step in the flow.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Create roll",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "const roll = pm.response.json().data ?? pm.response.json();",
+              "if (roll.id) pm.collectionVariables.set('roll_id', roll.id);",
+              "if (roll.roll_number) pm.collectionVariables.set('roll_number', roll.roll_number);",
+              "pm.test('royal_touche_code generated', () =>",
+              "  pm.expect(roll.royal_touche_code).to.match(/^[A-Z0-9]+-\\d{4,}$/));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/material-rolls",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls"
+          ]
+        },
+        "description": "ALL of these are required: roll_number, material_id, vendor_id, weight, gsm, width, location, date.\n\nOptional: batch_no, quantity, unit (defaults kg), tag_photo_path, stitched_barcode_photo_path, side1_photo_path, side2_photo_path.\n\nNever send: royal_touche_code (generated server-side from the vendor code), remaining_weight, status.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roll_number\": \"RT-{{$randomInt}}\",\n  \"material_id\": \"{{material_id}}\",\n  \"vendor_id\": \"{{vendor_id}}\",\n  \"weight\": 275,\n  \"gsm\": 80,\n  \"width\": 1250,\n  \"location\": \"A-12\",\n  \"date\": \"2026-08-24\"\n}"
+        }
+      }
+    },
+    {
+      "name": "7. List rolls",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/material-rolls?page=1&pageSize=50",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "50"
+            },
+            {
+              "key": "q",
+              "value": "",
+              "disabled": true
+            },
+            {
+              "key": "material_id",
+              "value": "{{material_id}}",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "IN_STOCK",
+              "disabled": true
+            },
+            {
+              "key": "location",
+              "value": "",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Paginated. `q` searches roll_number, royal_touche_code and batch_no."
+      }
+    },
+    {
+      "name": "8. Get roll",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/material-rolls/{{roll_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls",
+            "{{roll_id}}"
+          ]
+        },
+        "description": "Accepts the roll's id OR the number printed on it \u2014 a scanner has the number, so no lookup call is needed first. Photo URLs come back signed and ready to render."
+      }
+    },
+    {
+      "name": "9. Roll OUT",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('recorded', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/movements",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ]
+        },
+        "description": "Issue the whole roll to a location.\n\nRequired: transaction_type, material_id, roll_id, location.\nOptional: issued_to, remarks, photo_paths (max 4, from 'Upload image').\n\nDo NOT send weight \u2014 an OUT consumes nothing. The whole roll simply moves; how much was used is declared on the RETURN. Sending weight is a 400.\n\nA roll already out returns 409 \u2014 record its return first.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transaction_type\": \"OUT\",\n  \"material_id\": \"{{material_id}}\",\n  \"roll_id\": \"{{roll_id}}\",\n  \"location\": \"Machine-2\",\n  \"issued_to\": \"Ramesh\",\n  \"remarks\": \"\",\n  \"photo_paths\": []\n}"
+        }
+      }
+    },
+    {
+      "name": "10. Roll RETURN",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('recorded', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/movements",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ]
+        },
+        "description": "Bring the roll back and declare what is left on it.\n\nRequired: transaction_type, material_id, roll_id, returned_weight.\nOptional: remarks, photo_paths.\n\nreturned_weight is what the roll weighs coming back, straight off the scale. Equal to what went out = nothing used. 0 = fully consumed, and the roll becomes CONSUMED.\n\nThis is the only movement that draws a roll down.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transaction_type\": \"RETURN\",\n  \"material_id\": \"{{material_id}}\",\n  \"roll_id\": \"{{roll_id}}\",\n  \"returned_weight\": 180,\n  \"remarks\": \"\",\n  \"photo_paths\": []\n}"
+        }
+      }
+    },
+    {
+      "name": "11. Movement history (all)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/stock/movements?page=1&pageSize=50",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "50"
+            },
+            {
+              "key": "transaction_type",
+              "value": "OUT",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Newest first. Each row carries a ready-to-render `description`, the weights before/after, and signed photo_urls for the OUT and RETURN shots."
+      }
+    },
+    {
+      "name": "12. Movement history \u2014 one roll (by roll_number)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ok', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const rows = b.items ?? b.data?.items ?? b.data ?? b;",
+              "pm.test('every row is this roll', () => rows.forEach(t =>",
+              "  pm.expect(t.roll_id?.roll_number ?? null)",
+              "    .to.eql(pm.collectionVariables.get('roll_number'))));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/stock/movements?roll_number={{roll_number}}&page=1&pageSize=50",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ],
+          "query": [
+            {
+              "key": "roll_number",
+              "value": "{{roll_number}}"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "50"
+            }
+          ]
+        },
+        "description": "History for the roll just scanned, addressed by its printed number \u2014 no id lookup needed. Case-insensitive.\n\nAn unknown roll_number returns an empty page, never the whole ledger."
+      }
+    }
+  ]
+}

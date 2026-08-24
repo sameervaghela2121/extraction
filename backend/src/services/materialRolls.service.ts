@@ -7,20 +7,21 @@ import { ApiError } from "../utils/ApiError";
 import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/crud";
 import { refreshSummaries, refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
+import { nextRollCode } from "./rollCode.service";
 
 type RollInput = {
   roll_number: string;
   material_id: string;
-  vendor_id?: string;
+  vendor_id: string;
   batch_no?: string;
-  initial_weight?: number;
+  weight: number;
   remaining_weight?: number;
   quantity?: number;
   unit?: string;
-  gsm?: number;
-  width_mm?: number;
-  location?: string;
-  received_date: string;
+  gsm: number;
+  width: number;
+  location: string;
+  date: string;
   status?: RollStatus;
   tag_photo_path?: string;
   stitched_barcode_photo_path?: string;
@@ -40,24 +41,34 @@ const PHOTO_FIELDS = [
 // movements, which write a ledger row for the change. See updateRollSchema.
 const PATCHABLE = [
   "batch_no",
-  "initial_weight",
+  "weight",
   "quantity",
   "unit",
   "gsm",
-  "width_mm",
+  "width",
   "location",
   ...PHOTO_FIELDS,
 ] as const;
 const ROLL_TAKEN = "A roll with this number already exists";
 
-/** What .populate(path, "name") leaves behind in place of the ObjectId. */
-type NamedRef = { _id: Types.ObjectId; name: string };
+/** The roll's photo slots as a plain list, for the receipt movement. Undefined rather
+ *  than [] when none were taken — the ledger stores the field only when it has one. */
+function registrationPhotos(roll: Pick<IMaterialRoll, (typeof PHOTO_FIELDS)[number]>) {
+  const paths = PHOTO_FIELDS.map((field) => roll[field]).filter(
+    (p): p is string => typeof p === "string" && p.length > 0,
+  );
+  return paths.length ? paths : undefined;
+}
 
-// Only the two ref paths, and only their name — a roll list shouldn't drag whole
-// vendor and material documents across the wire.
+/** What .populate leaves behind in place of the ObjectId. vendor_code only on the vendor,
+ *  where it is the Supplier Code Number the form shows. */
+type NamedRef = { _id: Types.ObjectId; name: string; vendor_code?: string };
+
+// Only the two ref paths, and only the fields the roll screens render — a roll list
+// shouldn't drag whole vendor and material documents across the wire.
 const REF_POPULATE = [
   { path: "material_id", select: "name" },
-  { path: "vendor_id", select: "name" },
+  { path: "vendor_id", select: "name vendor_code" },
 ];
 
 function refResponse(ref?: Types.ObjectId | NamedRef) {
@@ -65,7 +76,10 @@ function refResponse(ref?: Types.ObjectId | NamedRef) {
   // `id`, not `_id` — every other response in this codebase exposes it that way.
   // Unpopulated (a ref whose target was deleted) still returns the id, never null.
   if (ref instanceof Types.ObjectId) return { id: ref.toString(), name: null };
-  return { id: ref._id.toString(), name: ref.name };
+  // vendor_code is present only on the vendor ref; the material ref omits the key.
+  return ref.vendor_code === undefined
+    ? { id: ref._id.toString(), name: ref.name }
+    : { id: ref._id.toString(), name: ref.name, vendor_code: ref.vendor_code };
 }
 
 type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id"> & {
@@ -82,17 +96,18 @@ async function toResponse(r: PopulatedRoll) {
   return {
     id: r._id.toString(),
     roll_number: r.roll_number,
+    royal_touche_code: r.royal_touche_code,
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
     batch_no: r.batch_no,
-    initial_weight: r.initial_weight,
+    weight: r.weight,
     remaining_weight: r.remaining_weight,
     quantity: r.quantity,
     unit: r.unit,
     gsm: r.gsm,
-    width_mm: r.width_mm,
+    width: r.width,
     location: r.location,
-    received_date: r.received_date,
+    date: r.date,
     status: r.status,
     // Paths are what the client submits back; URLs are what it renders. Both are sent so
     // an edit screen can round-trip the photos without re-uploading them.
@@ -136,21 +151,35 @@ async function findRoll(idOrNumber: string) {
   return byNumber;
 }
 
+/** The looked-up master, so a caller that needs its name does not fetch it twice. */
+type UsableRef = NamedRef | undefined;
+
+async function loadUsableMaterial(materialId?: string): Promise<UsableRef> {
+  if (!materialId) return undefined;
+  const material = await RawMaterial.findById(materialId).select("status name").lean();
+  if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
+  if (material.status !== "active") {
+    throw ApiError.badRequest(`${material.name} is inactive — reactivate it before booking stock against it`);
+  }
+  return material;
+}
+
+// vendor_code as well as the name: the roll's Royal Touche code is minted from it.
+async function loadUsableVendor(
+  vendorId?: string,
+): Promise<(NamedRef & { vendor_code: string }) | undefined> {
+  if (!vendorId) return undefined;
+  const vendor = await Vendor.findById(vendorId).select("status name vendor_code").lean();
+  if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
+  if (vendor.status !== "active") {
+    throw ApiError.badRequest(`${vendor.name} is inactive — pick a different vendor`);
+  }
+  return vendor;
+}
+
 async function assertRefsUsable(materialId?: string, vendorId?: string) {
-  if (materialId) {
-    const material = await RawMaterial.findById(materialId).select("status name").lean();
-    if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
-    if (material.status !== "active") {
-      throw ApiError.badRequest(`${material.name} is inactive — reactivate it before booking stock against it`);
-    }
-  }
-  if (vendorId) {
-    const vendor = await Vendor.findById(vendorId).select("status name").lean();
-    if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
-    if (vendor.status !== "active") {
-      throw ApiError.badRequest(`${vendor.name} is inactive — pick a different vendor`);
-    }
-  }
+  // Both checks at once: they are independent, and each is a round trip to Atlas.
+  await Promise.all([loadUsableMaterial(materialId), loadUsableVendor(vendorId)]);
 }
 
 export const materialRollsService = {
@@ -174,12 +203,12 @@ export const materialRollsService = {
     if (query.location) filter.location = query.location;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ roll_number: rx }, { batch_no: rx }];
+      filter.$or = [{ roll_number: rx }, { royal_touche_code: rx }, { batch_no: rx }];
     }
 
     const [items, total] = await Promise.all([
       MaterialRoll.find(filter)
-        .sort({ received_date: -1 })
+        .sort({ date: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate(REF_POPULATE)
@@ -200,25 +229,32 @@ export const materialRollsService = {
    *  and the summary then agree without anyone having to remember a second call. */
   async create(input: RollInput, actingUserId: string) {
     const rollNumber = input.roll_number.toUpperCase();
-    await ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN);
-    await assertRefsUsable(input.material_id, input.vendor_id);
+    // Three independent reads, so one round trip instead of three. Registration happens
+    // on a phone over mobile data, where every avoidable trip to Atlas is felt.
+    // Promise.all rejects on the first failure, which is the behaviour the sequential
+    // version had: the caller sees whichever check failed.
+    const [, material, vendor] = await Promise.all([
+      ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN),
+      loadUsableMaterial(input.material_id),
+      loadUsableVendor(input.vendor_id),
+    ]);
 
-    // A newly received roll is full unless the caller says otherwise. A roll registered
-    // before it was weighed simply has no weight yet.
-    const remaining = input.remaining_weight ?? input.initial_weight;
-    if (
-      remaining !== undefined &&
-      input.initial_weight !== undefined &&
-      remaining > input.initial_weight
-    ) {
+    // A newly received roll is full unless the caller says otherwise.
+    const remaining = input.remaining_weight ?? input.weight;
+    if (remaining > input.weight) {
       throw ApiError.badRequest(
-        `A roll cannot hold more than the ${input.initial_weight} ${input.unit ?? "kg"} it arrived with`,
+        `A roll cannot hold more than the ${input.weight} ${input.unit ?? "kg"} it arrived with`,
       );
     }
+
+    // After the checks: the sequence number is consumed even on a failed save, so it is
+    // not spent until the roll is actually going to be written.
+    const royalToucheCode = await nextRollCode(vendor!.vendor_code);
 
     const roll = await MaterialRoll.create({
       ...input,
       roll_number: rollNumber,
+      royal_touche_code: royalToucheCode,
       remaining_weight: remaining,
     });
     // A new roll changes what's on hand, so the material's cached totals must follow it.
@@ -228,7 +264,7 @@ export const materialRollsService = {
       transaction_type: "IN",
       // Dated when the roll arrived, not when it was keyed in — a roll entered a week
       // late must still land in the right place in the history.
-      transaction_date: roll.received_date,
+      transaction_date: roll.date,
       material_id: roll.material_id,
       roll_id: roll._id,
       vendor_id: roll.vendor_id,
@@ -236,11 +272,20 @@ export const materialRollsService = {
       material_weight_after: summary.total_weight,
       roll_weight_after: roll.remaining_weight,
       remarks: `Roll ${roll.roll_number} received`,
+      // The registration photos, carried onto the receipt row so the history shows the
+      // roll as it arrived — the same way an OUT and a RETURN carry theirs. Without this
+      // the IN is the one movement in the ledger with nothing to look at.
+      photo_paths: registrationPhotos(roll),
       created_by: new Types.ObjectId(actingUserId),
     });
 
-    await roll.populate(REF_POPULATE);
-    return toResponse(roll as unknown as PopulatedRoll);
+    // No populate: the two masters were already read by the checks above, so asking
+    // Mongo for them again would be two more round trips for documents we hold.
+    return toResponse({
+      ...(roll.toObject() as unknown as PopulatedRoll),
+      material_id: material ?? roll.material_id,
+      vendor_id: vendor ?? roll.vendor_id,
+    });
   },
 
   async update(id: string, updates: Partial<RollInput>) {
@@ -271,15 +316,15 @@ export const materialRollsService = {
     if (updates.vendor_id !== undefined) roll.vendor_id = new Types.ObjectId(updates.vendor_id);
     applyUpdates(roll, updates, PATCHABLE);
     // Not in PATCHABLE: these arrive as strings and need converting first.
-    if (updates.received_date !== undefined) roll.received_date = new Date(updates.received_date);
+    if (updates.date !== undefined) roll.date = new Date(updates.date);
 
     if (
       roll.remaining_weight !== undefined &&
-      roll.initial_weight !== undefined &&
-      roll.remaining_weight > roll.initial_weight
+      roll.weight !== undefined &&
+      roll.remaining_weight > roll.weight
     ) {
       throw ApiError.badRequest(
-        `A roll cannot hold more than the ${roll.initial_weight} ${roll.unit} it arrived with`,
+        `A roll cannot hold more than the ${roll.weight} ${roll.unit} it arrived with`,
       );
     }
     await roll.save();
@@ -292,7 +337,7 @@ export const materialRollsService = {
   // existed. Once any of it has been issued, the roll is history and must stay.
   async remove(id: string) {
     const roll = await findRoll(id);
-    if (roll.status !== "IN_STOCK" || roll.remaining_weight !== roll.initial_weight) {
+    if (roll.status !== "IN_STOCK" || roll.remaining_weight !== roll.weight) {
       throw ApiError.conflict("This roll has already been used, so it can no longer be deleted");
     }
     await roll.deleteOne();

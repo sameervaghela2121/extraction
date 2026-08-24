@@ -26,12 +26,6 @@ export const env = {
 
   gcsBucket: process.env.GCS_BUCKET ?? "sameerv-docflow-invoices",
 
-  // OCR: Google Vision reads curved/dirty labels far better than local tesseract, but
-  // costs per call. Unset key = tesseract, which needs no credentials and no network.
-  googleVisionApiKey: process.env.GOOGLE_VISION_API_KEY ?? "",
-  // "auto" tries easyocr (the Python service), then Vision if a key is set, then local
-  // tesseract. Name one explicitly to pin a single engine, e.g. while testing.
-  ocrEngine: process.env.OCR_ENGINE ?? "auto",
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 20 * 1024 * 1024),
 
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",

@@ -42,15 +42,15 @@ let cachedToken: string | null = null;
 const OCR_TIMEOUT_MS = 120_000;
 
 /** One recognised word with its box, as api/roll_label_ocr.py returns it. */
-type RollLabelWord = { text: string; x: number; y: number; w: number; h: number; conf: number };
 
 /** Fields straight off api/roll_label_gemini.py — already parsed, no geometry involved. */
 export type AiLabelRead = {
   roll_number: string | null;
   gsm: number | null;
-  width_mm: number | null;
-  weight_kg: number | null;
-  batch_no: string | null;
+  width: number | null;
+  weight: number | null;
+  /** ISO YYYY-MM-DD, or null when the label shows no date or an ambiguous one. */
+  date: string | null;
   confidence: number;
   raw_text: string;
   elapsed_ms: number;
@@ -149,50 +149,17 @@ export const invoiceGeneratorClient = {
   },
 
   /**
-   * Read a roll label photo with the service's local OCR (api/roll_label_ocr.py).
-   * Returns the raw text lines and mean confidence — the field parsing stays on this
-   * side, in ocr.service, so all three engines share one parser.
-   */
-  async readRollLabel(
-    image: Buffer,
-    filename = "label.jpg",
-  ): Promise<{ lines: string[]; confidence: number; words?: RollLabelWord[] }> {
-    return withAuth(async (token) => {
-      const form = new FormData();
-      form.append("photo", new Blob([new Uint8Array(image)], { type: "image/jpeg" }), filename);
-      try {
-        const { data } = await http.post<{
-          lines: string[];
-          confidence: number;
-          words?: RollLabelWord[];
-        }>(
-          "/ocr/roll-label",
-          form,
-          { headers: { Authorization: `Bearer ${token}` }, timeout: OCR_TIMEOUT_MS },
-        );
-        return data;
-      } catch (err) {
-        if (err instanceof AxiosError && err.response?.status === 401) throw err; // handled by withAuth
-        logger.error("[invoiceGenerator] roll-label OCR failed", (err as AxiosError).message);
-        throw new ApiError(502, "The label could not be read by the extraction service");
-      }
-    });
-  },
-
-  /**
    * Read a roll label with the service's Gemini route (api/roll_label_gemini.py).
    *
-   * Unlike readRollLabel above this returns the *fields*, not text: the model is asked
-   * for them directly, so there is no geometry for this side to parse. Its own method
-   * against its own route — the two engines are not interchangeable, and swapping
-   * between them must be an explicit call, never a silent fallback.
+   * Returns the *fields*, not text: the model is asked for them directly, so there is no
+   * geometry for this side to parse.
    */
   async readRollLabelAi(image: Buffer, filename = "label.jpg"): Promise<AiLabelRead> {
     return withAuth(async (token) => {
       const form = new FormData();
       form.append("photo", new Blob([new Uint8Array(image)], { type: "image/jpeg" }), filename);
       try {
-        const { data } = await http.post<AiLabelRead>("/ocr/roll-label-ai", form, {
+        const { data } = await http.post<AiLabelRead>("/ocr/roll-label", form, {
           headers: { Authorization: `Bearer ${token}` },
           timeout: OCR_TIMEOUT_MS,
         });
