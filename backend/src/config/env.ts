@@ -24,7 +24,10 @@ export const env = {
   invoiceGeneratorAppUser: process.env.INVOICE_GENERATOR_APP_USER ?? "",
   invoiceGeneratorAppPassword: process.env.INVOICE_GENERATOR_APP_PASSWORD ?? "",
 
-  gcsBucket: process.env.GCS_BUCKET ?? "sameerv-docflow-invoices",
+  // Roll photos live in their own bucket, separate from the invoice scans. Pinned in
+  // deploy.yml too: --set-env-vars replaces the whole env block, so a value only set on
+  // the service would be wiped by the next deploy.
+  gcsBucket: process.env.GCS_BUCKET ?? "sameerv-royaltouch-rolls",
 
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 20 * 1024 * 1024),
 
