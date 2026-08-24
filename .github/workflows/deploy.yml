@@ -100,7 +100,7 @@ jobs:
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
             --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost \
-            --set-env-vars=NODE_ENV=production,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
+            --set-env-vars=NODE_ENV=production,GCS_BUCKET=sameerv-royaltouch-rolls,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
             --set-secrets=MONGODB_URI=backend-mongodb-uri:latest,JWT_ACCESS_SECRET=backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=backend-jwt-refresh-secret:latest,SMTP_USER=backend-smtp-user:latest,SMTP_PASSWORD=backend-smtp-password:latest,INVOICE_GENERATOR_APP_USER=backend-invoice-generator-app-user:latest,INVOICE_GENERATOR_APP_PASSWORD=backend-invoice-generator-app-password:latest
 
   deploy-frontend:
