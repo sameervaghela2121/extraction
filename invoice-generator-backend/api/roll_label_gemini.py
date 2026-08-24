@@ -1,11 +1,9 @@
 """
-Roll-label reading via Gemini — a second engine, on its own route.
+Roll-label reading via Gemini — the only engine. EasyOCR (roll_label_ocr.py) was removed
+once this proved faster and more complete on real labels: ~4s and 5/5 fields against 8s
+and 4/5.
 
-Why a separate module and a separate route rather than a change to roll_label_ocr.py:
-the two approaches fail in completely different ways, and the EasyOCR path is the one in
-production use. It must not move while this is being proven.
-
-The real difference is where the *parsing* happens. EasyOCR returns text boxes and the
+The real difference is where the *parsing* happened. EasyOCR returned text boxes and the
 Node service works out which value sits under which caption by pixel geometry — fitted
 to the label layouts we happened to have, and wrong on the ones we didn't (width read as
 the paper width, or as the neighbouring order number). Gemini is asked for the fields
@@ -19,6 +17,7 @@ import json
 import logging
 import os
 import time
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -42,9 +41,9 @@ Return ONLY this JSON object:
 {
   "roll_number": string or null,
   "gsm": number or null,
-  "width_mm": number or null,
-  "weight_kg": number or null,
-  "batch_no": string or null,
+  "width": number or null,
+  "weight": number or null,
+  "date": string or null,
   "confidence": number between 0 and 1,
   "raw_text": string
 }
@@ -56,13 +55,16 @@ Rules:
 - The label is wrapped around a cylinder, so lines curve and the edges are distorted.
 - Captions and their values sit in columns: a value belongs to the caption ABOVE it,
   not to the caption beside it. Getting this wrong swaps the width with the order number.
-- width_mm: labels print "Width Paper/Print" as "1270/1250", meaning paper width then
+- width: in millimetres. Labels print "Width Paper/Print" as "1270/1250", meaning paper width then
   print width. Return the SECOND number (the print width, 1250 here). Digits only.
 - gsm: grams per square metre, usually 2-3 digits.
-- weight_kg: the roll's weight in kilograms. Prefer net weight; if only a gross weight
+- weight: the roll's weight in kilograms. Prefer net weight; if only a gross weight
   is printed, return that. Never return null just because the label says "gross".
 - roll_number: the value under "Roll-no.", digits only, dropping any leading letters.
-- batch_no: the value under "Decor-no.", "Batch-no." or "Lot-no.", exactly as printed.
+- date: the production or packing date, as "YYYY-MM-DD". Labels print it many ways —
+  "13.08.2026", "13/08/26", "2026-08-13". European order (day first) unless the year is
+  clearly first. If the order is genuinely ambiguous, such as "05/06/26", return null
+  rather than guessing: a roll dated a month wrong is worse than one left blank.
 - confidence: your own honest read quality. Low if the photo is blurred, angled, or the
   print is damaged or dirty.
 - raw_text: every line of text you can see on the label, newline separated.
@@ -74,6 +76,20 @@ def _as_text(value) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _as_iso_date(value) -> str | None:
+    """Accept only a real YYYY-MM-DD. The model is asked for one, but a half-parsed date
+    reaching the form as text the operator does not re-read is exactly the silent wrong
+    value this reader exists to avoid."""
+    text = _as_text(value)
+    if text is None:
+        return None
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError:
+        log.info("[ocr-ai] discarding unparseable date %r", text)
+        return None
 
 
 def _as_number(value) -> float | None:
@@ -177,9 +193,9 @@ def read_label_ai(image_bytes: bytes) -> dict:
     return {
         "roll_number": _as_text(parsed.get("roll_number")),
         "gsm": _as_number(parsed.get("gsm")),
-        "width_mm": _as_number(parsed.get("width_mm")),
-        "weight_kg": _as_number(parsed.get("weight_kg")),
-        "batch_no": _as_text(parsed.get("batch_no")),
+        "width": _as_number(parsed.get("width")),
+        "weight": _as_number(parsed.get("weight")),
+        "date": _as_iso_date(parsed.get("date")),
         "confidence": _as_number(parsed.get("confidence")) or 0.0,
         "raw_text": _as_text(parsed.get("raw_text")) or "",
         "elapsed_ms": round(elapsed * 1000),
@@ -192,8 +208,8 @@ def build_router(require_token) -> APIRouter:
 
     # `def`, not `async def`: the SDK call blocks, and on the event loop it would stall
     # the whole service for its duration. FastAPI runs sync handlers in a threadpool.
-    @router.post("/roll-label-ai", dependencies=[Depends(require_token)])
-    def roll_label_ai(photo: UploadFile = File(...)) -> dict:
+    @router.post("/roll-label", dependencies=[Depends(require_token)])
+    def roll_label(photo: UploadFile = File(...)) -> dict:
         content = photo.file.read()
         if not content:
             raise HTTPException(status_code=400, detail="empty upload")

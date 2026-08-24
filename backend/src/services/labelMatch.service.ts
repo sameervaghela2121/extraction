@@ -81,7 +81,7 @@ function fuzzyByName<T extends { name: string }>(records: T[], tokens: Set<strin
 
 export async function matchMasters(
   lines: string[],
-  fields: { gsm: number | null; width_mm: number | null },
+  fields: { gsm: number | null; width: number | null },
 ): Promise<{ material: MasterMatch; vendor: MasterMatch }> {
   const text = normalise(lines.join(" "));
   const tokens = new Set(lines.flatMap((l) => l.split(/\s+/)).map(normalise).filter(Boolean));
@@ -126,8 +126,8 @@ export async function matchMasters(
     materialHit = fuzzyByName(materials, tokens);
     matchedOn = "name_fuzzy";
   }
-  if (!materialHit && fields.gsm !== null && fields.width_mm !== null) {
-    const bySpec = materials.filter((m) => m.gsm === fields.gsm && m.width_mm === fields.width_mm);
+  if (!materialHit && fields.gsm !== null && fields.width !== null) {
+    const bySpec = materials.filter((m) => m.gsm === fields.gsm && m.width_mm === fields.width);
     if (bySpec.length === 1) {
       materialHit = bySpec[0];
       matchedOn = "gsm_and_width";

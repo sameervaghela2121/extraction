@@ -97,6 +97,8 @@ export const recordMovementSchema = z
 export const listMovementsQuerySchema = z.object({
   material_id: objectId.optional(),
   roll_id: objectId.optional(),
+  // Alternative to roll_id for a client holding the number printed on the roll.
+  roll_number: z.string().trim().min(1).optional(),
   transaction_type: z.enum(TRANSACTION_TYPES).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),

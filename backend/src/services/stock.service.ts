@@ -155,7 +155,9 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     }
     const from = roll.location;
     roll.status = "ISSUED";
-    roll.location = input.location;
+    // Only when the movement names one: location is required on a roll, so an OUT that
+    // does not say where it went must leave the roll where it was rather than blank it.
+    if (input.location !== undefined) roll.location = input.location;
     await roll.save();
     // The whole roll leaves the store, so that is what the row records and what drops out
     // of on-hand until it returns.
@@ -212,9 +214,9 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
   if (input.transaction_type === "IN") {
     const added = input.weight!;
     const current = roll.remaining_weight ?? 0;
-    if (roll.initial_weight !== undefined && current + added > roll.initial_weight) {
+    if (roll.weight !== undefined && current + added > roll.weight) {
       throw ApiError.badRequest(
-        `This roll only ever held ${roll.initial_weight} ${roll.unit} — cannot add more than that`,
+        `This roll only ever held ${roll.weight} ${roll.unit} — cannot add more than that`,
       );
     }
     roll.remaining_weight = current + added;
@@ -225,9 +227,9 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
 
   // ADJUSTMENT: the caller states the corrected weight, we derive the delta.
   const target = input.new_weight!;
-  if (roll.initial_weight !== undefined && target > roll.initial_weight) {
+  if (roll.weight !== undefined && target > roll.weight) {
     throw ApiError.badRequest(
-      `This roll only ever held ${roll.initial_weight} ${roll.unit} — the counted amount cannot be higher`,
+      `This roll only ever held ${roll.weight} ${roll.unit} — the counted amount cannot be higher`,
     );
   }
   const delta = target - (roll.remaining_weight ?? 0);
@@ -297,6 +299,7 @@ export const stockService = {
   async listMovements(query: {
     material_id?: string;
     roll_id?: string;
+    roll_number?: string;
     transaction_type?: TransactionType;
     page?: number;
     pageSize?: number;
@@ -306,8 +309,20 @@ export const stockService = {
 
     const filter: FilterQuery<IStockTransaction> = {};
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
-    if (query.roll_id) filter.roll_id = new Types.ObjectId(query.roll_id);
+    if (query.roll_id) filter.roll_id = query.roll_id;
     if (query.transaction_type) filter.transaction_type = query.transaction_type;
+
+    // A phone that scanned a barcode has the printed number, never an ObjectId. Resolved
+    // to the id here rather than left to the client as a second round trip.
+    if (query.roll_number) {
+      const roll = await MaterialRoll.findOne({ roll_number: query.roll_number.toUpperCase() })
+        .select("_id")
+        .lean();
+      // An unknown number means no history, not every movement in the store — without
+      // this the filter would silently widen to unfiltered.
+      if (!roll) return paginated([], 0, page, pageSize);
+      filter.roll_id = roll._id;
+    }
 
     const [items, total] = await Promise.all([
       StockTransaction.find(filter)

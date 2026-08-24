@@ -10,7 +10,3 @@ Pillow
 pymongo
 pypdf
 google-cloud-storage
-# Roll-label OCR (api/roll_label_ocr.py). torch/torchvision are NOT listed here on
-# purpose — the Dockerfile installs the CPU-only wheels first, because the PyPI default
-# is the CUDA build and that is ~2.5GB of drivers this service will never use.
-easyocr

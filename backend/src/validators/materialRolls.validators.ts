@@ -8,21 +8,25 @@ const objectPath = z
   .string()
   .regex(/^rolls\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{1,8}$/i, "Not a valid upload path");
 
+// The registration form fills every one of these, so all of them are required here. Only
+// fields the form does not ask for stay optional.
 export const createRollSchema = z.object({
   roll_number: z.string().trim().min(1, "Roll number is required"),
-  material_id: objectId,
-  vendor_id: objectId.optional(),
+  material_id: objectId.describe("Material"),
+  vendor_id: objectId.describe("Vendor"),
+  weight: z.number({ required_error: "Weight is required" }).positive("Weight must be greater than 0"),
+  gsm: z.number({ required_error: "GSM is required" }).positive("GSM must be greater than 0"),
+  width: z.number({ required_error: "Width is required" }).positive("Width must be greater than 0"),
+  location: z.string().trim().min(1, "Location is required"),
+  date: z
+    .string({ required_error: "Date is required" })
+    .datetime({ offset: true })
+    .or(z.string().date()),
+  // Not on the registration form: set by later flows, or read off the label when present.
   batch_no: z.string().trim().optional(),
-  // Both optional: a roll may be registered from its label before it is weighed, and a
-  // roll sold by length may never carry a weight at all.
-  initial_weight: z.number().positive("Weight must be greater than 0").optional(),
   remaining_weight: z.number().nonnegative().optional(),
   quantity: z.number().positive("Quantity must be greater than 0").optional(),
   unit: z.string().trim().min(1).optional(),
-  gsm: z.number().nonnegative().optional(),
-  width_mm: z.number().nonnegative().optional(),
-  location: z.string().trim().optional(),
-  received_date: z.string().datetime({ offset: true }).or(z.string().date()),
   status: z.enum(ROLL_STATUSES).optional(),
   // GCS object paths returned by POST /media/upload — not URLs, and not raw files.
   tag_photo_path: objectPath.optional(),

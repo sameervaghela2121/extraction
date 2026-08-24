@@ -24,7 +24,6 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend || 'true' }}
       backend: ${{ steps.filter.outputs.backend || 'true' }}
       ai_backend: ${{ steps.filter.outputs.ai_backend || 'true' }}
-      royal_touch: ${{ steps.filter.outputs.royal_touch || 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -38,8 +37,6 @@ jobs:
               - 'backend/**'
             ai_backend:
               - 'invoice-generator-backend/**'
-            royal_touch:
-              - 'royal-touch-backend/**'
 
   deploy-ai-backend:
     needs: changes
@@ -58,21 +55,16 @@ jobs:
           docker build -t "$IMG" ./invoice-generator-backend
           docker push "$IMG"
       - name: Deploy
-        # EasyOCR (api/roll_label_ocr.py) loads torch plus a ~94MB model, so this service
-        # needs far more than the other three: 1Gi OOMs, and 1 CPU turns an 11s read into
-        # 52s. cpu-boost covers the model load, which now happens at startup.
-        #
-        # min-instances=1 because that load costs ~30s: scaling to zero means the next
-        # operator to scan a label pays it, which is the difference between an 11s read
-        # and a 50s one. With cpu-throttling the idle instance bills at the idle CPU rate.
+        # EasyOCR/torch are gone — roll-label reads are a Gemini API call now, so this
+        # service is I/O-bound like the other three: 1 CPU, 1Gi, scales to zero.
         run: |
           gcloud run deploy docflow-ai-backend \
             --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
-            --memory=4Gi --cpu=4 --timeout=600 \
-            --min-instances=1 --max-instances=1 --cpu-throttling --cpu-boost \
+            --memory=1Gi --cpu=1 --timeout=600 \
+            --min-instances=0 --max-instances=1 --cpu-throttling --cpu-boost \
             --set-env-vars=GCS_BUCKET=sameerv-docflow-invoices \
             --set-secrets=GEMINI_API_KEY=ai-backend-gemini-api-key:latest,MONGODB_URI=ai-backend-mongodb-uri:latest,APP_USER=ai-backend-app-user:latest,APP_PASSWORD=ai-backend-app-password:latest
 
@@ -110,37 +102,6 @@ jobs:
             --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost \
             --set-env-vars=NODE_ENV=production,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
             --set-secrets=MONGODB_URI=backend-mongodb-uri:latest,JWT_ACCESS_SECRET=backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=backend-jwt-refresh-secret:latest,SMTP_USER=backend-smtp-user:latest,SMTP_PASSWORD=backend-smtp-password:latest,INVOICE_GENERATOR_APP_USER=backend-invoice-generator-app-user:latest,INVOICE_GENERATOR_APP_PASSWORD=backend-invoice-generator-app-password:latest
-
-  # Royal Touch (Roll Receiving) API — no URL-lookup step like deploy-backend has:
-  # this service talks to nothing but MongoDB, and its client is a native Android app,
-  # so there is no sibling Cloud Run URL to wire in at deploy time.
-  deploy-royal-touch:
-    needs: changes
-    if: needs.changes.outputs.royal_touch == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
-      - name: Build and push
-        run: |
-          IMG="${{ env.REPO }}/royaltouch-backend:${{ github.sha }}"
-          docker build -t "$IMG" ./royal-touch-backend
-          docker push "$IMG"
-      - name: Deploy
-        run: |
-          gcloud run deploy docflow-royaltouch-backend \
-            --image="${{ env.REPO }}/royaltouch-backend:${{ github.sha }}" \
-            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
-            --service-account=royaltouch-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
-            --allow-unauthenticated \
-            --memory=1Gi --cpu=1 \
-            --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost \
-            --set-env-vars=NODE_ENV=production,MONGODB_DB_NAME=RoyalTouch \
-            --set-secrets=MONGODB_URI=royaltouch-backend-mongodb-uri:latest,JWT_ACCESS_SECRET=royaltouch-backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=royaltouch-backend-jwt-refresh-secret:latest
 
   deploy-frontend:
     needs: changes
@@ -191,7 +152,7 @@ jobs:
   # committed to `development` directly, the push is rejected and this job goes red
   # rather than rewriting or clobbering their work.
   sync-development:
-    needs: [deploy-ai-backend, deploy-backend, deploy-royal-touch, deploy-frontend]
+    needs: [deploy-ai-backend, deploy-backend, deploy-frontend]
     if: ${{ github.event_name == 'push' && !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     permissions:
