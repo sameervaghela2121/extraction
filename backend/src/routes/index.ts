@@ -11,7 +11,9 @@ import generalVouchersRoutes from "./generalVouchers.routes";
 import vendorsRoutes from "./vendors.routes";
 import rawMaterialsRoutes from "./rawMaterials.routes";
 import materialRollsRoutes from "./materialRolls.routes";
+import locationsRoutes from "./locations.routes";
 import stockRoutes from "./stock.routes";
+import syncRoutes from "./sync.routes";
 import ocrRoutes from "./ocr.routes";
 import mediaRoutes from "./media.routes";
 
@@ -36,7 +38,9 @@ router.use("/general-vouchers", generalVouchersRoutes);
 router.use("/vendors", vendorsRoutes);
 router.use("/raw-materials", rawMaterialsRoutes);
 router.use("/material-rolls", materialRollsRoutes);
+router.use("/locations", locationsRoutes);
 router.use("/stock", stockRoutes);
+router.use("/sync", syncRoutes);
 router.use("/ocr", ocrRoutes);
 router.use("/media", mediaRoutes);
 

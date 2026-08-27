@@ -1,0 +1,846 @@
+{
+  "info": {
+    "name": "Royal Touch — Offline Sync (Mobile)",
+    "description": "Every endpoint the mobile app calls for offline sync, in the order it calls them.\n\n**Point base_url at a THROWAWAY database** — these requests register rolls and move stock. Start the API with `MONGODB_DB_NAME=Data_synctest npm run dev`.\n\nSet `base_url`, run '1. Login' — the token is stored and reused by every request.\n\n── There are no dedicated sync endpoints ──\nOffline writes replay against the ordinary routes. Only two fields were added:\n  • `client_id` — a UUID the DEVICE mints per queued write, making it idempotent\n  • `updated_after` — an ISO date, fetching only what changed\n\n── When the app calls what ──\n  on login / foreground   2, 3, 4     cache materials, vendors (+ paper codes), locations\n  captured offline        6, 7, 8     queued in the outbox\n  photos                  5, then 9   upload FIRST, records carry the paths\n  on reconnect            11, 12      delta pull, per-collection checkpoints\n  the flush               13          or 6/7/8 one at a time\n  screens                 10, 14      roll history, on-hand totals\n\n── Four rules the flush must follow ──\n  1. Drain the outbox strictly FIFO, ONE request at a time. Never in parallel: remaining_weight is derived from the order movements are applied in.\n  2. Halt on the first 400 / 403 / 409 and show the server's `error` text verbatim. Do not skip a failed item and continue — later items may depend on it.\n  3. Retry 5xx / 429 / timeouts forever with backoff, reusing the SAME client_id. A fresh UUID on retry creates a second roll. This is the single most important rule here.\n  4. A 401 pauses and re-logins. It NEVER clears the queue.\n\n── What the client must not assume ──\n  • royal_touche_code is YOURS to send, off the vendor's paper list. Not unique.\n  • remaining_weight and status are server-owned. Never PATCH them.\n  • Usage is derived from the scale reading, never sent.\n  • Do not ask for a return location — it comes from the roll's own OUT row.\n  • Do not post an IN after registering a roll. Registration writes it.\n  • `description` is server-rendered. Show it; do not rebuild it.\n\nCompanion docs: offline-sync-mobile.md (SQLite schema, outbox, flush algorithm) and backend-flow-and-logic.md (roll lifecycle, weight arithmetic, errors).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000/api"
+    },
+    {
+      "key": "email",
+      "value": "admin@docflow.app"
+    },
+    {
+      "key": "password",
+      "value": "admin@123"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "role",
+      "value": ""
+    },
+    {
+      "key": "material_id",
+      "value": ""
+    },
+    {
+      "key": "vendor_id",
+      "value": ""
+    },
+    {
+      "key": "location",
+      "value": ""
+    },
+    {
+      "key": "royal_touche_code",
+      "value": ""
+    },
+    {
+      "key": "supplier_code_number",
+      "value": ""
+    },
+    {
+      "key": "roll_id",
+      "value": ""
+    },
+    {
+      "key": "roll_number",
+      "value": ""
+    },
+    {
+      "key": "out_id",
+      "value": ""
+    },
+    {
+      "key": "ret_id",
+      "value": ""
+    },
+    {
+      "key": "photo_path",
+      "value": ""
+    },
+    {
+      "key": "cid_roll",
+      "value": ""
+    },
+    {
+      "key": "cid_out",
+      "value": ""
+    },
+    {
+      "key": "cid_ret",
+      "value": ""
+    },
+    {
+      "key": "b_roll",
+      "value": ""
+    },
+    {
+      "key": "b_out",
+      "value": ""
+    },
+    {
+      "key": "b_ret",
+      "value": ""
+    },
+    {
+      "key": "b_roll_number",
+      "value": ""
+    },
+    {
+      "key": "rolls_checkpoint",
+      "value": ""
+    },
+    {
+      "key": "movements_checkpoint",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Tokens do not expire, so a phone offline for a week still flushes without re-authenticating.\n\nA 401 during a flush means the server rotated its secret. Pause the flush, re-login, resume the SAME queue with the SAME client_ids. Never clear the outbox on a 401 — those rows are the only copy of work done in the warehouse. Logout must refuse to run (or warn loudly) while anything is pending.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('token', b.accessToken);",
+              "pm.collectionVariables.set('refresh_token', b.refreshToken);",
+              "pm.collectionVariables.set('role', b.user.role);",
+              "// Writing rolls and movements needs admin or store_manager. Any other role gets",
+              "// 403 on EVERY queued item — a queue that can never drain. Check it here and put",
+              "// the app in read-only mode, rather than discovering it at the end of a shift.",
+              "pm.test('role can write', () =>",
+              "  pm.expect(['admin','store_manager']).to.include(b.user.role));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Cache materials",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/raw-materials",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "raw-materials"
+          ]
+        },
+        "description": "Full refresh on login and on foreground. No delta, no client_id, never queued — the list is small enough that refetching it beats tracking changes.\n\nStore the whole list. If the request fails, KEEP the old copy: rolls reference the material by id, and ids never change, so a stale name is harmless."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const rows = Array.isArray(b) ? b : b.items;",
+              "pm.collectionVariables.set('material_id', rows[0].id);",
+              "pm.test('has at least one material', () => pm.expect(rows.length).to.be.above(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Cache vendors (carries the paper codes)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/vendors",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "vendors"
+          ]
+        },
+        "description": "Each vendor carries its base papers, straight from the Royal Touche paper-codes sheet:\n\n  papers: [{ royal_touche_code, delta_code, is_common,\n             supplier_code_number, found_in }]\n\nThis is what makes registration work offline: pick the supplier, pick one of its papers, and royal_touche_code fills itself in — no round trip, no 'Pending sync'.\n\n68 vendors, ~1,080 papers in total. Cache the whole thing alongside materials."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const rows = Array.isArray(b) ? b : b.items;",
+              "const withPapers = rows.find(v => (v.papers || []).length) || rows[0];",
+              "pm.collectionVariables.set('vendor_id', withPapers.id);",
+              "// The paper the registration below will claim to be made of. In the app this is",
+              "// the operator picking from this vendor's paper list.",
+              "const paper = (withPapers.papers || [])[0];",
+              "if (paper) {",
+              "  pm.collectionVariables.set('royal_touche_code', paper.royal_touche_code);",
+              "  pm.collectionVariables.set('supplier_code_number', paper.supplier_code_number || '');",
+              "  console.log('picked paper', paper.royal_touche_code, paper.supplier_code_number);",
+              "}",
+              "pm.test('vendors carry their base papers', () =>",
+              "  pm.expect(rows.some(v => (v.papers || []).length)).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Cache locations",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/locations?status=active",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "locations"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "active"
+            }
+          ]
+        },
+        "description": "The bays a roll can sit in, and the destinations an OUT can name. Cache the whole list on login and foreground, exactly like materials and vendors — no delta, no client_id, never queued.\n\nAlready sorted for display: `sort_order` follows the physical walk through the warehouse, not the alphabet (alphabetically 'Running Godown' would land between the two Godowns). Render in the order returned.\n\n`godown` groups the two sides of a building under one header without parsing the name. `?godown=Godown A` filters server-side if you need it.\n\nPass `status=active` so closed bays drop out of the picker. Omit it on an admin screen that needs to see deactivated ones.\n\nIMPORTANT: rolls and movements still carry the location as a plain STRING — send `location: \"Godown A side 1\"`, the `name` from this list, not the id. The master exists to populate the dropdown, not to be referenced."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const rows = pm.response.json();",
+              "pm.test('has bays to pick from', () => pm.expect(rows.length).to.be.above(0));",
+              "pm.collectionVariables.set('location', rows[0].name);",
+              "// Grouped the way a picker should render them.",
+              "const byGodown = rows.reduce((m, l) => {",
+              "  (m[l.godown || 'Other'] = m[l.godown || 'Other'] || []).push(l.name); return m;",
+              "}, {});",
+              "console.log(byGodown);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Upload a photo",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/media/upload",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "media",
+            "upload"
+          ]
+        },
+        "description": "Body is form-data: field `file`, type File. Choose an image in Postman before sending.\n\nNEVER put image bytes in the outbox, and never send a device path — `file:///data/user/0/...` is rejected. Only paths this API minted are accepted (`rolls/YYYY/MM/<uuid>.<ext>`), which is what stops a client pointing a roll at any other object in the bucket.\n\nORDER MATTERS: upload photos BEFORE flushing the records that carry them. Rolls can be patched afterwards, but movements CANNOT — there is no PATCH for a movement, so its photo_paths must be in the body when it is created. Doing both the same way keeps one code path:\n  1. upload every pending photo -> collect objectPaths\n  2. write them into the queued rows in SQLite\n  3. flush the outbox\n\nOne file per request, by design — a failed shot is then retried alone rather than the whole set. Upload is NOT idempotent (no client_id), so a retry writes a second object; mark the local row uploaded before moving on or a flaky link fills the bucket with orphans.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "One image. Pick a file before sending."
+            }
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "// objectPath is what you submit back and what the database stores.",
+              "// mediaUrl is a SIGNED url for showing the operator their shot — it expires,",
+              "// so never store it.",
+              "pm.collectionVariables.set('photo_path', b.objectPath);",
+              "pm.test('returns a server object path', () =>",
+              "  pm.expect(b.objectPath).to.match(/^rolls\\/\\d{4}\\/\\d{2}\\/[0-9a-f-]{36}\\./));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Register roll (queued offline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/material-rolls",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls"
+          ]
+        },
+        "description": "REQUIRED: roll_number, royal_touche_code, material_id, vendor_id, weight, gsm, width, location, date.\n\nroyal_touche_code is Royal Touche's code for the BASE PAPER (e.g. 639), taken from the vendor's paper list in request 3 or read off the label. The server stores what you send — it mints nothing. It is NOT unique: every roll cut from paper 639 carries 639.\n\nThe server does three things you must not duplicate:\n  - defaults remaining_weight to weight (a new roll is full)\n  - writes the IN ledger row itself, dated `date` — DO NOT post your own IN\n  - refreshes the material's on-hand total\n\nField names that trip people up: `weight` (not initial_weight), `width` (not width_mm), `date` (not received_date). Unknown keys are stripped silently, so a wrong name fails as a missing required field.\n\nclient_id makes this idempotent — resend the identical request and the same roll comes back.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"client_id\": \"{{cid_roll}}\",\n  \"roll_number\": \"{{roll_number}}\",\n  \"royal_touche_code\": \"{{royal_touche_code}}\",\n  \"material_id\": \"{{material_id}}\",\n  \"vendor_id\": \"{{vendor_id}}\",\n  \"batch_no\": \"B-2026-08-17\",\n  \"weight\": 250,\n  \"gsm\": 90,\n  \"width\": 1200,\n  \"quantity\": 3400,\n  \"unit\": \"kg\",\n  \"location\": \"{{location}}\",\n  \"date\": \"2026-08-27\",\n  \"side1_photo_path\": \"{{photo_path}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// The device mints ONE UUID per queued write, at the moment the user taps save —",
+              "// not when the request is sent. Reused unchanged on every retry, forever: a fresh",
+              "// one would register a second roll.",
+              "if (!pm.collectionVariables.get('cid_roll')) {",
+              "  pm.collectionVariables.set('cid_roll', pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('roll_number', 'RT-' + Math.floor(Math.random()*90000+10000));",
+              "}",
+              "// Run request 4 first if you want a real photo path; otherwise drop the field.",
+              "if (!pm.collectionVariables.get('photo_path')) {",
+              "  console.log('no photo uploaded yet — remove side1_photo_path or run request 5');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('roll_id', b.id);",
+              "pm.test('the paper code round-trips unchanged', () =>",
+              "  pm.expect(b.royal_touche_code).to.eql(pm.collectionVariables.get('royal_touche_code')));",
+              "pm.test('a new roll is full', () => pm.expect(b.remaining_weight).to.eql(250));",
+              "pm.test('starts IN_STOCK', () => pm.expect(b.status).to.eql('IN_STOCK'));",
+              "pm.test('client_id is echoed back', () =>",
+              "  pm.expect(b.client_id).to.eql(pm.collectionVariables.get('cid_roll')));",
+              "pm.test('updatedAt present for the delta pull', () =>",
+              "  pm.expect(b.updatedAt).to.be.a('string'));",
+              "// Send this request again unchanged: the SAME roll comes back, not a second one."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Roll OUT (queued offline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/movements",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ]
+        },
+        "description": "Requires roll_id and location (the destination). MUST NOT send `weight` — the whole roll goes, and what was used is declared on the return. Sending weight is a 400.\n\nEffect: status -> ISSUED, location -> the destination, remaining_weight UNCHANGED (nothing is consumed yet, the roll is just elsewhere). An ISSUED roll drops out of the on-hand total.\n\n409 if the roll is already out, or empty.\n\nphoto_paths: max 4, uploaded FIRST (request 5). There is no PATCH for a movement, so photos cannot be attached later.\n\nWithout client_id a retry would be refused with 409 'already out'. With it, the original row comes back.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"client_id\": \"{{cid_out}}\",\n  \"transaction_type\": \"OUT\",\n  \"material_id\": \"{{material_id}}\",\n  \"roll_id\": \"{{roll_id}}\",\n  \"location\": \"Machine 3\",\n  \"issued_to\": \"Ramesh / Shift A\",\n  \"remarks\": \"Job card JC-8841\",\n  \"photo_paths\": [\n    \"{{photo_path}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('cid_out'))",
+              "  pm.collectionVariables.set('cid_out', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('out_id', b.id);",
+              "pm.test('the whole roll left the store', () => pm.expect(b.weight).to.eql(250));",
+              "pm.test('nothing consumed yet', () => pm.expect(b.roll_weight_after).to.eql(250));",
+              "pm.test('from the rack it was stored on', () =>",
+              "  pm.expect(b.from_location).to.eql(pm.collectionVariables.get('location')));",
+              "pm.test('to where the movement said', () => pm.expect(b.to_location).to.eql('Machine 3'));",
+              "pm.test('description is ready to render', () => pm.expect(b.description).to.be.a('string'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Roll RETURN (queued offline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/movements",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ]
+        },
+        "description": "returned_weight is the SCALE READING — what the roll weighs coming back, NOT what was used. The server subtracts: used = weight_before - returned_weight.\n\nDO NOT ask the operator for a location. The server reads the destination off the roll's own most recent OUT row and sends it home.\n\nreturned_weight 0 means fully consumed: status becomes CONSUMED and the roll will not accept another OUT until an IN restores it.\n\n409 if the roll is not currently ISSUED. 400 if it comes back heavier than it went out.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"client_id\": \"{{cid_ret}}\",\n  \"transaction_type\": \"RETURN\",\n  \"material_id\": \"{{material_id}}\",\n  \"roll_id\": \"{{roll_id}}\",\n  \"returned_weight\": 180,\n  \"remarks\": \"Job JC-8841 complete\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('cid_ret'))",
+              "  pm.collectionVariables.set('cid_ret', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('ret_id', b.id);",
+              "pm.test('the store gets back what is left on the roll', () =>",
+              "  pm.expect(b.weight).to.eql(180));",
+              "pm.test('usage is DERIVED: 250 - 180', () => pm.expect(b.used_weight).to.eql(70));",
+              "pm.test('roll now weighs the scale reading', () =>",
+              "  pm.expect(b.roll_weight_after).to.eql(180));",
+              "pm.test('sent home to the rack it left from', () =>",
+              "  pm.expect(b.to_location).to.eql(pm.collectionVariables.get('location')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Attach a photo to an existing roll",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/material-rolls/{{roll_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls",
+            "{{roll_id}}"
+          ]
+        },
+        "description": "Only needed when a roll's photo arrives after the roll itself. Movements have no PATCH — theirs must be in the create body.\n\nSend ONLY the fields the user actually changed. This endpoint is last-write-wins with no version check, so posting a whole cached row would overwrite anything edited on the portal meanwhile.\n\nRejected here with 400: remaining_weight and status (they follow movements, which leave a ledger row) and client_id (it records which queued write produced this roll).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tag_photo_path\": \"{{photo_path}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Roll history",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/stock/movements?roll_number={{roll_number}}&page=1&pageSize=50",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ],
+          "query": [
+            {
+              "key": "roll_number",
+              "value": "{{roll_number}}"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "50"
+            }
+          ]
+        },
+        "description": "A roll has NO history field — its history IS the ledger. Query by roll_number (what a barcode scan gives you) or by roll_id; the server resolves the printed number itself, so no lookup round trip. An unknown number returns an empty list, not an error and not every movement in the store.\n\nNewest first. Every row is self-describing — render `description` as-is (\"Returned 180 kg to Bay 2 · 70 kg used\") and use `roll_weight_after` as the running balance. Do no arithmetic client-side.\n\nOFFLINE: build this screen from the local stock_transactions mirror, not the API. Rows still in the outbox have no server-rendered `description` and no `roll_weight_after` — compose a local stand-in, mark them pending, and replace with the server's values once they sync."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('registration wrote its own IN row', () =>",
+              "  pm.expect(b.items.some(r => r.transaction_type === 'IN')).to.be.true);",
+              "pm.test('newest first', () => {",
+              "  const t = b.items.map(r => new Date(r.transaction_date).getTime());",
+              "  pm.expect(t).to.eql(t.slice().sort((a,c) => c-a));",
+              "});",
+              "console.log(b.items.map(r => r.description));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Pull rolls changed since checkpoint",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/material-rolls?updated_after={{rolls_checkpoint}}&pageSize=200",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "material-rolls"
+          ],
+          "query": [
+            {
+              "key": "updated_after",
+              "value": "{{rolls_checkpoint}}"
+            },
+            {
+              "key": "pageSize",
+              "value": "200"
+            }
+          ]
+        },
+        "description": "updated_after switches the sort to updatedAt ascending, so the backlog arrives oldest-first and paging is stable.\n\nSave the LAST row of the LAST page as the next checkpoint, and only after the whole paging loop finishes. NEVER derive a checkpoint from device time: a phone whose clock runs fast skips every row written in that gap, permanently, with no error anywhere. It is the one failure in this design that leaves no trace.\n\nA row that comes back carrying a client_id this device recognises is the server's copy of something it queued — update that local row in place (fill in server_id, updated_at, set sync_state='synced'), do not insert a duplicate.\n\nKNOWN GAP: a roll deleted on the server never appears in a delta pull, so the device keeps it forever. There are no tombstones yet. The only recovery is dropping the checkpoint and re-pulling everything."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// First sync ever: omit updated_after entirely to pull everything. This default",
+              "// stands in for that.",
+              "if (!pm.collectionVariables.get('rolls_checkpoint'))",
+              "  pm.collectionVariables.set('rolls_checkpoint', '2026-01-01T00:00:00.000Z');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('oldest-first, so paging is resumable', () => {",
+              "  const t = b.items.map(r => new Date(r.updatedAt).getTime());",
+              "  pm.expect(t).to.eql(t.slice().sort((a,c) => a-c));",
+              "});",
+              "// Page until items.length < pageSize, THEN save the last row's updatedAt.",
+              "if (b.items.length)",
+              "  pm.collectionVariables.set('rolls_checkpoint', b.items[b.items.length-1].updatedAt);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Pull movements changed since checkpoint",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/stock/movements?updated_after={{movements_checkpoint}}&pageSize=200",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ],
+          "query": [
+            {
+              "key": "updated_after",
+              "value": "{{movements_checkpoint}}"
+            },
+            {
+              "key": "pageSize",
+              "value": "200"
+            }
+          ]
+        },
+        "description": "Same contract as the roll pull, with its OWN separate checkpoint. The two advance independently — never share one value between them.\n\nA roll's history can gain rows this phone never queued: someone on the portal can issue or adjust the same roll."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('movements_checkpoint'))",
+              "  pm.collectionVariables.set('movements_checkpoint', '2026-01-01T00:00:00.000Z');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "if (b.items.length)",
+              "  pm.collectionVariables.set('movements_checkpoint', b.items[b.items.length-1].updatedAt);",
+              "pm.test('carries updatedAt to checkpoint on', () =>",
+              "  pm.expect(b.items[0].updatedAt).to.be.a('string'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Batch flush",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/sync/batch",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "sync",
+            "batch"
+          ]
+        },
+        "description": "The whole outbox in one request. Accepts ONE item as happily as fifty, so the app can use it for every flush and never need a second code path.\n\n  - max 50 items; send the rest in the next call\n  - every item keeps its OWN client_id, REQUIRED here (optional on the single-item routes). The batch itself has no id: a batch-level id could not describe '5 of 8 written', and the retry would be told the work was done while three rolls had never moved\n  - items run in ARRAY ORDER, one at a time, through the same service code the single-item endpoints use\n  - roll_client_id points a movement at a roll registered earlier in the same batch, which has no server id yet. Omit it when body.roll_id is already known\n  - enqueue a whole batch in ONE SQLite transaction, so a crash mid-enqueue cannot leave a movement queued without its roll\n\nRESPONSE IS ALWAYS 200, even when items fail — a batch is not a transaction, and items already written stay written:\n\n  { applied, failed, skipped, resume_from,\n    results: [ { index, client_id, type, status, data,\n                 code, reason, error, fields, detail } ] }\n\nOn a failed item:\n  reason  -> BRANCH ON THIS. One of: validation | duplicate | conflict |\n             not_found | forbidden | server_error. Stable; the `error` wording\n             will change, so never match on prose\n  error   -> show to the operator VERBATIM\n  code    -> the status this item would have returned on its own endpoint\n  fields  -> validation only: which inputs to highlight\n  detail  -> server_error only: the raw cause, for your crash log. NEVER display\n\nserver_error is the ONLY reason where retrying the item unchanged is correct. Every other reason needs a person or a cache refresh first — which is why the flush halts rather than skipping ahead.\n\n  status 'ok'      -> mark that outbox row sent, use `data` as the response\n  status 'failed'  -> branch on `reason`, show `error`, highlight `fields`\n  status 'skipped' -> untouched, still pending, leave the row alone\n  resume_from      -> index to retry from once the failure is resolved; null when everything applied\n\nResending the whole batch is also safe: applied items come back as replays.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"type\": \"roll\",\n      \"client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"roll_number\": \"{{b_roll_number}}\",\n        \"royal_touche_code\": \"{{royal_touche_code}}\",\n        \"material_id\": \"{{material_id}}\",\n        \"vendor_id\": \"{{vendor_id}}\",\n        \"weight\": 250,\n        \"gsm\": 90,\n        \"width\": 1200,\n        \"unit\": \"kg\",\n        \"location\": \"{{location}}\",\n        \"date\": \"2026-08-27\"\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_out}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"OUT\",\n        \"material_id\": \"{{material_id}}\",\n        \"location\": \"Machine 3\",\n        \"issued_to\": \"Ramesh / Shift A\"\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_ret}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"RETURN\",\n        \"material_id\": \"{{material_id}}\",\n        \"returned_weight\": 180\n      }\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('b_roll')) {",
+              "  pm.collectionVariables.set('b_roll', pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_out',  pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_ret',  pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_roll_number', 'BT-' + Math.floor(Math.random()*90000+10000));",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 — a batch is NEVER a 4xx', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('all three applied', () => pm.expect(b.applied).to.eql(3));",
+              "pm.test('nothing to resume from', () => pm.expect(b.resume_from).to.eql(null));",
+              "pm.test('the movements bound to the roll from the same batch', () =>",
+              "  pm.expect(b.results[1].data.roll_id.id).to.eql(b.results[0].data.id));",
+              "pm.test('usage derived inside the batch too', () =>",
+              "  pm.expect(b.results[2].data.used_weight).to.eql(70));",
+              "// Send this request again: all three come back as replays, nothing is duplicated."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. On-hand totals",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/stock/summary",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "summary"
+          ]
+        },
+        "description": "Cached per-material totals, recomputed after every movement:\n\n  total_weight = sum of remaining_weight WHERE status = IN_STOCK AND remaining_weight > 0\n\nAn ISSUED roll is NOT on hand — it still has weight, it is just not in the store, so it drops out until it returns. If the app computes its own totals for an offline dashboard, filter on status the same way or the numbers will disagree with the server."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "console.log(pm.response.json());"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,7 @@ const MAX_LISTED_ISSUES = 3;
 
 /** One readable sentence from a ZodError: the field's own message where the schema gave
  *  it one, prefixed with the field name so the user knows which input to fix. */
-function zodMessage(err: ZodError): string {
+export function zodMessage(err: ZodError): string {
   const seen = new Set<string>();
   for (const issue of err.issues) {
     const field = issue.path.join(".");

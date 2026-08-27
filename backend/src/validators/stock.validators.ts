@@ -12,7 +12,7 @@ const objectPath = z
 /** Enough for a couple of angles per movement without turning the ledger into an album. */
 const MAX_MOVEMENT_PHOTOS = 4;
 
-export const recordMovementSchema = z
+export const movementFieldsSchema = z
   .object({
     transaction_type: z.enum(TRANSACTION_TYPES),
     transaction_date: z.string().datetime({ offset: true }).or(z.string().date()).optional(),
@@ -34,8 +34,18 @@ export const recordMovementSchema = z
     // OUT/RETURN: photos of the roll taken as it leaves and as it comes back. GCS object
     // paths returned by POST /media/upload — not URLs, and not raw files.
     photo_paths: z.array(objectPath).max(MAX_MOVEMENT_PHOTOS).optional(),
-  })
-  .superRefine((v, ctx) => {
+    // Offline flush: the device's own id for this queued movement. Sending it makes the
+    // movement idempotent — a retry returns the row already written rather than moving
+    // the same stock a second time. See utils/idempotency.ts.
+    client_id: z.string().uuid("client_id must be a UUID").optional(),
+  });
+
+/**
+ * The fields above plus the rules that depend on transaction_type. Split from the object
+ * itself so the batch endpoint can validate an item whose roll_id is not known yet — it
+ * arrives as roll_client_id and is resolved server-side, then checked against this.
+ */
+export const recordMovementSchema = movementFieldsSchema.superRefine((v, ctx) => {
     // A whole roll goes out to a place; nothing is consumed yet, so no quantity.
     if (v.transaction_type === "OUT") {
       if (!v.roll_id) {
@@ -100,6 +110,9 @@ export const listMovementsQuerySchema = z.object({
   // Alternative to roll_id for a client holding the number printed on the roll.
   roll_number: z.string().trim().min(1).optional(),
   transaction_type: z.enum(TRANSACTION_TYPES).optional(),
+  // Delta pull, same contract as the roll list: switches the sort to updatedAt ascending
+  // so a device can walk its backlog and checkpoint on the last row it saw.
+  updated_after: z.coerce.date().optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),
 });

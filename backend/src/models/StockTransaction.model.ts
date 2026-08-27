@@ -42,6 +42,9 @@ export interface IStockTransaction {
    *  left, and the roll as it came back. Evidence for a disputed weight, so they hang off
    *  the movement rather than the roll: the roll only ever shows its latest state. */
   photo_paths?: string[];
+  /** Minted on the device when the movement was queued, so a retried flush gets this row
+   *  back instead of moving the same stock twice. Absent on portal-recorded movements. */
+  client_id?: string;
   created_by: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -72,10 +75,19 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     // Paths, not URLs — a stored URL expires, a path does not. Read URLs are signed per
     // response, same as the roll's registration photos.
     photo_paths: { type: [String], default: undefined },
+    client_id: { type: String, trim: true },
     created_by: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true, collection: "stock_transactions" },
 );
+
+// The replay guard — the one that matters most, because a duplicated movement silently
+// changes a stock figure. Sparse for the same reason as the roll's: every existing row
+// predates the field. See utils/idempotency.ts.
+stockTransactionSchema.index({ client_id: 1 }, { unique: true, sparse: true });
+
+// Serves the delta pull, same as the roll's.
+stockTransactionSchema.index({ updatedAt: 1 });
 
 export const StockTransaction = model<IStockTransaction>(
   "StockTransaction",

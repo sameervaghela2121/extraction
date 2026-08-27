@@ -19,6 +19,11 @@ function toResponse(v: IVendor) {
     id: v._id.toString(),
     vendor_code: v.vendor_code,
     name: v.name,
+    // The supplier's base papers, from the Royal Touche paper-codes sheet. Sent with the
+    // list because that is how the app fills a roll's royal_touche_code offline: pick the
+    // supplier, pick one of its papers. `[]` rather than undefined so a caller can map
+    // over it without a guard.
+    papers: v.papers ?? [],
     contact: v.contact ?? {},
     address: v.address,
     gst_number: v.gst_number,

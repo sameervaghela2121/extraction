@@ -1,16 +1,18 @@
-import { Types, type FilterQuery } from "mongoose";
+import { Types, type FilterQuery, type HydratedDocument } from "mongoose";
 import { MaterialRoll, type IMaterialRoll, type RollStatus } from "../models/MaterialRoll.model";
 import { StockTransaction } from "../models/StockTransaction.model";
 import { RawMaterial } from "../models/RawMaterial.model";
 import { Vendor } from "../models/Vendor.model";
 import { ApiError } from "../utils/ApiError";
 import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/crud";
+import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import { refreshSummaries, refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
-import { nextRollCode } from "./rollCode.service";
 
 type RollInput = {
   roll_number: string;
+  /** Royal Touche's code for the base paper, read off the label. Optional for now. */
+  royal_touche_code?: string;
   material_id: string;
   vendor_id: string;
   batch_no?: string;
@@ -27,6 +29,8 @@ type RollInput = {
   stitched_barcode_photo_path?: string;
   side1_photo_path?: string;
   side2_photo_path?: string;
+  /** Offline flush: the device's id for this queued registration. See create. */
+  client_id?: string;
 };
 
 /** The four photo slots, in the order the registration flow captures them. */
@@ -40,6 +44,8 @@ const PHOTO_FIELDS = [
 // remaining_weight and status are deliberately absent: both only move through stock
 // movements, which write a ledger row for the change. See updateRollSchema.
 const PATCHABLE = [
+  // Correctable like roll_number: both are read off the label, so both can be mistyped.
+  "royal_touche_code",
   "batch_no",
   "weight",
   "quantity",
@@ -119,7 +125,11 @@ async function toResponse(r: PopulatedRoll) {
     stitched_barcode_photo_url: stitched,
     side1_photo_url: side1,
     side2_photo_url: side2,
+    // Echoed back so a device pulling a delta can match rolls against its own outbox and
+    // drop the queued copies. Absent on anything registered from the portal.
+    client_id: r.client_id,
     createdAt: r.createdAt,
+    // The delta-pull checkpoint the client sends back as updated_after.
     updatedAt: r.updatedAt,
   };
 }
@@ -164,7 +174,7 @@ async function loadUsableMaterial(materialId?: string): Promise<UsableRef> {
   return material;
 }
 
-// vendor_code as well as the name: the roll's Royal Touche code is minted from it.
+// vendor_code as well as the name: roll screens show it as the Supplier Code Number.
 async function loadUsableVendor(
   vendorId?: string,
 ): Promise<(NamedRef & { vendor_code: string }) | undefined> {
@@ -190,6 +200,7 @@ export const materialRollsService = {
     vendor_id?: string;
     status?: RollStatus;
     location?: string;
+    updated_after?: Date;
     page?: number;
     pageSize?: number;
   }) {
@@ -198,6 +209,7 @@ export const materialRollsService = {
 
     const filter: FilterQuery<IMaterialRoll> = {};
     if (query.status) filter.status = query.status;
+    if (query.updated_after) filter.updatedAt = { $gt: query.updated_after };
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.vendor_id) filter.vendor_id = new Types.ObjectId(query.vendor_id);
     if (query.location) filter.location = query.location;
@@ -208,7 +220,10 @@ export const materialRollsService = {
 
     const [items, total] = await Promise.all([
       MaterialRoll.find(filter)
-        .sort({ date: -1 })
+        // A delta pull walks forward through updatedAt; every other caller wants newest
+        // received first. _id breaks ties so two rolls saved in the same millisecond
+        // cannot swap places between pages and hide one of themselves.
+        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { date: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate(REF_POPULATE)
@@ -228,6 +243,17 @@ export const materialRollsService = {
   /** Receiving a roll is itself a stock movement, so it writes one. Rolls, transactions
    *  and the summary then agree without anyone having to remember a second call. */
   async create(input: RollInput, actingUserId: string) {
+    // Before anything else, including the roll_number check. A phone re-flushing a
+    // registration whose response it never received must get its roll back — running
+    // ensureCodeFree first would answer "a roll with this number already exists", which
+    // is that same roll, and would wedge the device's queue on an item it can never
+    // drain. The replay check has to shadow the uniqueness check, not follow it.
+    const replayed = await findReplay(MaterialRoll, input.client_id);
+    if (replayed) {
+      await replayed.populate(REF_POPULATE);
+      return toResponse(replayed as unknown as PopulatedRoll);
+    }
+
     const rollNumber = input.roll_number.toUpperCase();
     // Three independent reads, so one round trip instead of three. Registration happens
     // on a phone over mobile data, where every avoidable trip to Atlas is felt.
@@ -247,16 +273,27 @@ export const materialRollsService = {
       );
     }
 
-    // After the checks: the sequence number is consumed even on a failed save, so it is
-    // not spent until the roll is actually going to be written.
-    const royalToucheCode = await nextRollCode(vendor!.vendor_code);
-
-    const roll = await MaterialRoll.create({
-      ...input,
-      roll_number: rollNumber,
-      royal_touche_code: royalToucheCode,
-      remaining_weight: remaining,
-    });
+    let roll: HydratedDocument<IMaterialRoll>;
+    try {
+      roll = await MaterialRoll.create({
+        ...input,
+        roll_number: rollNumber,
+        // Off the label, not minted: the code names the base paper, so rolls of the same
+        // paper share it and there is nothing for the server to allocate. Absent rather
+        // than empty when the client omits it, so the sparse index skips the row.
+        royal_touche_code: input.royal_touche_code?.toUpperCase(),
+        remaining_weight: remaining,
+      });
+    } catch (err) {
+      // Two flushes of the same queued registration, in flight at once: both read "no
+      // replay" above, both got here, and the unique index let exactly one through. The
+      // loser returns the winner's roll. The winner is mid-flight, so it — not this
+      // request — writes the receipt row and refreshes the summary.
+      if (!isReplayCollision(err)) throw err;
+      const winner = await resolveReplay(MaterialRoll, input.client_id!, err);
+      await winner.populate(REF_POPULATE);
+      return toResponse(winner as unknown as PopulatedRoll);
+    }
     // A new roll changes what's on hand, so the material's cached totals must follow it.
     const summary = await refreshSummary(roll.material_id);
 

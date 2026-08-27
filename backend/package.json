@@ -9,7 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed": "tsx src/utils/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:vendors": "tsx src/utils/seedVendors.ts",
+    "seed:locations": "tsx src/utils/seedLocations.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
