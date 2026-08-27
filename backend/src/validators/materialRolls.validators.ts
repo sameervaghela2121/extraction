@@ -12,6 +12,15 @@ const objectPath = z
 // fields the form does not ask for stay optional.
 export const createRollSchema = z.object({
   roll_number: z.string().trim().min(1, "Roll number is required"),
+  // Royal Touche's code for the base paper (e.g. "639"), read off the label alongside the
+  // roll number. Not minted here: it names the paper, so every roll of that paper carries
+  // the same one — which also means a phone can fill it in with no signal.
+  //
+  // Optional for now, at the client's request, while the mobile app is being wired up. The
+  // catalogue also lists Delta-range papers that have no RT code at all, so a roll made
+  // from one has nothing to put here. A roll without it cannot be traced back to its paper
+  // — worth making required again once registration reliably supplies it.
+  royal_touche_code: z.string().trim().min(1).optional(),
   material_id: objectId.describe("Material"),
   vendor_id: objectId.describe("Vendor"),
   weight: z.number({ required_error: "Weight is required" }).positive("Weight must be greater than 0"),
@@ -33,6 +42,11 @@ export const createRollSchema = z.object({
   stitched_barcode_photo_path: objectPath.optional(),
   side1_photo_path: objectPath.optional(),
   side2_photo_path: objectPath.optional(),
+  // Offline flush: the device's own id for this queued registration. Sending it makes the
+  // create idempotent — retry it and you get the same roll, not a second one. A UUID
+  // because the device has to mint it with no server round trip and no chance of
+  // colliding with another phone's.
+  client_id: z.string().uuid("client_id must be a UUID").optional(),
 });
 
 export const updateRollSchema = createRollSchema
@@ -49,6 +63,13 @@ export const updateRollSchema = createRollSchema
   .refine((v) => v.status === undefined, {
     message: "A roll's status follows its movements — issue or consume it instead",
     path: ["status"],
+  })
+  // Inherited from the create schema by .partial(), and refused here: client_id is the
+  // record of which queued write produced this roll. Rewriting it would free a spent id
+  // to create a second roll, which is the exact thing it exists to prevent.
+  .refine((v) => v.client_id === undefined, {
+    message: "client_id is set when the roll is created and cannot be changed",
+    path: ["client_id"],
   });
 
 export const listRollsQuerySchema = z.object({
@@ -57,6 +78,10 @@ export const listRollsQuerySchema = z.object({
   vendor_id: objectId.optional(),
   status: z.enum(ROLL_STATUSES).optional(),
   location: z.string().trim().optional(),
+  // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
+  // to updatedAt ascending so the client can page through the backlog oldest-first and
+  // save the last updatedAt it saw as the next checkpoint.
+  updated_after: z.coerce.date().optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),
 });

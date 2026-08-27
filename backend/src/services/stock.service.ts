@@ -1,4 +1,4 @@
-import { Types, type FilterQuery } from "mongoose";
+import { Types, type FilterQuery, type HydratedDocument } from "mongoose";
 import {
   StockTransaction,
   type IStockTransaction,
@@ -10,6 +10,7 @@ import { RawMaterial } from "../models/RawMaterial.model";
 import { Vendor } from "../models/Vendor.model";
 import { ApiError } from "../utils/ApiError";
 import { paginated } from "../utils/crud";
+import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import { refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
 
@@ -34,6 +35,8 @@ type MovementInput = {
   /** OUT/RETURN: photos of the roll captured at the movement, already uploaded via
    *  POST /media/upload. Object paths, not URLs. */
   photo_paths?: string[];
+  /** Offline flush: the device's id for this queued movement. See recordMovement. */
+  client_id?: string;
 };
 
 /** Each ref carries its own natural label, not all of them a "name". */
@@ -114,7 +117,14 @@ async function toResponse(t: PopulatedTransaction) {
     photo_paths: photoPaths,
     photo_urls: photoUrls,
     created_by: refResponse(t.created_by, "name"),
+    // Echoed back so a device pulling a delta can match rows against its own outbox and
+    // drop the queued copies, rather than guessing from the weights and timestamps.
+    client_id: t.client_id,
     createdAt: t.createdAt,
+    // The delta-pull checkpoint: the client saves the last one it saw and sends it back
+    // as updated_after. Absent from this response until now, which made the pull
+    // impossible to resume.
+    updatedAt: t.updatedAt,
   };
 }
 
@@ -243,6 +253,17 @@ export const stockService = {
   /** The only write path for stock levels: records the movement, moves the roll, and
    *  refreshes the material's summary. */
   async recordMovement(input: MovementInput, actingUserId: string) {
+    // First, above everything — applyToRoll below mutates the roll, and a replay that
+    // reaches it is not merely wasteful: a second IN adds the weight again and quietly
+    // inflates the stock figure, and a second RETURN is refused as "not currently out",
+    // wedging the device's queue behind an item it can never drain. Neither is
+    // recoverable from the phone's side, so the replay stops here.
+    const replayed = await findReplay(StockTransaction, input.client_id);
+    if (replayed) {
+      await replayed.populate(REF_POPULATE);
+      return toResponse(replayed as unknown as PopulatedTransaction);
+    }
+
     const material = await RawMaterial.findById(input.material_id).select("status name").lean();
     if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
 
@@ -274,23 +295,40 @@ export const stockService = {
     // ponytail: no multi-document transaction — the roll write and this insert aren't
     // atomic together. Needs a replica set + session to close; the summary self-heals
     // on the next movement either way.
-    const transaction = await StockTransaction.create({
-      transaction_type: input.transaction_type,
-      transaction_date: input.transaction_date ? new Date(input.transaction_date) : new Date(),
-      material_id: materialId,
-      roll_id: rollId,
-      vendor_id: input.vendor_id ? new Types.ObjectId(input.vendor_id) : undefined,
-      weight: effect.weight,
-      used_weight: effect.used_weight,
-      material_weight_after: summary.total_weight,
-      roll_weight_after: effect.roll_weight_after,
-      issued_to: input.issued_to,
-      from_location: effect.from_location,
-      to_location: effect.to_location,
-      remarks: input.remarks,
-      photo_paths: input.photo_paths?.length ? input.photo_paths : undefined,
-      created_by: new Types.ObjectId(actingUserId),
-    });
+    // ponytail: the replay guard above catches sequential retries — a flush that lost its
+    // response and sends the same item again later — which is every retry a device that
+    // flushes its queue one at a time can produce. It does not cover two flushes of the
+    // same client_id genuinely in flight at once: both pass the guard, both run
+    // applyToRoll, and only the insert below is rejected, leaving the roll moved twice.
+    // Closing that needs the client_id reserved before applyToRoll (insert the row first,
+    // fill in the weights after) or a real transaction — worth doing if the mobile client
+    // ever flushes in parallel. It must not: see the FIFO requirement in the sync notes.
+    let transaction: HydratedDocument<IStockTransaction>;
+    try {
+      transaction = await StockTransaction.create({
+        transaction_type: input.transaction_type,
+        transaction_date: input.transaction_date ? new Date(input.transaction_date) : new Date(),
+        material_id: materialId,
+        roll_id: rollId,
+        vendor_id: input.vendor_id ? new Types.ObjectId(input.vendor_id) : undefined,
+        weight: effect.weight,
+        used_weight: effect.used_weight,
+        material_weight_after: summary.total_weight,
+        roll_weight_after: effect.roll_weight_after,
+        issued_to: input.issued_to,
+        from_location: effect.from_location,
+        to_location: effect.to_location,
+        remarks: input.remarks,
+        photo_paths: input.photo_paths?.length ? input.photo_paths : undefined,
+        client_id: input.client_id,
+        created_by: new Types.ObjectId(actingUserId),
+      });
+    } catch (err) {
+      if (!isReplayCollision(err)) throw err;
+      const winner = await resolveReplay(StockTransaction, input.client_id!, err);
+      await winner.populate(REF_POPULATE);
+      return toResponse(winner as unknown as PopulatedTransaction);
+    }
 
     await transaction.populate(REF_POPULATE);
     return toResponse(transaction as unknown as PopulatedTransaction);
@@ -301,6 +339,7 @@ export const stockService = {
     roll_id?: string;
     roll_number?: string;
     transaction_type?: TransactionType;
+    updated_after?: Date;
     page?: number;
     pageSize?: number;
   }) {
@@ -308,6 +347,7 @@ export const stockService = {
     const pageSize = query.pageSize ?? 50;
 
     const filter: FilterQuery<IStockTransaction> = {};
+    if (query.updated_after) filter.updatedAt = { $gt: query.updated_after };
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.roll_id) filter.roll_id = query.roll_id;
     if (query.transaction_type) filter.transaction_type = query.transaction_type;
@@ -326,7 +366,9 @@ export const stockService = {
 
     const [items, total] = await Promise.all([
       StockTransaction.find(filter)
-        .sort({ transaction_date: -1, _id: -1 })
+        // A delta pull walks forward through updatedAt; the history screen wants the
+        // most recent movement first. Same reasoning as the roll list.
+        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { transaction_date: -1, _id: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate(REF_POPULATE)

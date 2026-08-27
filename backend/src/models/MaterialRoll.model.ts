@@ -13,8 +13,9 @@ export type RollStatus = (typeof ROLL_STATUSES)[number];
 export interface IMaterialRoll {
   _id: Types.ObjectId;
   roll_number: string;
-  /** Our own code for the roll, minted from the vendor's code. Never client-supplied. */
-  royal_touche_code: string;
+  /** Royal Touche's code for the base paper, off the label. Shared by every roll of it.
+   *  Optional for now — see createRollSchema. */
+  royal_touche_code?: string;
   material_id: Types.ObjectId;
   vendor_id: Types.ObjectId;
   batch_no?: string;
@@ -38,6 +39,10 @@ export interface IMaterialRoll {
   /** The date the roll was received. */
   date: Date;
   status: RollStatus;
+  /** Minted on the device when the roll was registered, so a flush that retries after a
+   *  lost response gets this roll back instead of registering a second one. Absent on
+   *  rolls created from the web portal, which never queues. */
+  client_id?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,9 +52,14 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // The barcode value printed on the roll. String, not ObjectId — it comes from
     // the label, not from us.
     roll_number: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    // Generated in materialRollsService.create. The unique index is the real guarantee —
-    // the counter makes collisions impossible, this makes them impossible to store.
-    royal_touche_code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    // Royal Touche's own code for the base paper this roll is made of — read off the
+    // label, like roll_number. NOT unique: it identifies the paper, not the roll, so
+    // every roll of paper 639 carries 639. Indexed because "show me all rolls of this
+    // paper" is the question it exists to answer.
+    //
+    // Not required for now, at the client's request. Sparse is deliberate: without it the
+    // index would carry an entry for every roll that has no code.
+    royal_touche_code: { type: String, uppercase: true, trim: true, index: true, sparse: true },
     material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true, index: true },
     vendor_id: { type: Schema.Types.ObjectId, ref: "Vendor", required: true, index: true },
     batch_no: { type: String, trim: true },
@@ -70,6 +80,7 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     side2_photo_path: { type: String, trim: true },
     date: { type: Date, required: true },
     status: { type: String, enum: [...ROLL_STATUSES], default: "IN_STOCK", index: true },
+    client_id: { type: String, trim: true },
   },
   { timestamps: true, collection: "materials_rolls" },
 );
@@ -80,5 +91,14 @@ const materialRollSchema = new Schema<IMaterialRoll>(
 // in memory; this one answers the match from the index alone. Field order follows the
 // query — equality, equality, then range.
 materialRollSchema.index({ material_id: 1, status: 1, remaining_weight: 1 });
+
+// The replay guard. Sparse is not optional: every roll registered before this field
+// existed has no client_id, and a plain unique index would read them all as the same
+// null and refuse to build. Sparse leaves them out of the index altogether.
+materialRollSchema.index({ client_id: 1 }, { unique: true, sparse: true });
+
+// Serves the delta pull: `updated_after=<checkpoint>` sorted ascending, which is how a
+// device catches up on everything that changed while it was offline.
+materialRollSchema.index({ updatedAt: 1 });
 
 export const MaterialRoll = model<IMaterialRoll>("MaterialRoll", materialRollSchema);

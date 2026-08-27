@@ -1,0 +1,8 @@
+[
+  { "location_code": "GODOWN-A-1",  "name": "Godown A side 1",       "godown": "Godown A",       "sort_order": 10 },
+  { "location_code": "GODOWN-A-2",  "name": "Godown A side 2",       "godown": "Godown A",       "sort_order": 20 },
+  { "location_code": "GODOWN-B-1",  "name": "Godown B side 1",       "godown": "Godown B",       "sort_order": 30 },
+  { "location_code": "GODOWN-B-2",  "name": "Godown B side 2",       "godown": "Godown B",       "sort_order": 40 },
+  { "location_code": "RUNNING-1",   "name": "Running Godown side 1", "godown": "Running Godown", "sort_order": 50 },
+  { "location_code": "RUNNING-2",   "name": "Running Godown side 2", "godown": "Running Godown", "sort_order": 60 }
+]
