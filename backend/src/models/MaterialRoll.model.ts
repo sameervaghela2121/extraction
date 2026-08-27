@@ -60,7 +60,10 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // Not required for now, at the client's request. Sparse is deliberate: without it the
     // index would carry an entry for every roll that has no code.
     royal_touche_code: { type: String, uppercase: true, trim: true, index: true, sparse: true },
-    material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true, index: true },
+    // No index: true here — the compound index below starts with material_id, and Mongo
+    // serves a prefix query from a compound index. A standalone one would be a second
+    // index to write on every insert for no read it can answer alone.
+    material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true },
     vendor_id: { type: Schema.Types.ObjectId, ref: "Vendor", required: true, index: true },
     batch_no: { type: String, trim: true },
     weight: { type: Number, min: 0, required: true },
