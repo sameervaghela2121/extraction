@@ -2,7 +2,7 @@ import { Router } from "express";
 import { locationsController } from "../controllers/locations.controller";
 import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/auth.middleware";
-import { requireRole } from "../middleware/rbac.middleware";
+import { requireGodownWrite } from "../middleware/rbac.middleware";
 import { validate } from "../middleware/validate.middleware";
 import {
   createLocationSchema,
@@ -14,7 +14,7 @@ const router = Router();
 
 // Same gating as the other masters: any signed-in user can read the list to fill a
 // picker, admin and store_manager maintain it.
-const canWrite = requireRole("admin", "store_manager");
+const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
 

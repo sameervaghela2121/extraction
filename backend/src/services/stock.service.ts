@@ -17,7 +17,8 @@ import { mediaService } from "./media.service";
 type MovementInput = {
   transaction_type: TransactionType;
   transaction_date?: string;
-  material_id: string;
+  /** Absent only on a CONSUME, where it is read off the roll. */
+  material_id?: string;
   roll_id?: string;
   vendor_id?: string;
   /** IN only: weight being added back. */
@@ -32,6 +33,8 @@ type MovementInput = {
   location?: string;
   issued_to?: string;
   remarks?: string;
+  /** A code from the remark master, picked rather than typed. */
+  remark_code?: string;
   /** OUT/RETURN: photos of the roll captured at the movement, already uploaded via
    *  POST /media/upload. Object paths, not URLs. */
   photo_paths?: string[];
@@ -83,6 +86,8 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
       return `Issued out ${t.weight} ${unit}${to}`;
     case "RETURN":
       return `Returned ${t.weight} ${unit}${to} · ${t.used_weight ?? 0} ${unit} used`;
+    case "CONSUME":
+      return t.weight ? `Consumed — ${t.weight} ${unit} used up` : "Consumed";
     default:
       return `Corrected by ${t.weight} ${unit}`;
   }
@@ -113,6 +118,7 @@ async function toResponse(t: PopulatedTransaction) {
     material_weight_after: t.material_weight_after,
     issued_to: t.issued_to,
     remarks: t.remarks,
+    remark_code: t.remark_code,
     // Paths round-trip, URLs render — same split as the roll's registration photos.
     photo_paths: photoPaths,
     photo_urls: photoUrls,
@@ -152,7 +158,9 @@ type RollEffect = {
 async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promise<RollEffect> {
   const roll = await MaterialRoll.findById(rollId);
   if (!roll) throw ApiError.notFound("That roll no longer exists");
-  if (roll.material_id.toString() !== input.material_id) {
+  // A CONSUME may omit material_id — there is nothing for the operator to pick, so it is
+  // taken from the roll rather than demanded and then checked against itself.
+  if (input.material_id && roll.material_id.toString() !== input.material_id) {
     throw ApiError.badRequest("This roll belongs to a different material");
   }
 
@@ -221,6 +229,27 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     };
   }
 
+  if (input.transaction_type === "CONSUME") {
+    // Already closed — by a RETURN weighed at 0, or by an earlier consume. The flag only
+    // ever asserts "this roll is finished", which is already true, so it is accepted as a
+    // no-op instead of a 409: a phone that queued both a zero return and a consume for the
+    // same empty core must not have its whole flush halted by the second one.
+    if (roll.status === "CONSUMED") {
+      return { delta: 0, weight: 0, used_weight: 0, roll_weight_after: 0, from_location: roll.location };
+    }
+    // Whatever was still on it is what the line used up. A roll that was never weighed
+    // consumes nothing measurable, but still stops being stock.
+    const used = roll.remaining_weight ?? 0;
+    const from = roll.location;
+    // An ISSUED roll already dropped out of on-hand when it went out, so finishing it
+    // changes no total — it is the roll that was IN_STOCK whose weight leaves here.
+    const delta = roll.status === "ISSUED" ? 0 : -used;
+    roll.remaining_weight = 0;
+    roll.status = "CONSUMED";
+    await roll.save();
+    return { delta, weight: used, used_weight: used, roll_weight_after: 0, from_location: from };
+  }
+
   if (input.transaction_type === "IN") {
     const added = input.weight!;
     const current = roll.remaining_weight ?? 0;
@@ -249,6 +278,14 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
   return { delta, weight: Math.abs(delta), roll_weight_after: roll.remaining_weight };
 }
 
+/** The material a roll belongs to, for a movement that did not name one. */
+async function materialOfRoll(rollId?: string): Promise<string | undefined> {
+  if (!rollId) return undefined;
+  const roll = await MaterialRoll.findById(rollId).select("material_id").lean();
+  if (!roll) throw ApiError.notFound("That roll no longer exists");
+  return roll.material_id.toString();
+}
+
 export const stockService = {
   /** The only write path for stock levels: records the movement, moves the roll, and
    *  refreshes the material's summary. */
@@ -264,7 +301,15 @@ export const stockService = {
       return toResponse(replayed as unknown as PopulatedTransaction);
     }
 
-    const material = await RawMaterial.findById(input.material_id).select("status name").lean();
+    // A CONSUME carries only the roll — the material comes off the roll itself. Resolved
+    // before anything else reads it: `new Types.ObjectId(undefined)` would quietly MINT a
+    // fresh id and refresh the wrong material's summary.
+    const materialIdString = input.material_id ?? (await materialOfRoll(input.roll_id));
+    if (!materialIdString) {
+      throw ApiError.badRequest("material_id is required — or send roll_id so it can be read off the roll");
+    }
+
+    const material = await RawMaterial.findById(materialIdString).select("status name").lean();
     if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
 
     // Retired masters block stock coming IN, never stock going OUT: a material taken out
@@ -284,7 +329,7 @@ export const stockService = {
       }
     }
 
-    const materialId = new Types.ObjectId(input.material_id);
+    const materialId = new Types.ObjectId(materialIdString);
     const rollId = input.roll_id ? new Types.ObjectId(input.roll_id) : undefined;
 
     const effect = rollId
@@ -319,6 +364,7 @@ export const stockService = {
         from_location: effect.from_location,
         to_location: effect.to_location,
         remarks: input.remarks,
+        remark_code: input.remark_code,
         photo_paths: input.photo_paths?.length ? input.photo_paths : undefined,
         client_id: input.client_id,
         created_by: new Types.ObjectId(actingUserId),

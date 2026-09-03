@@ -8,7 +8,7 @@ import { Schema, model, Types } from "mongoose";
  *              operator states what was used and the roll's weight drops by it.
  * ADJUSTMENT - a correction from a physical count.
  */
-export const TRANSACTION_TYPES = ["IN", "OUT", "RETURN", "ADJUSTMENT"] as const;
+export const TRANSACTION_TYPES = ["IN", "OUT", "RETURN", "ADJUSTMENT", "CONSUME"] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 export interface IStockTransaction {
@@ -38,6 +38,10 @@ export interface IStockTransaction {
   from_location?: string;
   to_location?: string;
   remarks?: string;
+  /** A code from the remark master ("MISPRINT"), when the operator picked one rather than
+   *  only typing. Stored as the code, not a ref: the phone fills it offline from its
+   *  cached list, exactly like `location`. Free-text `remarks` still stands on its own. */
+  remark_code?: string;
   /** GCS object paths for photos taken at the moment of the movement — the roll as it
    *  left, and the roll as it came back. Evidence for a disputed weight, so they hang off
    *  the movement rather than the roll: the roll only ever shows its latest state. */
@@ -72,6 +76,7 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     from_location: { type: String, trim: true },
     to_location: { type: String, trim: true },
     remarks: { type: String, trim: true },
+    remark_code: { type: String, uppercase: true, trim: true },
     // Paths, not URLs — a stored URL expires, a path does not. Read URLs are signed per
     // response, same as the roll's registration photos.
     photo_paths: { type: [String], default: undefined },

@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Royal Touch — Offline Sync (Mobile)",
-    "description": "Every endpoint the mobile app calls for offline sync, in the order it calls them.\n\n**Point base_url at a THROWAWAY database** — these requests register rolls and move stock. Start the API with `MONGODB_DB_NAME=Data_synctest npm run dev`.\n\nSet `base_url`, run '1. Login' — the token is stored and reused by every request.\n\n── There are no dedicated sync endpoints ──\nOffline writes replay against the ordinary routes. Only two fields were added:\n  • `client_id` — a UUID the DEVICE mints per queued write, making it idempotent\n  • `updated_after` — an ISO date, fetching only what changed\n\n── When the app calls what ──\n  on login / foreground   2, 3, 4     cache materials, vendors (+ paper codes), locations\n  captured offline        6, 7, 8     queued in the outbox\n  photos                  5, then 9   upload FIRST, records carry the paths\n  on reconnect            11, 12      delta pull, per-collection checkpoints\n  the flush               13          or 6/7/8 one at a time\n  screens                 10, 14      roll history, on-hand totals\n\n── Four rules the flush must follow ──\n  1. Drain the outbox strictly FIFO, ONE request at a time. Never in parallel: remaining_weight is derived from the order movements are applied in.\n  2. Halt on the first 400 / 403 / 409 and show the server's `error` text verbatim. Do not skip a failed item and continue — later items may depend on it.\n  3. Retry 5xx / 429 / timeouts forever with backoff, reusing the SAME client_id. A fresh UUID on retry creates a second roll. This is the single most important rule here.\n  4. A 401 pauses and re-logins. It NEVER clears the queue.\n\n── What the client must not assume ──\n  • royal_touche_code is YOURS to send, off the vendor's paper list. Not unique.\n  • remaining_weight and status are server-owned. Never PATCH them.\n  • Usage is derived from the scale reading, never sent.\n  • Do not ask for a return location — it comes from the roll's own OUT row.\n  • Do not post an IN after registering a roll. Registration writes it.\n  • `description` is server-rendered. Show it; do not rebuild it.\n\nCompanion docs: offline-sync-mobile.md (SQLite schema, outbox, flush algorithm) and backend-flow-and-logic.md (roll lifecycle, weight arithmetic, errors).",
+    "name": "Royal Touche — Mobile App",
+    "description": "Every endpoint the mobile app calls for offline sync, in the order it calls them.\n\n**Point base_url at a THROWAWAY database** — these requests register rolls and move stock. Start the API with `MONGODB_DB_NAME=Data_synctest npm run dev`.\n\nSet `base_url`, run '1. Login' — the token is stored and reused by every request.\n\n── This is the ONLY collection the app needs ──\nEvery request the mobile app makes is here. The panel's endpoints (documents, GRN, vouchers, users, export) are NOT part of the app's surface — they live in royal-touche-admin.postman_collection.json.\n\n── There are no dedicated sync endpoints ──\nOffline writes replay against the ordinary routes. Only two fields were added:\n  • `client_id` — a UUID the DEVICE mints per queued write, making it idempotent\n  • `updated_after` — an ISO date, fetching only what changed\n\n── When the app calls what ──\n  on login / foreground  2, 3, 4, 5  cache materials, vendors (+ paper codes), locations, remarks\n  captured offline       7, 8, 9, 10 queued in the outbox\n  photos                 6, then 11  upload FIRST, records carry the paths\n  on reconnect           16, 17      delta pull, per-collection checkpoints\n  the flush              18          or 7-10 one at a time\n  screens                15, 19      roll history, on-hand totals\n\n── Four rules the flush must follow ──\n  1. Drain the outbox strictly FIFO, ONE request at a time. Never in parallel: remaining_weight is derived from the order movements are applied in.\n  2. Halt on the first 400 / 403 / 409 and show the server's `error` text verbatim. Do not skip a failed item and continue — later items may depend on it.\n  3. Retry 5xx / 429 / timeouts forever with backoff, reusing the SAME client_id. A fresh UUID on retry creates a second roll. This is the single most important rule here.\n  4. A 401 pauses and re-logins. It NEVER clears the queue.\n\n── What the client must not assume ──\n  • royal_touche_code is YOURS to send, off the vendor's paper list. Not unique.\n  • remaining_weight and status are server-owned. Never PATCH them.\n  • Usage is derived from the scale reading, never sent.\n  • Do not ask for a return location — it comes from the roll's own OUT row.\n  • Do not post an IN after registering a roll. Registration writes it.\n  • `description` is server-rendered. Show it; do not rebuild it.\n\nCompanion docs: offline-sync-mobile.md (SQLite schema, outbox, flush algorithm) and backend-flow-and-logic.md (roll lifecycle, weight arithmetic, errors).\n\n── Added since the first draft ──\n  • `remarks` master — cache it, send `remark_code` on a roll or a movement (both optional)\n  • vendors and supplier codes can be ADDED from the phone, online or through the batch\n  • the batch applies `vendor` and `supplier_code` items BEFORE rolls and movements, whatever order you queued them in\n  • `vendor_client_id` on a batched roll points at a supplier created in the same flush; `vendor_id` is optional there for exactly that reason\n  • `is_consumed: true` on a movement closes a roll with no other field — see request 10",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -113,6 +113,38 @@
     },
     {
       "key": "movements_checkpoint",
+      "value": ""
+    },
+    {
+      "key": "cid_vendor",
+      "value": ""
+    },
+    {
+      "key": "new_vendor_id",
+      "value": ""
+    },
+    {
+      "key": "remark_code",
+      "value": ""
+    },
+    {
+      "key": "b_vendor",
+      "value": ""
+    },
+    {
+      "key": "b_codes",
+      "value": ""
+    },
+    {
+      "key": "b_vendor_code",
+      "value": ""
+    },
+    {
+      "key": "cid_consume",
+      "value": ""
+    },
+    {
+      "key": "b_consume",
       "value": ""
     }
   ],
@@ -290,7 +322,45 @@
       ]
     },
     {
-      "name": "5. Upload a photo",
+      "name": "5. Cache remarks",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/remarks?status=active",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "remarks"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "active",
+              "description": "Skip retired ones"
+            }
+          ]
+        },
+        "description": "The remark picker: COLOR-VAR, MISPRINT, DESIGN-MISMATCH.\n\nCache it like materials, vendors and locations. A roll or a movement carries the CODE (`remark_code`), not an id — so the phone can fill it with no signal — plus optional free-text `remarks` for anything the code doesn't cover."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const rows = pm.response.json();",
+              "pm.test('remarks cached', () => pm.expect(rows).to.be.an('array'));",
+              "if (rows[0]) pm.collectionVariables.set('remark_code', rows[0].remark_code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Upload a photo",
       "request": {
         "method": "POST",
         "header": [],
@@ -338,7 +408,7 @@
       ]
     },
     {
-      "name": "6. Register roll (queued offline)",
+      "name": "7. Register roll (queued offline)",
       "request": {
         "method": "POST",
         "header": [
@@ -411,7 +481,7 @@
       ]
     },
     {
-      "name": "7. Roll OUT (queued offline)",
+      "name": "8. Roll OUT (queued offline)",
       "request": {
         "method": "POST",
         "header": [
@@ -473,7 +543,7 @@
       ]
     },
     {
-      "name": "8. Roll RETURN (queued offline)",
+      "name": "9. Roll RETURN (queued offline)",
       "request": {
         "method": "POST",
         "header": [
@@ -536,7 +606,66 @@
       ]
     },
     {
-      "name": "9. Attach a photo to an existing roll",
+      "name": "10. Roll consumed (queued offline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/movements",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stock",
+            "movements"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          },
+          "raw": "{\n  \"roll_id\": \"{{roll_id}}\",\n  \"is_consumed\": true,\n  \"client_id\": \"{{cid_consume}}\"\n}"
+        },
+        "description": "When the operator sees an empty core, send THIS and nothing else: the roll, the flag, and a client_id. No scale reading, no location, no material_id.\n\nThe server:\n  • records one ledger row of type CONSUME, with used_weight = whatever was left on the roll\n  • sets remaining_weight to 0 and status to CONSUMED\n  • reads material_id off the roll — you do not send it\n  • refreshes the material's on-hand total\n\nWorks from either state. A roll still IN_STOCK loses its weight from on-hand here; a roll that is ISSUED (out on a machine) already left on-hand at the OUT, so the total does not move again — only the roll closes.\n\nREJECTED: weight, new_weight, returned_weight. A consumed roll has nothing to measure — if you have a scale reading, it is a RETURN, not a consume.\n\nReplaying it is safe (client_id), and so is consuming a roll that is ALREADY consumed — that answers 200 with a zero-weight row, not an error. So a queued RETURN of 0 followed by a consume for the same empty core is fine: the return closes the roll, the consume confirms it and changes nothing. Nothing in this path can halt a flush.\n\nOFFLINE: queue it as an ordinary `movement` item in the batch (18) with the same body. Use roll_client_id instead of roll_id for a roll registered in the same flush."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('cid_consume')) {",
+              "  pm.collectionVariables.set('cid_consume', pm.variables.replaceIn('{{$guid}}'));",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('recorded as a CONSUME', () => pm.expect(b.transaction_type).to.eql('CONSUME'));",
+              "pm.test('the roll is closed', () => pm.expect(b.roll_weight_after).to.eql(0));",
+              "// Run it a second time: same 200, weight 0 — consuming a consumed roll is a no-op."
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "11. Attach a photo to an existing roll",
       "request": {
         "method": "PATCH",
         "header": [
@@ -580,7 +709,124 @@
       ]
     },
     {
-      "name": "10. Roll history",
+      "name": "12. Create vendor",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/vendors",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "vendors"
+          ]
+        },
+        "description": "Only when there is signal. OFFLINE, queue this as a `vendor` item in the batch (request 18) instead — the batch applies master data before the rolls, so a roll naming this supplier never fails with 'vendor not found'.\n\n`client_id` makes it idempotent: re-send it and you get the same vendor back, not a second one.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"vendor_code\": \"PHONE-CO\",\n  \"name\": \"Supplier added on site\",\n  \"client_id\": \"{{cid_vendor}}\",\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"supplier_code_number\": \"AP 126640 SULAWEZI\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('cid_vendor')) {",
+              "  pm.collectionVariables.set('cid_vendor', pm.variables.replaceIn('{{$guid}}'));",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const b = pm.response.json();",
+              "if (b.id) pm.collectionVariables.set('new_vendor_id', b.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Add supplier codes",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/vendors/{{new_vendor_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "vendors",
+            "{{new_vendor_id}}"
+          ]
+        },
+        "description": "⚠️ A PATCH REPLACES the whole papers array. Send the vendor's existing rows plus the new ones, or use the batch's `supplier_code` item instead — that one MERGES by code and is safe to replay.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"found_in\": \"1.00mm\"\n    },\n    {\n      \"royal_touche_code\": \"641\",\n      \"found_in\": \"1.25mm\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "14. OCR roll label",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/ocr/roll-label",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ocr",
+            "roll-label"
+          ]
+        },
+        "description": "Reads a photo of the roll's label and hands the values back for the operator to CONFIRM. Nothing is stored — this is a typing aid, not a write. Needs signal, so the registration form must work without it.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "photo",
+              "type": "file",
+              "src": []
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "15. Roll history",
       "request": {
         "method": "GET",
         "header": [],
@@ -632,7 +878,7 @@
       ]
     },
     {
-      "name": "11. Pull rolls changed since checkpoint",
+      "name": "16. Pull rolls changed since checkpoint",
       "request": {
         "method": "GET",
         "header": [],
@@ -691,7 +937,7 @@
       ]
     },
     {
-      "name": "12. Pull movements changed since checkpoint",
+      "name": "17. Pull movements changed since checkpoint",
       "request": {
         "method": "GET",
         "header": [],
@@ -746,7 +992,7 @@
       ]
     },
     {
-      "name": "13. Batch flush",
+      "name": "18. Batch flush",
       "request": {
         "method": "POST",
         "header": [
@@ -765,10 +1011,10 @@
             "batch"
           ]
         },
-        "description": "The whole outbox in one request. Accepts ONE item as happily as fifty, so the app can use it for every flush and never need a second code path.\n\n  - max 50 items; send the rest in the next call\n  - every item keeps its OWN client_id, REQUIRED here (optional on the single-item routes). The batch itself has no id: a batch-level id could not describe '5 of 8 written', and the retry would be told the work was done while three rolls had never moved\n  - items run in ARRAY ORDER, one at a time, through the same service code the single-item endpoints use\n  - roll_client_id points a movement at a roll registered earlier in the same batch, which has no server id yet. Omit it when body.roll_id is already known\n  - enqueue a whole batch in ONE SQLite transaction, so a crash mid-enqueue cannot leave a movement queued without its roll\n\nRESPONSE IS ALWAYS 200, even when items fail — a batch is not a transaction, and items already written stay written:\n\n  { applied, failed, skipped, resume_from,\n    results: [ { index, client_id, type, status, data,\n                 code, reason, error, fields, detail } ] }\n\nOn a failed item:\n  reason  -> BRANCH ON THIS. One of: validation | duplicate | conflict |\n             not_found | forbidden | server_error. Stable; the `error` wording\n             will change, so never match on prose\n  error   -> show to the operator VERBATIM\n  code    -> the status this item would have returned on its own endpoint\n  fields  -> validation only: which inputs to highlight\n  detail  -> server_error only: the raw cause, for your crash log. NEVER display\n\nserver_error is the ONLY reason where retrying the item unchanged is correct. Every other reason needs a person or a cache refresh first — which is why the flush halts rather than skipping ahead.\n\n  status 'ok'      -> mark that outbox row sent, use `data` as the response\n  status 'failed'  -> branch on `reason`, show `error`, highlight `fields`\n  status 'skipped' -> untouched, still pending, leave the row alone\n  resume_from      -> index to retry from once the failure is resolved; null when everything applied\n\nResending the whole batch is also safe: applied items come back as replays.",
+        "description": "The whole outbox in one request. Accepts ONE item as happily as fifty, so the app can use it for every flush and never need a second code path.\n\n  - max 50 items; send the rest in the next call\n  - every item keeps its OWN client_id, REQUIRED here (optional on the single-item routes). The batch itself has no id: a batch-level id could not describe '5 of 8 written', and the retry would be told the work was done while three rolls had never moved\n  - MASTER DATA RUNS FIRST. 'vendor' and 'supplier_code' items are applied before every roll and movement in the batch, whatever order you queued them in — so a roll naming a supplier added offline never fails with 'vendor not found'. Rolls and movements keep ARRAY ORDER among themselves\n  - items run one at a time, through the same service code the single-item endpoints use\n  - vendor_client_id points a roll (or a supplier_code item) at a vendor added earlier in this batch, or in an earlier flush — the device's own UUID stays the handle until it learns the server id. Omit it when vendor_id is known. On a batched roll, vendor_id is optional for exactly this reason; send one or the other\n  - a 'supplier_code' item MERGES papers by code, so replaying it adds nothing twice. A paper is the same paper when its royal_touche_code matches, or its delta_code when it has no RT code\n  - roll_client_id points a movement at a roll registered earlier in the same batch, which has no server id yet. Omit it when body.roll_id is already known\n  - enqueue a whole batch in ONE SQLite transaction, so a crash mid-enqueue cannot leave a movement queued without its roll\n\nRESPONSE IS ALWAYS 200, even when items fail — a batch is not a transaction, and items already written stay written:\n\n  { applied, failed, skipped, resume_from,\n    results: [ { index, client_id, type, status, data,\n                 code, reason, error, fields, detail } ] }\n\nOn a failed item:\n  reason  -> BRANCH ON THIS. One of: validation | duplicate | conflict |\n             not_found | forbidden | server_error. Stable; the `error` wording\n             will change, so never match on prose\n  error   -> show to the operator VERBATIM\n  code    -> the status this item would have returned on its own endpoint\n  fields  -> validation only: which inputs to highlight\n  detail  -> server_error only: the raw cause, for your crash log. NEVER display\n\nserver_error is the ONLY reason where retrying the item unchanged is correct. Every other reason needs a person or a cache refresh first — which is why the flush halts rather than skipping ahead.\n\n  status 'ok'      -> mark that outbox row sent, use `data` as the response\n  status 'failed'  -> branch on `reason`, show `error`, highlight `fields`\n  status 'skipped' -> untouched, still pending, leave the row alone\n  resume_from      -> index to retry from once the failure is resolved; null when everything applied. It is the first index that was NOT written, which with master-data reordering may sit before the item that actually failed\n\nResending the whole batch is also safe: applied items come back as replays.\n\nThe example body is one full offline shift, in queue order: a supplier added on site, its paper code, a roll received from it, the roll issued out, returned part-used, then marked finished with the `is_consumed` flag. Every item carries its OWN client_id — reusing one (a copy-paste of the previous item is the usual cause) is rejected outright with 'Every item needs its own client_id', because the second item would otherwise be read as a replay of the first and reported as applied while never running.",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"items\": [\n    {\n      \"type\": \"roll\",\n      \"client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"roll_number\": \"{{b_roll_number}}\",\n        \"royal_touche_code\": \"{{royal_touche_code}}\",\n        \"material_id\": \"{{material_id}}\",\n        \"vendor_id\": \"{{vendor_id}}\",\n        \"weight\": 250,\n        \"gsm\": 90,\n        \"width\": 1200,\n        \"unit\": \"kg\",\n        \"location\": \"{{location}}\",\n        \"date\": \"2026-08-27\"\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_out}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"OUT\",\n        \"material_id\": \"{{material_id}}\",\n        \"location\": \"Machine 3\",\n        \"issued_to\": \"Ramesh / Shift A\"\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_ret}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"RETURN\",\n        \"material_id\": \"{{material_id}}\",\n        \"returned_weight\": 180\n      }\n    }\n  ]\n}",
+          "raw": "{\n  \"items\": [\n    {\n      \"type\": \"vendor\",\n      \"client_id\": \"{{b_vendor}}\",\n      \"body\": {\n        \"vendor_code\": \"{{b_vendor_code}}\",\n        \"name\": \"New Co Papers\"\n      }\n    },\n    {\n      \"type\": \"supplier_code\",\n      \"client_id\": \"{{b_codes}}\",\n      \"body\": {\n        \"vendor_client_id\": \"{{b_vendor}}\",\n        \"papers\": [\n          {\n            \"royal_touche_code\": \"639\",\n            \"supplier_code_number\": \"AP 126640 SULAWEZI\",\n            \"found_in\": \"1.00mm\"\n          }\n        ]\n      }\n    },\n    {\n      \"type\": \"roll\",\n      \"client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"roll_number\": \"{{b_roll_number}}\",\n        \"royal_touche_code\": \"{{royal_touche_code}}\",\n        \"material_id\": \"{{material_id}}\",\n        \"weight\": 250,\n        \"gsm\": 90,\n        \"width\": 1200,\n        \"unit\": \"kg\",\n        \"location\": \"{{location}}\",\n        \"date\": \"2026-08-27\"\n      },\n      \"vendor_client_id\": \"{{b_vendor}}\"\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_out}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"OUT\",\n        \"material_id\": \"{{material_id}}\",\n        \"location\": \"Machine 3\",\n        \"issued_to\": \"Ramesh / Shift A\"\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_ret}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"transaction_type\": \"RETURN\",\n        \"material_id\": \"{{material_id}}\",\n        \"returned_weight\": 180\n      }\n    },\n    {\n      \"type\": \"movement\",\n      \"client_id\": \"{{b_consume}}\",\n      \"roll_client_id\": \"{{b_roll}}\",\n      \"body\": {\n        \"is_consumed\": true\n      }\n    }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -784,9 +1030,13 @@
             "type": "text/javascript",
             "exec": [
               "if (!pm.collectionVariables.get('b_roll')) {",
+              "  pm.collectionVariables.set('b_vendor', pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_codes',  pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_vendor_code', 'NEWCO-' + Math.floor(Math.random()*90000+10000));",
               "  pm.collectionVariables.set('b_roll', pm.variables.replaceIn('{{$guid}}'));",
               "  pm.collectionVariables.set('b_out',  pm.variables.replaceIn('{{$guid}}'));",
               "  pm.collectionVariables.set('b_ret',  pm.variables.replaceIn('{{$guid}}'));",
+              "  pm.collectionVariables.set('b_consume', pm.variables.replaceIn('{{$guid}}'));",
               "  pm.collectionVariables.set('b_roll_number', 'BT-' + Math.floor(Math.random()*90000+10000));",
               "}"
             ]
@@ -799,20 +1049,35 @@
             "exec": [
               "pm.test('200 — a batch is NEVER a 4xx', () => pm.response.to.have.status(200));",
               "const b = pm.response.json();",
-              "pm.test('all three applied', () => pm.expect(b.applied).to.eql(3));",
+              "// Results come back in the order they were SENT, whatever order the server ran them in —",
+              "// master data goes first internally, so find rows by type rather than by index.",
+              "const at = (i) => b.results[i];",
+              "const roll = at(2).data, out = at(3).data, ret = at(4).data, consumed = at(5).data;",
+              "",
+              "pm.test('all six applied', () => pm.expect(b.applied).to.eql(6));",
               "pm.test('nothing to resume from', () => pm.expect(b.resume_from).to.eql(null));",
+              "pm.test('the vendor was created before the roll that names it', () =>",
+              "  pm.expect(roll.vendor_id.id).to.eql(at(0).data.id));",
+              "pm.test('the supplier code landed on that vendor', () =>",
+              "  pm.expect(at(1).data.papers.map(p => p.royal_touche_code)).to.include('639'));",
               "pm.test('the movements bound to the roll from the same batch', () =>",
-              "  pm.expect(b.results[1].data.roll_id.id).to.eql(b.results[0].data.id));",
+              "  pm.expect(out.roll_id.id).to.eql(roll.id));",
               "pm.test('usage derived inside the batch too', () =>",
-              "  pm.expect(b.results[2].data.used_weight).to.eql(70));",
-              "// Send this request again: all three come back as replays, nothing is duplicated."
+              "  pm.expect(ret.used_weight).to.eql(70));",
+              "pm.test('the consume closed the roll', () => {",
+              "  pm.expect(consumed.transaction_type).to.eql('CONSUME');",
+              "  pm.expect(consumed.used_weight).to.eql(180);",
+              "  pm.expect(consumed.roll_weight_after).to.eql(0);",
+              "});",
+              "// Send this request again: every item comes back as a replay, nothing is duplicated.",
+              "// To write a genuinely new set, clear b_roll (and the other b_* vars) first."
             ]
           }
         }
       ]
     },
     {
-      "name": "14. On-hand totals",
+      "name": "19. On-hand totals",
       "request": {
         "method": "GET",
         "header": [],

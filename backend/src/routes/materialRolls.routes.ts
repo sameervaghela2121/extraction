@@ -2,7 +2,7 @@ import { Router } from "express";
 import { materialRollsController } from "../controllers/materialRolls.controller";
 import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/auth.middleware";
-import { requireRole } from "../middleware/rbac.middleware";
+import { requireGodownWrite } from "../middleware/rbac.middleware";
 import { validate } from "../middleware/validate.middleware";
 import {
   createRollSchema,
@@ -12,7 +12,7 @@ import {
 
 const router = Router();
 
-const canWrite = requireRole("admin", "store_manager");
+const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
 

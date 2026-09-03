@@ -9,7 +9,7 @@ const contactSchema = z.object({
 
 // One row of the Royal Touche paper-codes sheet. royal_touche_code is what ends up on a
 // roll; the rest is what the operator reads to recognise the paper.
-const basePaperSchema = z
+export const basePaperSchema = z
   .object({
     royal_touche_code: z.string().trim().optional(),
     delta_code: z.string().trim().optional(),

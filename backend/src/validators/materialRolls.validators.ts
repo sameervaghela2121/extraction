@@ -31,6 +31,13 @@ export const createRollSchema = z.object({
     .string({ required_error: "Date is required" })
     .datetime({ offset: true })
     .or(z.string().date()),
+  // A code from the remark master, when the roll is worth flagging — a shade variation,
+  // a misprint. Not validated against the master: the phone picks it from its cached copy
+  // and `location` is stored the same way, as the code rather than a reference.
+  remark_code: z.string().trim().min(1).optional(),
+  // The note itself, when the code alone doesn't say enough. Both are optional and
+  // independent — a roll can carry either, both, or neither.
+  remarks: z.string().trim().optional(),
   // Not on the registration form: set by later flows, or read off the label when present.
   batch_no: z.string().trim().optional(),
   remaining_weight: z.number().nonnegative().optional(),

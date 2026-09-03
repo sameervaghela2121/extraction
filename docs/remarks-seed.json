@@ -1,0 +1,5 @@
+[
+  { "remark_code": "COLOR-VAR", "label": "Color variant / shade variation", "sort_order": 1 },
+  { "remark_code": "MISPRINT", "label": "Misprint", "sort_order": 2 },
+  { "remark_code": "DESIGN-MISMATCH", "label": "Design mismatch (wrong design)", "sort_order": 3 }
+]

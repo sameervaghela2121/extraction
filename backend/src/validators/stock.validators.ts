@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TRANSACTION_TYPES } from "../models/StockTransaction.model";
+import { TRANSACTION_TYPES, type TransactionType } from "../models/StockTransaction.model";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
 // Only paths this API minted: "rolls/YYYY/MM/<uuid>.<ext>". Rejecting anything else stops
@@ -14,9 +14,23 @@ const MAX_MOVEMENT_PHOTOS = 4;
 
 export const movementFieldsSchema = z
   .object({
-    transaction_type: z.enum(TRANSACTION_TYPES),
+    // Optional only so `is_consumed` can stand in for it — the transform below fills it,
+    // and the rules that follow reject a movement that named neither.
+    transaction_type: z.enum(TRANSACTION_TYPES).optional(),
+    /**
+     * The phone's shorthand for "this roll is finished".
+     *
+     * A roll running out is the one movement with nothing to measure: no scale reading, no
+     * destination, no corrected figure — the operator just sees an empty core. So the app
+     * sends this flag alone and the server works out the rest, rather than making it fake a
+     * RETURN of 0 or an ADJUSTMENT to 0. It becomes transaction_type CONSUME below, so the
+     * ledger still carries one honest row for it.
+     */
+    is_consumed: z.literal(true).optional(),
     transaction_date: z.string().datetime({ offset: true }).or(z.string().date()).optional(),
-    material_id: objectId,
+    // Optional for CONSUME only, where it is read off the roll — the app marking a roll
+    // finished should not have to remember which material it was.
+    material_id: objectId.optional(),
     roll_id: objectId.optional(),
     vendor_id: objectId.optional(),
     // Weight is the stock figure everywhere below; a roll's `quantity` (length/pieces)
@@ -31,6 +45,8 @@ export const movementFieldsSchema = z
     location: z.string().trim().min(1).optional(),
     issued_to: z.string().trim().optional(),
     remarks: z.string().trim().optional(),
+    // A code from the remark master, alongside (not instead of) the free text.
+    remark_code: z.string().trim().min(1).optional(),
     // OUT/RETURN: photos of the roll taken as it leaves and as it comes back. GCS object
     // paths returned by POST /media/upload — not URLs, and not raw files.
     photo_paths: z.array(objectPath).max(MAX_MOVEMENT_PHOTOS).optional(),
@@ -45,7 +61,45 @@ export const movementFieldsSchema = z
  * itself so the batch endpoint can validate an item whose roll_id is not known yet — it
  * arrives as roll_client_id and is resolved server-side, then checked against this.
  */
-export const recordMovementSchema = movementFieldsSchema.superRefine((v, ctx) => {
+export const recordMovementSchema = movementFieldsSchema
+  // Normalise the shorthand before any rule sees it, so the service only ever handles one
+  // shape: a transaction_type. req.body is replaced with this output (see validate()).
+  .transform((v) => (v.is_consumed && !v.transaction_type ? { ...v, transaction_type: "CONSUME" as const } : v))
+  .superRefine((v, ctx) => {
+    if (!v.transaction_type) {
+      ctx.addIssue({
+        code: "custom",
+        message: "transaction_type is required (or send is_consumed: true)",
+        path: ["transaction_type"],
+      });
+      return;
+    }
+
+    // CONSUME is the flag path: the roll is empty, and there is nothing to weigh or place.
+    if (v.transaction_type === "CONSUME") {
+      if (!v.roll_id) {
+        ctx.addIssue({ code: "custom", message: "CONSUME requires roll_id", path: ["roll_id"] });
+      }
+      for (const [field, label] of [
+        ["weight", "weight"],
+        ["new_weight", "new_weight"],
+        ["returned_weight", "returned_weight"],
+      ] as const) {
+        if (v[field] !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `A consumed roll has nothing left to measure — drop ${label}`,
+            path: [field],
+          });
+        }
+      }
+      return;
+    }
+
+    if (!v.material_id) {
+      ctx.addIssue({ code: "custom", message: "material_id is required", path: ["material_id"] });
+    }
+
     // A whole roll goes out to a place; nothing is consumed yet, so no quantity.
     if (v.transaction_type === "OUT") {
       if (!v.roll_id) {
@@ -102,7 +156,10 @@ export const recordMovementSchema = movementFieldsSchema.superRefine((v, ctx) =>
     if (v.weight === undefined) {
       ctx.addIssue({ code: "custom", message: "weight is required for IN", path: ["weight"] });
     }
-  });
+  })
+  // transaction_type is optional on the object only so `is_consumed` can supply it; the
+  // rule above rejects a movement that has neither, so by here it is always set.
+  .transform((v) => ({ ...v, transaction_type: v.transaction_type as TransactionType }));
 
 export const listMovementsQuerySchema = z.object({
   material_id: objectId.optional(),

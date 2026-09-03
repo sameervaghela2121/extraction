@@ -1,6 +1,14 @@
 import { Schema, model, Types } from "mongoose";
 
-export const USER_ROLES = ["staff", "admin", "store_manager"] as const;
+// godown_supervisor uses both the admin panel and the mobile app; godown_operator is
+// app-only (the web login refuses it, same as store_manager).
+export const USER_ROLES = [
+  "staff",
+  "admin",
+  "store_manager",
+  "godown_supervisor",
+  "godown_operator",
+] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = "invited" | "active" | "suspended";
 

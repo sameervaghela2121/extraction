@@ -36,6 +36,13 @@ export interface IMaterialRoll {
   stitched_barcode_photo_path?: string;
   side1_photo_path?: string;
   side2_photo_path?: string;
+  /** A code from the remark master ("COLOR-VAR"), noted when the roll was received. Same
+   *  shape as the movement's: the code itself, filled from the device's cached list. */
+  remark_code?: string;
+  /** Whatever the picked code doesn't cover, in the operator's own words. Stands beside
+   *  remark_code rather than replacing it: the code is what reports group by, the text is
+   *  what the next person actually reads. */
+  remarks?: string;
   /** The date the roll was received. */
   date: Date;
   status: RollStatus;
@@ -81,6 +88,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     stitched_barcode_photo_path: { type: String, trim: true },
     side1_photo_path: { type: String, trim: true },
     side2_photo_path: { type: String, trim: true },
+    remark_code: { type: String, uppercase: true, trim: true },
+    remarks: { type: String, trim: true },
     date: { type: Date, required: true },
     status: { type: String, enum: [...ROLL_STATUSES], default: "IN_STOCK", index: true },
     client_id: { type: String, trim: true },

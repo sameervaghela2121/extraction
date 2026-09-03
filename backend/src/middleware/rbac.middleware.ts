@@ -16,3 +16,12 @@ export function requireRole(...roles: UserRole[]) {
 }
 
 export const requireAdmin = requireRole("admin");
+
+/** Godown work: maintain the inventory masters and post stock moves. Shared by the
+ *  vendors/locations/raw-materials/rolls/stock/sync routes so the list lives in one place. */
+export const requireGodownWrite = requireRole(
+  "admin",
+  "store_manager",
+  "godown_supervisor",
+  "godown_operator",
+);
