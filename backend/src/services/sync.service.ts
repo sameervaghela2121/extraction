@@ -1,5 +1,6 @@
 import { ZodError, type z } from "zod";
 import { MaterialRoll } from "../models/MaterialRoll.model";
+import { Vendor } from "../models/Vendor.model";
 import { zodMessage } from "../middleware/validate.middleware";
 import { ApiError } from "../utils/ApiError";
 import { findReplay } from "../utils/idempotency";
@@ -8,6 +9,7 @@ import { recordMovementSchema } from "../validators/stock.validators";
 import type { syncBatchSchema } from "../validators/sync.validators";
 import { materialRollsService } from "./materialRolls.service";
 import { stockService } from "./stock.service";
+import { vendorsService } from "./vendors.service";
 
 /**
  * Batch flush: a device sends its whole outbox in one request instead of one call per item.
@@ -19,8 +21,9 @@ import { stockService } from "./stock.service";
  *
  * Two properties make a partial failure recoverable:
  *
- *  - Items run **in order, one at a time**. remaining_weight is derived from the order
- *    movements are applied in, so a batch is a queue, not a set.
+ *  - Items run **one at a time**, master data first and everything else in the order the
+ *    device queued it. remaining_weight is derived from the order movements are applied
+ *    in, so the roll/movement part of a batch is a queue, not a set.
  *  - Every item carries its **own** client_id. A batch-level id could not describe "5 of 8
  *    written" — the retry would be told the batch was already done while three rolls had
  *    never moved. Per-item ids make the retry trivial: the 5 come back as replays and the
@@ -116,26 +119,80 @@ function errorOf(
   };
 }
 
-async function runItem(
-  item: Item,
-  actingUserId: string,
-  rollIdsInBatch: Map<string, string>,
-): Promise<unknown> {
+/**
+ * Master data added on the device. These run before the rolls and movements in the same
+ * batch, whatever order they were queued in — a roll naming a supplier the phone invented
+ * offline must find that supplier already in the database, not a "vendor not found".
+ */
+const MASTER_TYPES = new Set<Item["type"]>(["vendor", "supplier_code"]);
+
+/** Server ids for things created earlier in this same flush, keyed by their client_id. */
+type BatchIds = {
+  rolls: Map<string, string>;
+  vendors: Map<string, string>;
+};
+
+/**
+ * Turn a device's client_id for a vendor into a server id.
+ *
+ * Looks in this batch first, then at what earlier flushes wrote: a vendor added last week
+ * and a vendor added two items ago are both things the device only knows by client_id.
+ */
+async function resolveVendorId(clientId: string, ids: BatchIds): Promise<string> {
+  const fromBatch = ids.vendors.get(clientId);
+  if (fromBatch) return fromBatch;
+
+  const earlier = await findReplay(Vendor, clientId);
+  if (!earlier) {
+    throw ApiError.badRequest(
+      "vendor_client_id does not match any vendor — send the vendor's own item before whatever uses it",
+    );
+  }
+  return earlier._id.toString();
+}
+
+async function runItem(item: Item, actingUserId: string, ids: BatchIds): Promise<unknown> {
+  if (item.type === "vendor") {
+    const vendor = await vendorsService.create({ ...item.body, client_id: item.client_id });
+    // Remembered so a roll or a supplier-code item later in this batch can point at a
+    // vendor that had no server id when the device queued it.
+    ids.vendors.set(item.client_id, vendor.id);
+    return vendor;
+  }
+
+  if (item.type === "supplier_code") {
+    const vendorId =
+      item.body.vendor_id ??
+      (item.body.vendor_client_id
+        ? await resolveVendorId(item.body.vendor_client_id, ids)
+        : undefined);
+    if (!vendorId) {
+      throw ApiError.badRequest("Send either vendor_id or vendor_client_id");
+    }
+    return vendorsService.addPapers(vendorId, item.body.papers);
+  }
+
   if (item.type === "roll") {
+    const vendorId =
+      item.body.vendor_id ??
+      (item.vendor_client_id ? await resolveVendorId(item.vendor_client_id, ids) : undefined);
+    if (!vendorId) {
+      throw ApiError.badRequest("Send either vendor_id or vendor_client_id on the roll");
+    }
     const roll = await materialRollsService.create(
-      { ...item.body, client_id: item.client_id },
+      { ...item.body, vendor_id: vendorId, client_id: item.client_id },
       actingUserId,
     );
     // Remembered so a movement later in this same batch can point at a roll that had no
     // server id when the device queued it.
-    rollIdsInBatch.set(item.client_id, roll.id);
+    ids.rolls.set(item.client_id, roll.id);
     return roll;
   }
 
   const body = { ...item.body, client_id: item.client_id };
 
   if (!body.roll_id && item.roll_client_id) {
-    const fromBatch = rollIdsInBatch.get(item.roll_client_id);
+    const fromBatch = ids.rolls.get(item.roll_client_id);
     if (fromBatch) {
       body.roll_id = fromBatch;
     } else {
@@ -165,10 +222,19 @@ export const syncService = {
    */
   async flush(input: BatchInput, actingUserId: string) {
     const results: ItemResult[] = [];
-    const rollIdsInBatch = new Map<string, string>();
+    const ids: BatchIds = { rolls: new Map(), vendors: new Map() };
     let halted = false;
 
-    for (const [index, item] of input.items.entries()) {
+    // Master data first, each group keeping the order the device queued it in. The index
+    // travels with the item so every result still names the position it arrived at — the
+    // device maps results back to its outbox by index, not by run order.
+    const numbered = input.items.map((item, index) => ({ item, index }));
+    const ordered = [
+      ...numbered.filter((e) => MASTER_TYPES.has(e.item.type)),
+      ...numbered.filter((e) => !MASTER_TYPES.has(e.item.type)),
+    ];
+
+    for (const { item, index } of ordered) {
       const base = { index, client_id: item.client_id, type: item.type };
 
       // Once one item fails, everything behind it is reported untouched rather than
@@ -181,21 +247,28 @@ export const syncService = {
       }
 
       try {
-        results.push({ ...base, status: "ok", data: await runItem(item, actingUserId, rollIdsInBatch) });
+        results.push({ ...base, status: "ok", data: await runItem(item, actingUserId, ids) });
       } catch (err) {
         results.push({ ...base, status: "failed", ...errorOf(err, item, index) });
         halted = true;
       }
     }
 
-    const applied = results.filter((r) => r.status === "ok").length;
+    // Back into the order the device sent, so it can walk its outbox alongside.
+    results.sort((a, b) => a.index - b.index);
+
+    // The index to resume from: the first item that did not get written. Everything before
+    // it is on the server, so the client can drop those outbox rows and retry from here
+    // once the failure is dealt with. Computed from the results rather than counted,
+    // because master data runs ahead of its position — a failure in it can leave earlier
+    // indexes untouched.
+    const firstUnwritten = results.find((r) => r.status !== "ok");
+
     return {
-      applied,
+      applied: results.filter((r) => r.status === "ok").length,
       failed: results.filter((r) => r.status === "failed").length,
       skipped: results.filter((r) => r.status === "skipped").length,
-      // The index to resume from. Everything before it is on the server; the client can
-      // drop those outbox rows and retry from here once the failure is dealt with.
-      resume_from: halted ? applied : null,
+      resume_from: halted ? (firstUnwritten?.index ?? null) : null,
       results,
     };
   },

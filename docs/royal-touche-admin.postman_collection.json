@@ -1,0 +1,2596 @@
+{
+  "info": {
+    "name": "Royal Touche — Admin Panel",
+    "description": "Every endpoint the web panel calls, grouped the way the panel is.\n\nSet `base_url`, `email` and `password`, then run **Auth → Login** — the token is stored and reused by every other request through collection-level bearer auth.\n\n── Who can call what ──\n  admin              everything\n  godown_supervisor  master data + rolls/barcodes only; the panel hides the rest\n  staff              GRN only\n  store_manager /\n  godown_operator    app-only accounts — the web login refuses them\n\n── Conventions ──\n  • every list of master data is unpaginated (pickers read it whole); documents, GRNs, vouchers, rolls and movements are paginated with page/pageSize\n  • DELETE on master data is a SOFT delete — status goes to inactive, and PATCH status back to 'active' restores it\n  • ids in `{{curly}}` are collection variables; fill them from a list response\n\nThe mobile app has its own collection: royal-touche-mobile.postman_collection.json. Do not use this one to test the phone — it does not carry the offline rules.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000/api"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "role",
+      "value": ""
+    },
+    {
+      "key": "vendor_id",
+      "value": ""
+    },
+    {
+      "key": "location_id",
+      "value": ""
+    },
+    {
+      "key": "material_id",
+      "value": ""
+    },
+    {
+      "key": "remark_id",
+      "value": ""
+    },
+    {
+      "key": "roll_id",
+      "value": ""
+    },
+    {
+      "key": "document_id",
+      "value": ""
+    },
+    {
+      "key": "invoice_id",
+      "value": ""
+    },
+    {
+      "key": "grn_id",
+      "value": ""
+    },
+    {
+      "key": "voucher_id",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "field_key",
+      "value": ""
+    },
+    {
+      "key": "object_path",
+      "value": ""
+    },
+    {
+      "key": "sync_log_id",
+      "value": ""
+    },
+    {
+      "key": "invite_token",
+      "value": ""
+    },
+    {
+      "key": "reset_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Login, token refresh, identity, and the invite / password-reset flows.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Stores accessToken, refreshToken and role as collection variables. Every other request reuses the token through the collection's bearer auth.\n\nThe panel signs in with an admin or godown_supervisor account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('token', b.accessToken);",
+                  "pm.collectionVariables.set('refresh_token', b.refreshToken);",
+                  "pm.collectionVariables.set('role', b.user.role);",
+                  "console.log('signed in as', b.user.email, '-', b.user.role);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Swap a refresh token for a new access token. A 401 anywhere else means call this, then retry the original request once.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "if (b.accessToken) pm.collectionVariables.set('token', b.accessToken);",
+                  "if (b.refreshToken) pm.collectionVariables.set('refresh_token', b.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The signed-in user: id, name, email, role."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh token. The access token stays valid until it expires.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/invite/{{invite_token}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "invite",
+                "{{invite_token}}",
+                "accept"
+              ]
+            },
+            "description": "The token comes from the invite email's link. Sets the password and signs the user in — except for app-only roles (store_manager, godown_operator), where the password is set but no web session starts.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"set-a-real-one\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "if (b.accessToken) pm.collectionVariables.set('token', b.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Always answers the same way whether or not the address exists — it must not reveal who has an account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Token from the reset email.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{reset_token}}\",\n  \"password\": \"set-a-real-one\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Master data",
+      "description": "Vendors (with their paper codes), godown locations, raw materials and remarks.\n\nAll four behave identically: read is open to any signed-in user (pickers need it), writes need admin / store_manager / godown_supervisor / godown_operator, and DELETE is a soft delete that sets status to inactive.",
+      "item": [
+        {
+          "name": "List vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors?q=&status=active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search by code or name"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active | inactive"
+                }
+              ]
+            },
+            "description": "The whole vendors master — no pagination, it is read into a picker."
+          },
+          "response": []
+        },
+        {
+          "name": "Get vendor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{{vendor_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{{vendor_id}}"
+              ]
+            },
+            "description": "One vendor, with its embedded paper codes."
+          },
+          "response": []
+        },
+        {
+          "name": "Create vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendors",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors"
+              ]
+            },
+            "description": "vendor_code is uppercased and must be unique. `papers` is the Royal Touche paper-codes sheet for this supplier — each row needs a royal_touche_code or a delta_code.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendor_code\": \"NEWCO\",\n  \"name\": \"New Co Papers\",\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"supplier_code_number\": \"AP 126640 SULAWEZI\",\n      \"found_in\": \"1.00mm\"\n    }\n  ],\n  \"contact\": {\n    \"person\": \"Mr. Shah\",\n    \"phone\": \"9876543210\"\n  },\n  \"gst_number\": \"24AAACR5055K1ZK\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update vendor (replaces papers)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendors/{{vendor_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{{vendor_id}}"
+              ]
+            },
+            "description": "A PATCH carrying `papers` REPLACES the whole array — the sheet is edited as a set and the rows have no id to merge on. Omit `papers` to leave it untouched.\n\n`contact` is the exception: it merges field by field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Co Papers Pvt Ltd\",\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"found_in\": \"1.00mm\"\n    },\n    {\n      \"delta_code\": \"D-114\",\n      \"is_common\": true\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate vendor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{{vendor_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{{vendor_id}}"
+              ]
+            },
+            "description": "Soft delete — sets status to inactive. Purchase history keeps pointing at it. PATCH status back to 'active' to restore."
+          },
+          "response": []
+        },
+        {
+          "name": "List locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations?q=&status=active&godown=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search by code or name"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active | inactive"
+                },
+                {
+                  "key": "godown",
+                  "value": "",
+                  "description": "Filter to one building"
+                }
+              ]
+            },
+            "description": "The whole locations master — no pagination, it is read into a picker."
+          },
+          "response": []
+        },
+        {
+          "name": "Create location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/locations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations"
+              ]
+            },
+            "description": "sort_order drives picker order — bays are walked in physical order, not alphabetical.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"A-1\",\n  \"name\": \"Godown A side 1\",\n  \"godown\": \"Godown A\",\n  \"sort_order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get location",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations/{{location_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "{{location_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Update location",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/locations/{{location_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "{{location_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Godown A side 1 (rack 2)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate location",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations/{{location_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "{{location_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "List raw materials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/raw-materials?q=&status=active&category=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "raw-materials"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search by code or name"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active | inactive"
+                },
+                {
+                  "key": "category",
+                  "value": "",
+                  "description": "Filter by category"
+                }
+              ]
+            },
+            "description": "The whole raw materials master — no pagination, it is read into a picker."
+          },
+          "response": []
+        },
+        {
+          "name": "Create raw material",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/raw-materials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "raw-materials"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"material_code\": \"BP-90\",\n  \"name\": \"Base paper 90 gsm\",\n  \"unit\": \"kg\",\n  \"category\": \"Base paper\",\n  \"gsm\": 90,\n  \"width_mm\": 1200,\n  \"reorder_level\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get raw material",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/raw-materials/{{material_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "raw-materials",
+                "{{material_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Update raw material",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/raw-materials/{{material_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "raw-materials",
+                "{{material_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reorder_level\": 750\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate raw material",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/raw-materials/{{material_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "raw-materials",
+                "{{material_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "List remarks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/remarks?q=&status=active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "remarks"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search by code or name"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active | inactive"
+                }
+              ]
+            },
+            "description": "The whole remarks master — no pagination, it is read into a picker."
+          },
+          "response": []
+        },
+        {
+          "name": "Create remark",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/remarks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "remarks"
+              ]
+            },
+            "description": "Fills the picker behind `remark_code` on a roll and on a stock movement. The free-text `remarks` field stays available alongside it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remark_code\": \"COLOR-VAR\",\n  \"label\": \"Color variant / shade variation\",\n  \"sort_order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get remark",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/remarks/{{remark_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "remarks",
+                "{{remark_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Update remark",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/remarks/{{remark_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "remarks",
+                "{{remark_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sort_order\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate remark",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/remarks/{{remark_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "remarks",
+                "{{remark_id}}"
+              ]
+            },
+            "description": "Soft delete. Rows that already recorded this code keep their meaning."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rolls & stock (read)",
+      "description": "Read-only in the panel. Rolls are registered and moved from the phone.",
+      "item": [
+        {
+          "name": "List rolls",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/material-rolls?q=&status=&material_id=&vendor_id=&location=&page=1&pageSize=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "material-rolls"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Roll number, RT code or batch"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "IN_STOCK | ISSUED | CONSUMED"
+                },
+                {
+                  "key": "material_id",
+                  "value": "",
+                  "description": "Filter by material"
+                },
+                {
+                  "key": "vendor_id",
+                  "value": "",
+                  "description": "Filter by vendor"
+                },
+                {
+                  "key": "location",
+                  "value": "",
+                  "description": "Filter by bay"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "25",
+                  "description": "max 200"
+                }
+              ]
+            },
+            "description": "Paginated. This is what the barcode generator lists to pick rolls from."
+          },
+          "response": []
+        },
+        {
+          "name": "Get roll",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/material-rolls/{{roll_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "material-rolls",
+                "{{roll_id}}"
+              ]
+            },
+            "description": "One roll, with signed URLs for its four registration photos."
+          },
+          "response": []
+        },
+        {
+          "name": "Correct a roll",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/material-rolls/{{roll_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "material-rolls",
+                "{{roll_id}}"
+              ]
+            },
+            "description": "Label details only. `remaining_weight` and `status` are REFUSED here — stock moves through the ledger, never by editing the roll.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remark_code\": \"COLOR-VAR\",\n  \"remarks\": \"Shade off on the outer 20 m\",\n  \"batch_no\": \"B-2291\",\n  \"location\": \"A-2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete roll",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/material-rolls/{{roll_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "material-rolls",
+                "{{roll_id}}"
+              ]
+            },
+            "description": "Removes a roll registered in error. Its ledger rows are what stock is derived from, so reach for a correcting ADJUSTMENT movement first — delete only a roll that should never have existed."
+          },
+          "response": []
+        },
+        {
+          "name": "Movement history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock/movements?roll_number=&material_id=&transaction_type=&page=1&pageSize=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock",
+                "movements"
+              ],
+              "query": [
+                {
+                  "key": "roll_number",
+                  "value": "",
+                  "description": "History for one roll"
+                },
+                {
+                  "key": "material_id",
+                  "value": "",
+                  "description": ""
+                },
+                {
+                  "key": "transaction_type",
+                  "value": "",
+                  "description": "IN | OUT | RETURN | ADJUSTMENT | CONSUME"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50",
+                  "description": "max 200"
+                }
+              ]
+            },
+            "description": "The append-only ledger. `description` is server-rendered — show it, don't rebuild it.\n\nCONSUME rows come from the phone's 'roll finished' flag: used_weight is what was left on the roll, and roll_weight_after is 0."
+          },
+          "response": []
+        },
+        {
+          "name": "On-hand totals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock/summary?material_id=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "material_id",
+                  "value": "",
+                  "description": "One material, or omit for all"
+                }
+              ]
+            },
+            "description": "Derived from the ledger, not stored by hand."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Uploaded invoices and what the extraction service read out of them.",
+      "item": [
+        {
+          "name": "List documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents?search=&status=&showArchived=false&sort=uploadedAt&order=desc&page=1&pageSize=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": ""
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "pending | verified | archived"
+                },
+                {
+                  "key": "showArchived",
+                  "value": "false",
+                  "description": ""
+                },
+                {
+                  "key": "sort",
+                  "value": "uploadedAt",
+                  "description": ""
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "asc | desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": ""
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Document detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}"
+              ]
+            },
+            "description": "Includes every invoice block extracted from the file, plus the activity trail."
+          },
+          "response": []
+        },
+        {
+          "name": "Document file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "file"
+              ]
+            },
+            "description": "The original PDF/image."
+          },
+          "response": []
+        },
+        {
+          "name": "Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/activity",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "activity"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Edit extracted fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/fields",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "fields"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoice_id}}\",\n  \"fields\": [\n    {\n      \"key\": \"grandTotal\",\n      \"value\": 128400\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "verify"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Unverify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/unverify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "unverify"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Archive",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/archive",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "archive"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "restore"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/bulk/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "bulk",
+                "verify"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{document_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk unverify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/bulk/unverify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "bulk",
+                "unverify"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{document_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/bulk/archive",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "bulk",
+                "archive"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{document_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Upload & scan",
+      "description": "Two-step direct-to-GCS upload. Step 2 is a plain PUT to the signed URL, done by the browser — not a request in this collection.",
+      "item": [
+        {
+          "name": "Presign upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/upload/presign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "upload",
+                "presign"
+              ]
+            },
+            "description": "Step 1 of the direct-to-GCS upload: mints a signed PUT URL per file.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"filename\": \"invoice.pdf\",\n      \"contentType\": \"application/pdf\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/documents/upload/confirm",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "upload",
+                "confirm"
+              ]
+            },
+            "description": "Step 3, after every PUT succeeded. Creates the documents and starts extraction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uploads\": [\n    {\n      \"objectPath\": \"{{object_path}}\",\n      \"filename\": \"invoice.pdf\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload (legacy relay)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/upload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "documents",
+                "upload"
+              ]
+            },
+            "description": "Bytes relayed through this server. Kept until direct-to-GCS is proven in production.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "GRN",
+      "description": "Goods receipt notes built from extracted invoices.",
+      "item": [
+        {
+          "name": "Draft from documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/grn/draft?documentIds={{document_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn",
+                "draft"
+              ],
+              "query": [
+                {
+                  "key": "documentIds",
+                  "value": "{{document_id}}",
+                  "description": "Comma separated"
+                }
+              ]
+            },
+            "description": "Builds an unsaved GRN from the extraction — one upload of several files is one call."
+          },
+          "response": []
+        },
+        {
+          "name": "List GRNs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/grn?search=&page=1&pageSize=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "max 100"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Save GRN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/grn",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{document_id}}\",\n  \"invoiceId\": \"{{invoice_id}}\",\n  \"items\": [\n    {\n      \"description\": \"Base paper 90 gsm\",\n      \"quantity\": 12\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GRN detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/grn/{{grn_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn",
+                "{{grn_id}}"
+              ]
+            },
+            "description": "With the source invoice, for the side-by-side compare."
+          },
+          "response": []
+        },
+        {
+          "name": "Set status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/grn/{{grn_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn",
+                "{{grn_id}}",
+                "status"
+              ]
+            },
+            "description": "awaiting | approved | rejected — switchable in both directions.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Correct a quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/grn/{{grn_id}}/quantities",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "grn",
+                "{{grn_id}}",
+                "quantities"
+              ]
+            },
+            "description": "On a saved GRN a cleared box means 0 received, not 'not counted'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"description\": \"Base paper 90 gsm\",\n      \"quantity\": 11\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "General vouchers",
+      "description": "Same shape as Documents, for non-invoice vouchers.",
+      "item": [
+        {
+          "name": "List vouchers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers?search=&status=&showArchived=false&page=1&pageSize=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": ""
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": ""
+                },
+                {
+                  "key": "showArchived",
+                  "value": "false",
+                  "description": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": ""
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Voucher detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Voucher file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "file"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/activity",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "activity"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Edit fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/fields",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "fields"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fields\": [\n    {\n      \"key\": \"grandTotal\",\n      \"value\": 4200\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "verify"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Unverify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/unverify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "unverify"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Archive",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/archive",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "archive"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/{{voucher_id}}/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "{{voucher_id}}",
+                "restore"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/bulk/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "bulk",
+                "verify"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{voucher_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk unverify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/bulk/unverify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "bulk",
+                "unverify"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{voucher_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/general-vouchers/bulk/archive",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "general-vouchers",
+                "bulk",
+                "archive"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{voucher_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users & settings",
+      "description": "User management and extraction settings. Admin only.",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Invite user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/invite",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "invite"
+              ]
+            },
+            "description": "role: staff | admin | store_manager | godown_supervisor | godown_operator.\n\ngodown_supervisor uses the panel and the app; godown_operator and store_manager are app-only — the web login sets their password and then refuses the session.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dharam S\",\n  \"email\": \"someone@example.com\",\n  \"role\": \"godown_supervisor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change role or status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "description": "status: invited | active | suspended.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove user",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Extraction columns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/field-definitions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "field-definitions"
+              ]
+            },
+            "description": "Which fields the extractor fills, and their order."
+          },
+          "response": []
+        },
+        {
+          "name": "Add custom column",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/field-definitions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "field-definitions"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"PO number\",\n  \"description\": \"Buyer's purchase order number\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle a column",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/field-definitions/{{field_key}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "field-definitions",
+                "{{field_key}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder columns",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/field-definitions/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "field-definitions",
+                "reorder"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keys\": [\n    \"invoiceNo\",\n    \"invoiceDate\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete custom column",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/field-definitions/{{field_key}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "field-definitions",
+                "{{field_key}}"
+              ]
+            },
+            "description": "Admin only."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Export & sync logs",
+      "description": "Reporting, and our own view of what the phones have been sending.",
+      "item": [
+        {
+          "name": "Export preview count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/export/preview-count?status=verified&dateFrom=&dateTo=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "export",
+                "preview-count"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "verified",
+                  "description": ""
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "",
+                  "description": "YYYY-MM-DD"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "",
+                  "description": "YYYY-MM-DD"
+                }
+              ]
+            },
+            "description": "How many rows the export would contain, before generating it."
+          },
+          "response": []
+        },
+        {
+          "name": "Generate export",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "export"
+              ]
+            },
+            "description": "format: csv | xlsx.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"xlsx\",\n  \"status\": \"verified\",\n  \"columns\": [\n    {\n      \"key\": \"invoiceNo\",\n      \"label\": \"Invoice no\"\n    },\n    {\n      \"key\": \"grandTotal\",\n      \"label\": \"Total\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sync logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sync/logs?failed_only=true&page=1&pageSize=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sync",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "failed_only",
+                  "value": "true",
+                  "description": "Only batches that had something go wrong"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Admin only. Every batch a device flushed, including ones rejected by validation — a flush log carries every field of every queued write."
+          },
+          "response": []
+        },
+        {
+          "name": "Sync log detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sync/logs/{{sync_log_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sync",
+                "logs",
+                "{{sync_log_id}}"
+              ]
+            },
+            "description": "Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "No auth. Returns { status: 'ok' }.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public GRN (no auth)",
+      "description": "Deliberately public — mounted before the authenticated catch-all so no token is required. Anyone with the URL can read and decide these GRNs; keep that in mind before pointing it at anything sensitive.",
+      "item": [
+        {
+          "name": "List GRNs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/grn",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "grn"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GRN detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/grn/{{grn_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "grn",
+                "{{grn_id}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GRN file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/grn/{{grn_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "grn",
+                "{{grn_id}}",
+                "file"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/grn/{{grn_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "grn",
+                "{{grn_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createRollSchema } from "./materialRolls.validators";
+import { basePaperSchema, createVendorSchema } from "./vendors.validators";
 import { movementFieldsSchema } from "./stock.validators";
 
 /**
@@ -17,10 +18,45 @@ const MAX_BATCH = 50;
 // batch it is the only thing that makes a retry safe, so it is required here.
 const requiredClientId = z.string().uuid("client_id must be a UUID");
 
+/** A vendor added on the device — a supplier that did not exist when it went offline. */
+const vendorItem = z.object({
+  type: z.literal("vendor"),
+  client_id: requiredClientId,
+  body: createVendorSchema,
+});
+
+/**
+ * Supplier codes (papers) added to a vendor. Merged by code server-side, so replaying this
+ * item is a no-op rather than a second copy of the same paper.
+ */
+const supplierCodeItem = z.object({
+  type: z.literal("supplier_code"),
+  client_id: requiredClientId,
+  body: z.object({
+    /** The vendor's server id, when the device already knows it. */
+    vendor_id: z.string().optional(),
+    /** The client_id of a vendor added in this same batch (or an earlier one), for codes
+     *  added to a supplier that has no server id yet. Ignored when vendor_id is set. */
+    vendor_client_id: z.string().uuid().optional(),
+    papers: z.array(basePaperSchema).min(1, "Send at least one supplier code"),
+  }),
+});
+
 const rollItem = z.object({
   type: z.literal("roll"),
   client_id: requiredClientId,
-  body: createRollSchema,
+  // vendor_id is relaxed to optional here and nowhere else: a roll received from a
+  // supplier the device added while offline has only that supplier's client_id. Exactly
+  // one of the two must be present, which the service checks once it has resolved the
+  // client_id — a refine here would reject a roll whose vendor is being created in this
+  // same batch, which is the main thing a batch is for.
+  body: createRollSchema.partial({ vendor_id: true }),
+  /**
+   * The client_id of a vendor added in this same batch, for a roll received from a
+   * supplier that has no server id yet. Resolved server-side before the roll is created.
+   * Ignored when body.vendor_id is already set.
+   */
+  vendor_client_id: z.string().uuid().optional(),
 });
 
 const movementItem = z
@@ -45,7 +81,7 @@ const movementItem = z
 
 export const syncBatchSchema = z.object({
   items: z
-    .array(z.discriminatedUnion("type", [rollItem, movementItem]))
+    .array(z.discriminatedUnion("type", [vendorItem, supplierCodeItem, rollItem, movementItem]))
     .min(1, "Nothing to sync")
     .max(MAX_BATCH, `A batch cannot exceed ${MAX_BATCH} items — send the rest in the next call`)
     // Two items sharing a client_id inside one request is a client bug, and letting it

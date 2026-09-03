@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "seed:vendors": "tsx src/utils/seedVendors.ts",
     "seed:locations": "tsx src/utils/seedLocations.ts",
+    "seed:remarks": "tsx src/utils/seedRemarks.ts",
     "indexes": "tsx src/utils/syncIndexes.ts"
   },
   "dependencies": {

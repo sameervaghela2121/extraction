@@ -13,6 +13,10 @@ type RollInput = {
   roll_number: string;
   /** Royal Touche's code for the base paper, read off the label. Optional for now. */
   royal_touche_code?: string;
+  /** A code from the remark master, noted at registration. */
+  remark_code?: string;
+  /** The note in the operator's own words. */
+  remarks?: string;
   material_id: string;
   vendor_id: string;
   batch_no?: string;
@@ -46,6 +50,8 @@ const PHOTO_FIELDS = [
 const PATCHABLE = [
   // Correctable like roll_number: both are read off the label, so both can be mistyped.
   "royal_touche_code",
+  "remark_code",
+  "remarks",
   "batch_no",
   "weight",
   "quantity",
@@ -103,6 +109,8 @@ async function toResponse(r: PopulatedRoll) {
     id: r._id.toString(),
     roll_number: r.roll_number,
     royal_touche_code: r.royal_touche_code,
+    remark_code: r.remark_code,
+    remarks: r.remarks,
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
     batch_no: r.batch_no,

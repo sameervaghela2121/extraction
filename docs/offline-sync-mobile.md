@@ -120,7 +120,7 @@ CREATE TABLE stock_transactions (
   local_id           INTEGER PRIMARY KEY AUTOINCREMENT,
   server_id          TEXT UNIQUE,
   client_id          TEXT UNIQUE,
-  transaction_type   TEXT NOT NULL,       -- IN | OUT | RETURN | ADJUSTMENT
+  transaction_type   TEXT NOT NULL,       -- IN | OUT | RETURN | ADJUSTMENT | CONSUME
   transaction_date   TEXT NOT NULL,
   material_id        TEXT NOT NULL REFERENCES raw_materials(id),
   -- Points at the LOCAL roll row, not the server id: an OUT can be recorded
@@ -131,6 +131,9 @@ CREATE TABLE stock_transactions (
   used_weight        REAL,
   new_weight         REAL,                -- ADJUSTMENT only
   returned_weight    REAL,                -- RETURN only
+  -- CONSUME: queue it with this flag and no weights at all. The server reads
+  -- material_id off the roll and works out what was left on it.
+  is_consumed        INTEGER,             -- CONSUME only (0/1)
   from_location      TEXT,
   to_location        TEXT,
   location           TEXT,                -- OUT only: destination

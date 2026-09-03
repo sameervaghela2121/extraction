@@ -6,7 +6,8 @@ reject a request.
 
 Companion documents:
 - `offline-sync-mobile.md` — SQLite schema, outbox, flush rules
-- `royal-touch-offline-sync.postman_collection.json` — runnable requests
+- `royal-touche-mobile.postman_collection.json` — runnable requests, every endpoint the app calls
+- `royal-touche-admin.postman_collection.json` — the web panel's endpoints, for reference
 
 ---
 
@@ -42,8 +43,8 @@ without a ledger row behind it is a number nobody can explain later.
         RETURN      │   │  └─────────────────┘
      (weight > 0)   │   │       RETURN
                     │   │
-                    │   │ RETURN with returned_weight = 0
-                    │   ▼        or ADJUSTMENT to 0
+                    │   │ CONSUME (the phone's is_consumed flag),
+                    │   ▼ RETURN with returned_weight = 0, or ADJUSTMENT to 0
                     │ ┌──────────┐
                     └─│ CONSUMED │
                  IN   └──────────┘
@@ -51,9 +52,9 @@ without a ledger row behind it is a number nobody can explain later.
 
 | Status | Meaning | Accepts |
 |---|---|---|
-| `IN_STOCK` | On the rack, counts toward on-hand | OUT, IN, ADJUSTMENT |
-| `ISSUED` | Out at a machine — still exists, not in the store | RETURN only |
-| `CONSUMED` | Used up (`remaining_weight` 0) | IN (restores it to IN_STOCK) |
+| `IN_STOCK` | On the rack, counts toward on-hand | OUT, IN, ADJUSTMENT, CONSUME |
+| `ISSUED` | Out at a machine — still exists, not in the store | RETURN, CONSUME |
+| `CONSUMED` | Used up (`remaining_weight` 0) | IN (restores it to IN_STOCK), CONSUME (no-op) |
 
 A roll's status is **never set by the client**. `status` is rejected on PATCH — it follows
 the movements.
@@ -166,6 +167,33 @@ figure is the one thing nobody can audit later, so it is mandatory. Sets
 `remaining_weight` to `new_weight`; the delta is derived. `new_weight` of 0 marks the roll
 `CONSUMED`.
 
+### CONSUME — the roll is finished
+
+The one movement with nothing to measure: the operator sees an empty core, so there is no
+scale reading to give. The phone sends the roll and a flag and nothing else:
+
+```json
+{ "roll_id": "…", "is_consumed": true, "client_id": "…" }
+```
+
+`is_consumed: true` becomes `transaction_type: "CONSUME"` at the schema boundary, so the
+ledger still carries one honest row for it. `material_id` is read off the roll — the app
+does not send it. `used_weight` is whatever was left on the roll, `remaining_weight`
+becomes 0, and the status becomes `CONSUMED`.
+
+Valid from either live state. A roll that was `IN_STOCK` takes its weight out of on-hand
+here; a roll that was `ISSUED` left on-hand at its OUT, so the total does not move again —
+only the roll closes.
+
+Consuming an **already-`CONSUMED`** roll is accepted as a no-op — a row with `weight` and
+`used_weight` of 0 — not a 409. A `RETURN` weighed at 0 already closes the roll, and a
+device that queued both that return and a consume for the same empty core would otherwise
+have its entire flush halted by the second one. The flag only ever asserts "this roll is
+finished", which is already true.
+
+`weight`, `new_weight` and `returned_weight` are **rejected** on a CONSUME. A scale reading
+means it is a RETURN, not a consume.
+
 ### Every movement also gets
 
 - `description` — a ready-to-render sentence (`"Returned 180 kg to Bay 2 · 70 kg used"`).
@@ -203,10 +231,10 @@ Each row is self-describing; the screen should not need to compute anything:
 | Field | Use |
 |---|---|
 | `description` | **Render as-is** — `"Returned 180 kg to Bay 2 · 70 kg used"` |
-| `transaction_type` | `IN` / `OUT` / `RETURN` / `ADJUSTMENT` — for the icon and colour |
+| `transaction_type` | `IN` / `OUT` / `RETURN` / `ADJUSTMENT` / `CONSUME` — for the icon and colour |
 | `transaction_date` | When it happened (not when it was keyed in) |
 | `weight` | What moved on this row |
-| `used_weight` | RETURN only; `null` elsewhere |
+| `used_weight` | RETURN and CONSUME; `null` elsewhere |
 | `roll_weight_after` | The roll's weight after this row — the running balance |
 | `from_location` / `to_location` | The move |
 | `issued_to`, `remarks` | Who and why |

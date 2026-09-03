@@ -2,7 +2,7 @@ import { Router } from "express";
 import { syncController } from "../controllers/sync.controller";
 import { syncLogsController } from "../controllers/syncLogs.controller";
 import { requireAuth } from "../middleware/auth.middleware";
-import { requireRole } from "../middleware/rbac.middleware";
+import { requireGodownWrite, requireRole } from "../middleware/rbac.middleware";
 import { logSyncBatch } from "../middleware/syncLog.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -17,7 +17,7 @@ router.use(requireAuth);
 // read-only account is refused before any item runs, not partway through the batch.
 router.post(
   "/batch",
-  requireRole("admin", "store_manager"),
+  requireGodownWrite,
   // Before validate(), so a batch rejected for a bad field is recorded too — the device
   // gets a 400 and the service never runs, so this is the only trace of what arrived.
   logSyncBatch,

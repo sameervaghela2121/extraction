@@ -46,6 +46,10 @@ export interface IVendor {
   address?: string;
   gst_number?: string;
   status: VendorStatus;
+  /** Minted on the device when a vendor is added offline, so a flush that retries after a
+   *  lost response gets this vendor back instead of creating a second one. Absent on
+   *  vendors created from the web portal, which never queues. */
+  client_id?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -80,8 +84,14 @@ const vendorSchema = new Schema<IVendor>(
     address: { type: String, trim: true },
     gst_number: { type: String, uppercase: true, trim: true },
     status: { type: String, enum: [...VENDOR_STATUSES], default: "active" },
+    client_id: { type: String, trim: true },
   },
   { timestamps: true },
 );
+
+// The replay guard, same shape as the roll's: sparse because every vendor added before
+// this field existed has no client_id, and a plain unique index would read them all as
+// the same null and refuse to build.
+vendorSchema.index({ client_id: 1 }, { unique: true, sparse: true });
 
 export const Vendor = model<IVendor>("Vendor", vendorSchema);
