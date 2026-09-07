@@ -5,6 +5,15 @@ import { apiErrorMessage } from "../../api/client";
 import { PageHeader, Spinner, Avatar } from "../../components/ui";
 import type { ManagedUser, UserRole, UserStatus } from "../../types";
 
+// Roles an admin can hand out from the web panel. store_manager is deliberately absent —
+// those accounts are created elsewhere. Godown operators are app-only but still invited here.
+const ASSIGNABLE_ROLES: ReadonlyArray<readonly [UserRole, string]> = [
+  ["staff", "Staff"],
+  ["admin", "Admin"],
+  ["godown_supervisor", "Godown supervisor"],
+  ["godown_operator", "Godown operator"],
+];
+
 export default function UserManagementPage() {
   const { notify } = useToast();
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -71,9 +80,10 @@ export default function UserManagementPage() {
         <form onSubmit={invite} className="card row gap-8" style={{ padding: 16, marginBottom: 16, flexWrap: "wrap" }}>
           <input className="input" style={{ flex: 1, minWidth: 140 }} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} required />
           <input className="input" style={{ flex: 1, minWidth: 160 }} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <div className="row gap-8">
-            <button type="button" className={`btn btn-sm ${role === "staff" ? "btn-primary" : ""}`} onClick={() => setRole("staff")}>Staff</button>
-            <button type="button" className={`btn btn-sm ${role === "admin" ? "btn-primary" : ""}`} onClick={() => setRole("admin")}>Admin</button>
+          <div className="row gap-8" style={{ flexWrap: "wrap" }}>
+            {ASSIGNABLE_ROLES.map(([value, label]) => (
+              <button key={value} type="button" className={`btn btn-sm ${role === value ? "btn-primary" : ""}`} onClick={() => setRole(value)}>{label}</button>
+            ))}
           </div>
           <button className="btn btn-primary" type="submit">Send invite</button>
         </form>
@@ -110,9 +120,10 @@ export default function UserManagementPage() {
                     </td>
                     <td>
                       {editing ? (
-                        <div className="row gap-8">
-                          <button className={`btn btn-sm ${u.role === "staff" ? "btn-primary" : ""}`} onClick={() => update(u.id, { role: "staff" })}>Staff</button>
-                          <button className={`btn btn-sm ${u.role === "admin" ? "btn-primary" : ""}`} onClick={() => update(u.id, { role: "admin" })}>Admin</button>
+                        <div className="row gap-8" style={{ flexWrap: "wrap" }}>
+                          {ASSIGNABLE_ROLES.map(([value, label]) => (
+                            <button key={value} className={`btn btn-sm ${u.role === value ? "btn-primary" : ""}`} onClick={() => update(u.id, { role: value })}>{label}</button>
+                          ))}
                         </div>
                       ) : (
                         <span style={{ textTransform: "capitalize" }}>{u.role}</span>

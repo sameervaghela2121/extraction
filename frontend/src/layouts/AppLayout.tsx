@@ -8,6 +8,11 @@ import {
   Download,
   Settings,
   Users,
+  Truck,
+  MapPin,
+  Boxes,
+  MessageSquare,
+  ScanBarcode,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
@@ -22,9 +27,16 @@ interface NavItem {
   /** Staff only need the GRN workflow — everything else is hidden for them unless
    *  opted in here. Admins always see the full nav regardless of this flag. */
   staffVisible?: boolean;
+  /** The godown supervisor's whole panel is the section flagged here — nothing else.
+   *  Admin does NOT see these: the Royal Touche godown data is the supervisor's. */
+  supervisorVisible?: boolean;
   /** NavLink prefix-matches by default, so "/grn" would light up on "/grn/new" too. */
   end?: boolean;
 }
+
+// ponytail: masters are built and working, just not wanted in the nav yet. Flip to true to
+// bring the four Royal Touche master entries back — nothing else has to change.
+const MASTERS_ENABLED = true;
 
 const NAV: NavItem[] = [
   { to: "/upload", label: "Upload & Scan", icon: Upload },
@@ -36,13 +48,21 @@ const NAV: NavItem[] = [
   { to: "/export", label: "Export", icon: Download },
   { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
+  // Royal Touche masters — one entry each, in the order they're maintained.
+  { to: "/masters/vendors", label: "Vendors & papers", icon: Truck, supervisorVisible: true },
+  { to: "/masters/locations", label: "Locations", icon: MapPin, supervisorVisible: true },
+  { to: "/masters/raw-materials", label: "Raw materials", icon: Boxes, supervisorVisible: true },
+  { to: "/masters/remarks", label: "Remarks", icon: MessageSquare, supervisorVisible: true },
+  { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
 ];
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const items = NAV.filter((i) => {
-    if (user?.role === "admin") return true;
+    if (!MASTERS_ENABLED && i.to.startsWith("/masters")) return false;
+    if (user?.role === "admin") return !i.supervisorVisible;
+    if (user?.role === "godown_supervisor") return Boolean(i.supervisorVisible);
     if (i.adminOnly) return false;
     return Boolean(i.staffVisible);
   });

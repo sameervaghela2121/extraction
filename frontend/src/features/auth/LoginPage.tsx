@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../../layouts/AuthLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
+import { isMobileOnlyRole } from "../../types";
 
 export default function LoginPage() {
   const { login, logout } = useAuth();
@@ -18,10 +19,10 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const user = await login(email, password);
-      // Store managers belong to the mobile app. login() has already stored the tokens,
-      // so drop the session again rather than leaving them signed in on a UI with
-      // nothing for them.
-      if (user.role === "store_manager") {
+      // Store managers and godown operators belong to the mobile app. login() has already
+      // stored the tokens, so drop the session again rather than leaving them signed in on
+      // a UI with nothing for them.
+      if (isMobileOnlyRole(user.role)) {
         logout();
         setError("This account is for the mobile app.");
         return;

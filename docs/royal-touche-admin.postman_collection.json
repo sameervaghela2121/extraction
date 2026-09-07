@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Royal Touche — Admin Panel",
-    "description": "Every endpoint the web panel calls, grouped the way the panel is.\n\nSet `base_url`, `email` and `password`, then run **Auth → Login** — the token is stored and reused by every other request through collection-level bearer auth.\n\n── Who can call what ──\n  admin              everything\n  godown_supervisor  master data + rolls/barcodes only; the panel hides the rest\n  staff              GRN only\n  store_manager /\n  godown_operator    app-only accounts — the web login refuses them\n\n── Conventions ──\n  • every list of master data is unpaginated (pickers read it whole); documents, GRNs, vouchers, rolls and movements are paginated with page/pageSize\n  • DELETE on master data is a SOFT delete — status goes to inactive, and PATCH status back to 'active' restores it\n  • ids in `{{curly}}` are collection variables; fill them from a list response\n\nThe mobile app has its own collection: royal-touche-mobile.postman_collection.json. Do not use this one to test the phone — it does not carry the offline rules.",
+    "name": "Royal Touche \u2014 Admin Panel",
+    "description": "Every endpoint the web panel calls, grouped the way the panel is.\n\nSet `base_url`, `email` and `password`, then run **Auth \u2192 Login** \u2014 the token is stored and reused by every other request through collection-level bearer auth.\n\n\u2500\u2500 Who can call what \u2500\u2500\n  admin              everything\n  godown_supervisor  master data + rolls/barcodes only; the panel hides the rest\n  staff              GRN only\n  store_manager /\n  godown_operator    app-only accounts \u2014 the web login refuses them\n\n\u2500\u2500 Conventions \u2500\u2500\n  \u2022 every list of master data is unpaginated (pickers read it whole); documents, GRNs, vouchers, rolls and movements are paginated with page/pageSize\n  \u2022 DELETE on master data is a SOFT delete \u2014 status goes to inactive, and PATCH status back to 'active' restores it\n  \u2022 ids in `{{curly}}` are collection variables; fill them from a list response\n\nThe mobile app has its own collection: royal-touche-mobile.postman_collection.json. Do not use this one to test the phone \u2014 it does not carry the offline rules.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -97,6 +97,10 @@
     },
     {
       "key": "reset_token",
+      "value": ""
+    },
+    {
+      "key": "barcode_batch_id",
       "value": ""
     }
   ],
@@ -280,7 +284,7 @@
                 "accept"
               ]
             },
-            "description": "The token comes from the invite email's link. Sets the password and signs the user in — except for app-only roles (store_manager, godown_operator), where the password is set but no web session starts.",
+            "description": "The token comes from the invite email's link. Sets the password and signs the user in \u2014 except for app-only roles (store_manager, godown_operator), where the password is set but no web session starts.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"password\": \"set-a-real-one\"\n}",
@@ -328,7 +332,7 @@
                 "forgot-password"
               ]
             },
-            "description": "Always answers the same way whether or not the address exists — it must not reveal who has an account.",
+            "description": "Always answers the same way whether or not the address exists \u2014 it must not reveal who has an account.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{email}}\"\n}",
@@ -412,7 +416,7 @@
                 }
               ]
             },
-            "description": "The whole vendors master — no pagination, it is read into a picker."
+            "description": "The whole vendors master \u2014 no pagination, it is read into a picker."
           },
           "response": []
         },
@@ -454,7 +458,7 @@
                 "vendors"
               ]
             },
-            "description": "vendor_code is uppercased and must be unique. `papers` is the Royal Touche paper-codes sheet for this supplier — each row needs a royal_touche_code or a delta_code.",
+            "description": "vendor_code is uppercased and must be unique. `papers` is the Royal Touche paper-codes sheet for this supplier \u2014 each row needs a royal_touche_code or a delta_code.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"vendor_code\": \"NEWCO\",\n  \"name\": \"New Co Papers\",\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"supplier_code_number\": \"AP 126640 SULAWEZI\",\n      \"found_in\": \"1.00mm\"\n    }\n  ],\n  \"contact\": {\n    \"person\": \"Mr. Shah\",\n    \"phone\": \"9876543210\"\n  },\n  \"gst_number\": \"24AAACR5055K1ZK\"\n}",
@@ -487,7 +491,7 @@
                 "{{vendor_id}}"
               ]
             },
-            "description": "A PATCH carrying `papers` REPLACES the whole array — the sheet is edited as a set and the rows have no id to merge on. Omit `papers` to leave it untouched.\n\n`contact` is the exception: it merges field by field.",
+            "description": "A PATCH carrying `papers` REPLACES the whole array \u2014 the sheet is edited as a set and the rows have no id to merge on. Omit `papers` to leave it untouched.\n\n`contact` is the exception: it merges field by field.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"New Co Papers Pvt Ltd\",\n  \"papers\": [\n    {\n      \"royal_touche_code\": \"639\",\n      \"found_in\": \"1.00mm\"\n    },\n    {\n      \"delta_code\": \"D-114\",\n      \"is_common\": true\n    }\n  ]\n}",
@@ -515,7 +519,7 @@
                 "{{vendor_id}}"
               ]
             },
-            "description": "Soft delete — sets status to inactive. Purchase history keeps pointing at it. PATCH status back to 'active' to restore."
+            "description": "Soft delete \u2014 sets status to inactive. Purchase history keeps pointing at it. PATCH status back to 'active' to restore."
           },
           "response": []
         },
@@ -550,7 +554,7 @@
                 }
               ]
             },
-            "description": "The whole locations master — no pagination, it is read into a picker."
+            "description": "The whole locations master \u2014 no pagination, it is read into a picker."
           },
           "response": []
         },
@@ -573,7 +577,7 @@
                 "locations"
               ]
             },
-            "description": "sort_order drives picker order — bays are walked in physical order, not alphabetical.",
+            "description": "sort_order drives picker order \u2014 bays are walked in physical order, not alphabetical.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"location_code\": \"A-1\",\n  \"name\": \"Godown A side 1\",\n  \"godown\": \"Godown A\",\n  \"sort_order\": 1\n}",
@@ -688,7 +692,7 @@
                 }
               ]
             },
-            "description": "The whole raw materials master — no pagination, it is read into a picker."
+            "description": "The whole raw materials master \u2014 no pagination, it is read into a picker."
           },
           "response": []
         },
@@ -821,7 +825,7 @@
                 }
               ]
             },
-            "description": "The whole remarks master — no pagination, it is read into a picker."
+            "description": "The whole remarks master \u2014 no pagination, it is read into a picker."
           },
           "response": []
         },
@@ -931,6 +935,162 @@
       ]
     },
     {
+      "name": "Barcode batches",
+      "description": "Runs of blank labels printed before the rolls exist. Only the recipe is stored \u2014 prefix + date + range \u2014 because the codes are regenerated from it (prefix, then the date as YYMMDD, then the number zero-padded to the width of the end number: RT + 260907 + 001).",
+      "item": [
+        {
+          "name": "List barcode batches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/barcode-batches?page=1&pageSize=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "barcode-batches"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Max 100"
+                }
+              ]
+            },
+            "description": "Saved runs, newest first. Any signed-in user can read them."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('paginated envelope', () => pm.expect(body).to.have.keys('items','total','page','pageSize','totalPages'));",
+                  "if (body.items.length) pm.collectionVariables.set('barcode_batch_id', body.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create barcode batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/barcode-batches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "barcode-batches"
+              ]
+            },
+            "description": "Saves one run. 500 labels is the ceiling. Sending the same prefix + date + range twice returns 409 \u2014 the same barcode must not end up on two rolls.\n\n`prefix` and `date` may both be empty strings, which gives bare padded numbers.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prefix\": \"RT\",\n  \"date\": \"2026-09-07\",\n  \"from_number\": 1,\n  \"to_number\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const batch = pm.response.json();",
+                  "pm.collectionVariables.set('barcode_batch_id', batch.id);",
+                  "pm.test('count is derived', () => pm.expect(batch.count).to.eql(batch.to_number - batch.from_number + 1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create barcode batch \u2014 duplicate (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/barcode-batches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "barcode-batches"
+              ]
+            },
+            "description": "Send the request above a second time unchanged. Expect 409 'That exact run has already been saved'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prefix\": \"RT\",\n  \"date\": \"2026-09-07\",\n  \"from_number\": 1,\n  \"to_number\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 on a repeat run', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete barcode batch",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/barcode-batches/{{barcode_batch_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "barcode-batches",
+                "{{barcode_batch_id}}"
+              ]
+            },
+            "description": "Hard delete \u2014 nothing references a batch. Godown roles and admin only."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Rolls & stock (read)",
       "description": "Read-only in the panel. Rolls are registered and moved from the phone.",
       "item": [
@@ -1028,7 +1188,7 @@
                 "{{roll_id}}"
               ]
             },
-            "description": "Label details only. `remaining_weight` and `status` are REFUSED here — stock moves through the ledger, never by editing the roll.",
+            "description": "Label details only. `remaining_weight` and `status` are REFUSED here \u2014 stock moves through the ledger, never by editing the roll.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"remark_code\": \"COLOR-VAR\",\n  \"remarks\": \"Shade off on the outer 20 m\",\n  \"batch_no\": \"B-2291\",\n  \"location\": \"A-2\"\n}",
@@ -1056,7 +1216,7 @@
                 "{{roll_id}}"
               ]
             },
-            "description": "Removes a roll registered in error. Its ledger rows are what stock is derived from, so reach for a correcting ADJUSTMENT movement first — delete only a roll that should never have existed."
+            "description": "Removes a roll registered in error. Its ledger rows are what stock is derived from, so reach for a correcting ADJUSTMENT movement first \u2014 delete only a roll that should never have existed."
           },
           "response": []
         },
@@ -1102,7 +1262,7 @@
                 }
               ]
             },
-            "description": "The append-only ledger. `description` is server-rendered — show it, don't rebuild it.\n\nCONSUME rows come from the phone's 'roll finished' flag: used_weight is what was left on the roll, and roll_weight_after is 0."
+            "description": "The append-only ledger. `description` is server-rendered \u2014 show it, don't rebuild it.\n\nCONSUME rows come from the phone's 'roll finished' flag: used_weight is what was left on the roll, and roll_weight_after is 0."
           },
           "response": []
         },
@@ -1472,7 +1632,7 @@
     },
     {
       "name": "Upload & scan",
-      "description": "Two-step direct-to-GCS upload. Step 2 is a plain PUT to the signed URL, done by the browser — not a request in this collection.",
+      "description": "Two-step direct-to-GCS upload. Step 2 is a plain PUT to the signed URL, done by the browser \u2014 not a request in this collection.",
       "item": [
         {
           "name": "Presign upload",
@@ -1599,7 +1759,7 @@
                 }
               ]
             },
-            "description": "Builds an unsaved GRN from the extraction — one upload of several files is one call."
+            "description": "Builds an unsaved GRN from the extraction \u2014 one upload of several files is one call."
           },
           "response": []
         },
@@ -1710,7 +1870,7 @@
                 "status"
               ]
             },
-            "description": "awaiting | approved | rejected — switchable in both directions.",
+            "description": "awaiting | approved | rejected \u2014 switchable in both directions.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"approved\"\n}",
@@ -2127,7 +2287,7 @@
                 "invite"
               ]
             },
-            "description": "role: staff | admin | store_manager | godown_supervisor | godown_operator.\n\ngodown_supervisor uses the panel and the app; godown_operator and store_manager are app-only — the web login sets their password and then refuses the session.",
+            "description": "role: staff | admin | store_manager | godown_supervisor | godown_operator.\n\ngodown_supervisor uses the panel and the app; godown_operator and store_manager are app-only \u2014 the web login sets their password and then refuses the session.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Dharam S\",\n  \"email\": \"someone@example.com\",\n  \"role\": \"godown_supervisor\"\n}",
@@ -2433,7 +2593,7 @@
                 }
               ]
             },
-            "description": "Admin only. Every batch a device flushed, including ones rejected by validation — a flush log carries every field of every queued write."
+            "description": "Admin only. Every batch a device flushed, including ones rejected by validation \u2014 a flush log carries every field of every queued write."
           },
           "response": []
         },
@@ -2482,7 +2642,7 @@
     },
     {
       "name": "Public GRN (no auth)",
-      "description": "Deliberately public — mounted before the authenticated catch-all so no token is required. Anyone with the URL can read and decide these GRNs; keep that in mind before pointing it at anything sensitive.",
+      "description": "Deliberately public \u2014 mounted before the authenticated catch-all so no token is required. Anyone with the URL can read and decide these GRNs; keep that in mind before pointing it at anything sensitive.",
       "item": [
         {
           "name": "List GRNs",

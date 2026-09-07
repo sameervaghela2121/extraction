@@ -4,6 +4,7 @@ import AuthLayout from "../../layouts/AuthLayout";
 import { authApi } from "../../api/auth.api";
 import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
+import { isMobileOnlyRole } from "../../types";
 
 export default function AcceptInvitePage() {
   const { token = "" } = useParams();
@@ -25,9 +26,9 @@ export default function AcceptInvitePage() {
     setBusy(true);
     try {
       const result = await authApi.acceptInvite(token, password);
-      // A store manager's account is for the mobile app — the password is set, but we
-      // don't start a web session or send them into pages built for other roles.
-      if (result.user.role === "store_manager") {
+      // An app-only account is for the mobile app — the password is set, but we don't
+      // start a web session or send them into pages built for other roles.
+      if (isMobileOnlyRole(result.user.role)) {
         setNotice("Password set. Sign in from the mobile app.");
         return;
       }

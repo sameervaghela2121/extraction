@@ -1,6 +1,17 @@
-// store_manager exists on the backend for the mobile app. The web UI never offers it
-// as a choice — it's here only so the auth pages can recognise one and stay put.
-export type UserRole = "staff" | "admin" | "store_manager";
+// store_manager and godown_operator exist on the backend for the mobile app. The web UI
+// never offers them as a choice — they're here only so the auth pages can recognise one
+// and stay put. godown_supervisor uses both surfaces, so it does sign in here.
+export type UserRole =
+  | "staff"
+  | "admin"
+  | "store_manager"
+  | "godown_supervisor"
+  | "godown_operator";
+
+/** Roles whose account is app-only — the web login sets the password but won't sign them in. */
+export function isMobileOnlyRole(role: UserRole): boolean {
+  return role === "store_manager" || role === "godown_operator";
+}
 export type UserStatus = "invited" | "active" | "suspended";
 export type DocumentSource = "upload" | "scan" | "email";
 export type DocumentStatus = "pending" | "verified" | "archived";
@@ -197,4 +208,95 @@ export interface ManagedUser {
   role: UserRole;
   status: UserStatus;
   docCount: number;
+}
+
+// ---- Royal Touche master data ----
+
+export type MasterStatus = "active" | "inactive";
+
+/** One row of the Royal Touche paper-codes sheet, embedded in its supplier. A paper needs
+ *  at least one of the two codes; only papers with an RT code can be picked for a roll. */
+export interface VendorPaper {
+  royal_touche_code?: string;
+  delta_code?: string;
+  is_common?: boolean;
+  supplier_code_number?: string;
+  found_in?: string;
+}
+
+export interface Vendor {
+  id: string;
+  vendor_code: string;
+  name: string;
+  papers: VendorPaper[];
+  contact: { person?: string; phone?: string; email?: string };
+  address?: string;
+  gst_number?: string;
+  status: MasterStatus;
+}
+
+export interface GodownLocation {
+  id: string;
+  location_code: string;
+  name: string;
+  godown?: string;
+  sort_order?: number;
+  status: MasterStatus;
+}
+
+export interface RawMaterial {
+  id: string;
+  material_code: string;
+  name: string;
+  category?: string;
+  gsm?: number;
+  width_mm?: number;
+  unit: string;
+  reorder_level?: number;
+  status: MasterStatus;
+}
+
+/** The envelope every paginated list endpoint returns. */
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/** Only the fields the barcode screen prints or filters on — a roll response carries
+ *  photos, weights and refs the label has no use for. */
+export interface MaterialRollListItem {
+  id: string;
+  roll_number: string;
+  royal_touche_code?: string;
+  batch_no?: string;
+  gsm: number;
+  width: number;
+  unit: string;
+  location: string;
+  status: "IN_STOCK" | "ISSUED" | "CONSUMED";
+}
+
+/** A standard note an operator picks instead of typing — "Misprint", "Color variant". */
+export interface Remark {
+  id: string;
+  remark_code: string;
+  label: string;
+  sort_order?: number;
+  status: MasterStatus;
+}
+
+/** A saved run of blank labels. Only the recipe is stored — the codes are regenerated
+ *  from prefix + date + range, so a batch is the same size whatever it printed. */
+export interface BarcodeBatch {
+  id: string;
+  prefix: string;
+  date: string;
+  from_number: number;
+  to_number: number;
+  count: number;
+  createdBy: string;
+  createdAt: string;
 }

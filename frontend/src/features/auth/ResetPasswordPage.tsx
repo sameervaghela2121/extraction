@@ -4,6 +4,7 @@ import AuthLayout from "../../layouts/AuthLayout";
 import { authApi } from "../../api/auth.api";
 import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
+import { isMobileOnlyRole } from "../../types";
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
@@ -37,8 +38,8 @@ export default function ResetPasswordPage() {
     setBusy(true);
     try {
       const result = await authApi.resetPassword(token!, password);
-      // Same as accept-invite: a store manager signs in on mobile, not here.
-      if (result.user.role === "store_manager") {
+      // Same as accept-invite: app-only roles sign in on mobile, not here.
+      if (isMobileOnlyRole(result.user.role)) {
         setMessage("Password set. Sign in from the mobile app.");
         return;
       }
