@@ -1,6 +1,6 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
-import { ProtectedRoute, AdminRoute, StaffRestrictedRoute, RoleHome } from "./components/guards";
+import { ProtectedRoute, AdminRoute, RoleRoute, RoleHome } from "./components/guards";
 import LoginPage from "./features/auth/LoginPage";
 import AcceptInvitePage from "./features/auth/AcceptInvitePage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -16,6 +16,8 @@ import GeneralVouchersListPage from "./features/generalVouchers/GeneralVouchersL
 import GeneralVoucherDetailPage from "./features/generalVouchers/GeneralVoucherDetailPage";
 import ExtractionSettingsPage from "./features/settings/ExtractionSettingsPage";
 import UserManagementPage from "./features/users/UserManagementPage";
+import MasterDataPage from "./features/masters/MasterDataPage";
+import BarcodeGeneratorPage from "./features/barcodes/BarcodeGeneratorPage";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -27,12 +29,26 @@ export const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          // Staff's whole world — reachable regardless of role.
-          { path: "/grn", element: <GrnListPage /> },
-          { path: "/grn/new", element: <GrnPage /> },
-          { path: "/grn/:id", element: <GrnDetailPage /> },
+          // Staff's whole world — reachable by every role except the godown supervisor,
+          // whose panel is the masters section and nothing else.
           {
-            element: <StaffRestrictedRoute />,
+            element: <RoleRoute deny={["godown_supervisor"]} />,
+            children: [
+              { path: "/grn", element: <GrnListPage /> },
+              { path: "/grn/new", element: <GrnPage /> },
+              { path: "/grn/:id", element: <GrnDetailPage /> },
+            ],
+          },
+          {
+            element: <RoleRoute allow={["godown_supervisor"]} />,
+            children: [
+              { path: "/masters", element: <Navigate to="/masters/vendors" replace /> },
+              { path: "/masters/:section", element: <MasterDataPage /> },
+              { path: "/barcodes", element: <BarcodeGeneratorPage /> },
+            ],
+          },
+          {
+            element: <RoleRoute deny={["staff", "godown_supervisor"]} />,
             children: [
               { path: "/upload", element: <UploadPage /> },
               { path: "/documents", element: <DocumentsListPage /> },

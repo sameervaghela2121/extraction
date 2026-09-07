@@ -27,6 +27,7 @@ import "../models/RawMaterial.model";
 import "../models/Vendor.model";
 import "../models/Location.model";
 import "../models/Remark.model";
+import "../models/BarcodeBatch.model";
 import "../models/SyncLog.model";
 import "../models/User.model";
 

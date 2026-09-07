@@ -331,3 +331,131 @@ textarea {
   font-size: 13px;
   flex-shrink: 0;
 }
+
+/* ---- Barcode labels ---- */
+/* Picking and previewing sit side by side: the sheet used to live under the roll table,
+   so a label was a full page-scroll away from the checkbox that created it. */
+.barcode-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+.barcode-sheet-wrap {
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 14px;
+}
+@media (max-width: 1100px) {
+  .barcode-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .barcode-sheet-wrap {
+    position: static;
+    max-height: none;
+  }
+}
+/* Every input carries its own label — the people using this screen don't read placeholders
+   as instructions, and "Pad to N digits" meant nothing to them. */
+.barcode-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.barcode-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.barcode-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.barcode-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.barcode-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+.barcode-label-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.barcode-label {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #000;
+  padding: 10px;
+  width: 100%;
+  text-align: center;
+}
+/* height:auto matters: the canvas is ~312x90 intrinsic, so constraining only the width
+   squashes the bars horizontally and the preview stops matching the PDF. */
+.barcode-label canvas {
+  max-width: 100%;
+  height: auto;
+}
+.barcode-label-code {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.barcode-label-meta {
+  font-size: 11px;
+  color: #444;
+}
+
+/* Printing puts labels on the page and nothing else: no sidebar, no buttons, no card
+   chrome. The sheet keeps its grid so a page of labels comes out as a page of labels. */
+@media print {
+  .app-sidebar,
+  .app-mobilebar,
+  .app-bottomnav,
+  .barcode-controls {
+    display: none !important;
+  }
+  .app-main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #fff;
+  }
+  /* The screen's side-panel framing has no place on paper. */
+  .barcode-layout {
+    display: block;
+  }
+  .barcode-sheet-wrap {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    padding: 0;
+    background: none;
+  }
+  .barcode-label-slot {
+    break-inside: avoid;
+  }
+  .barcode-sheet {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
