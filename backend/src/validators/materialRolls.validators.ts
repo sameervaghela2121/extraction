@@ -21,6 +21,10 @@ export const createRollSchema = z.object({
   // from one has nothing to put here. A roll without it cannot be traced back to its paper
   // — worth making required again once registration reliably supplies it.
   royal_touche_code: z.string().trim().min(1).optional(),
+  // The pre-printed label scanned at registration, e.g. "RT2026040712345678". Minted by
+  // the admin panel's barcode batches, so the phone only ever echoes what it read.
+  // Optional: rolls received before the labels existed have none.
+  barcode: z.string().trim().min(1).optional(),
   material_id: objectId.describe("Material"),
   vendor_id: objectId.describe("Vendor"),
   weight: z.number({ required_error: "Weight is required" }).positive("Weight must be greater than 0"),

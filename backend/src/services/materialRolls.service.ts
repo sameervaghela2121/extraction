@@ -13,6 +13,8 @@ type RollInput = {
   roll_number: string;
   /** Royal Touche's code for the base paper, read off the label. Optional for now. */
   royal_touche_code?: string;
+  /** The pre-printed label scanned onto the roll. */
+  barcode?: string;
   /** A code from the remark master, noted at registration. */
   remark_code?: string;
   /** The note in the operator's own words. */
@@ -50,6 +52,7 @@ const PHOTO_FIELDS = [
 const PATCHABLE = [
   // Correctable like roll_number: both are read off the label, so both can be mistyped.
   "royal_touche_code",
+  "barcode",
   "remark_code",
   "remarks",
   "batch_no",
@@ -109,6 +112,7 @@ async function toResponse(r: PopulatedRoll) {
     id: r._id.toString(),
     roll_number: r.roll_number,
     royal_touche_code: r.royal_touche_code,
+    barcode: r.barcode,
     remark_code: r.remark_code,
     remarks: r.remarks,
     material_id: refResponse(r.material_id),
@@ -223,7 +227,12 @@ export const materialRollsService = {
     if (query.location) filter.location = query.location;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ roll_number: rx }, { royal_touche_code: rx }, { batch_no: rx }];
+      filter.$or = [
+        { roll_number: rx },
+        { royal_touche_code: rx },
+        { barcode: rx },
+        { batch_no: rx },
+      ];
     }
 
     const [items, total] = await Promise.all([
@@ -290,6 +299,8 @@ export const materialRollsService = {
         // paper share it and there is nothing for the server to allocate. Absent rather
         // than empty when the client omits it, so the sparse index skips the row.
         royal_touche_code: input.royal_touche_code?.toUpperCase(),
+        // Same deal: read off the label, uppercased so a scan and a typed code match.
+        barcode: input.barcode?.toUpperCase(),
         remaining_weight: remaining,
       });
     } catch (err) {
