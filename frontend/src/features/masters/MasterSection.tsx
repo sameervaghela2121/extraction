@@ -4,6 +4,7 @@ import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager, { pageOf } from "./Pager";
+import { compareCells, nextSort, SortHeader, type Sort } from "./sorting";
 import type { MasterRow, MasterSpec } from "./specs";
 
 // Papers used to ride along here as a second editor inside the vendor form. They have their
@@ -30,6 +31,21 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
+  /**
+   * Starts on the sortable column, ascending — never in an "unsorted" state.
+   *
+   * An unsorted state was indistinguishable from ascending here: the API already returns
+   * vendors ordered by name, and a vendor_code is the slugified name for 71 of the 74, so
+   * the two orderings render the same rows in the same sequence. Every click that moved
+   * between those two states looked like a click that did nothing.
+   *
+   * Lazy initialiser, not a plain value: it reads the spec, and MasterDataPage remounts
+   * this component per section, so it re-runs for each master rather than going stale.
+   */
+  const [sort, setSort] = useState<Sort>(() => {
+    const first = spec.fields.find((f) => f.inList && f.sortable);
+    return first ? { key: first.name, dir: "asc" } : null;
+  });
 
   const load = async () => {
     setLoading(true);
@@ -57,13 +73,33 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
     );
   }, [rows, search, spec.fields]);
 
+  // Sorted after filtering — same set either way, and this sorts the smaller list.
+  const ordered = useMemo(() => {
+    if (!sort) return visible;
+    const field = spec.fields.find((f) => f.name === sort.key);
+    const direction = sort.dir === "asc" ? 1 : -1;
+    // Copied before sorting: Array.prototype.sort mutates, and `visible` is the memoised
+    // filter result that other renders read.
+    return [...visible].sort(
+      (a, b) => compareCells(a[sort.key], b[sort.key], field?.type === "number") * direction,
+    );
+  }, [visible, sort, spec.fields]);
+
+  const toggleSort = (key: string) => setSort((prev) => nextSort(prev, key));
+
   // A filter that shrinks the list under the current page would otherwise leave an empty
   // table with no obvious way back.
   useEffect(() => {
     setPage(1);
   }, [search, spec.key]);
 
-  const pageRows = pageOf(visible, page);
+  // Re-sorting reshuffles which rows fall on which page, so staying on page 4 would land
+  // the user somewhere arbitrary in the new order.
+  useEffect(() => {
+    setPage(1);
+  }, [sort]);
+
+  const pageRows = pageOf(ordered, page);
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -154,9 +190,19 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
             <table className="table">
               <thead>
                 <tr>
-                  {columns.map((c) => (
-                    <th key={c.name}>{c.label}</th>
-                  ))}
+                  {columns.map((c) =>
+                    c.sortable ? (
+                      <SortHeader
+                        key={c.name}
+                        label={c.label}
+                        sortKey={c.name}
+                        sort={sort}
+                        onToggle={toggleSort}
+                      />
+                    ) : (
+                      <th key={c.name}>{c.label}</th>
+                    ),
+                  )}
                   <th>Status</th>
                   <th style={{ width: 150 }}></th>
                 </tr>

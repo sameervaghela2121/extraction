@@ -269,6 +269,30 @@ textarea {
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
+/* A header cell that happens to be a button — inherits the th's own type styling rather
+   than the browser's button chrome. The icon is darker than the muted header text so it
+   reads as an affordance rather than decoration. */
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sort-header svg {
+  color: var(--text);
+  transition: color 120ms ease;
+}
+.sort-header:hover,
+.sort-header:hover svg,
+.sort-header.active,
+.sort-header.active svg {
+  color: var(--brand-strong);
+}
 .table tbody tr:hover {
   background: var(--surface-2);
 }

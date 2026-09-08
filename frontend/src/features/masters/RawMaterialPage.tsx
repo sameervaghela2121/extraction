@@ -5,6 +5,7 @@ import { apiErrorMessage } from "../../api/client";
 import { vendorsApi } from "../../api/masters.api";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager, { pageOf } from "./Pager";
+import { compareCells, nextSort, SortHeader, type Sort } from "./sorting";
 import type { Vendor, VendorPaper } from "../../types";
 
 /**
@@ -34,6 +35,14 @@ interface Row {
   paper: VendorPaper;
 }
 
+/**
+ * `found_in` and `is_common` are carried but never rendered.
+ *
+ * They were taken off the form, not out of the data — 442 rows have a `found_in` value. A
+ * save writes the whole paper object back, so dropping them here would silently blank both
+ * fields on every row anyone edited. They round-trip instead: read on open, written back
+ * untouched on save, and simply absent on a row created from this screen.
+ */
 interface FormState {
   vendorId: string;
   royal_touche_code: string;
@@ -75,13 +84,13 @@ function toPaper(form: FormState): VendorPaper {
   };
 }
 
+/** Deliberately only the columns on screen: matching a hidden field would surface rows
+ *  where nothing visible explains the hit. */
 function matches(row: Row, q: string): boolean {
   return [
     row.paper.royal_touche_code,
     row.paper.delta_code,
     row.paper.supplier_code_number,
-    row.paper.found_in,
-    row.vendor.vendor_code,
     row.vendor.name,
   ].some((value) => (value ?? "").toLowerCase().includes(q));
 }
@@ -176,6 +185,9 @@ export default function RawMaterialPage() {
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
+  // Vendor is the only sortable column here, and the table starts on it — never in an
+  // "unsorted" state, for the reason spelled out in sorting.ts's nextSort.
+  const [sort, setSort] = useState<Sort>({ key: "vendor", dir: "asc" });
 
   const load = async () => {
     setLoading(true);
@@ -206,13 +218,24 @@ export default function RawMaterialPage() {
     return q ? rows.filter((row) => matches(row, q)) : rows;
   }, [rows, search]);
 
+  // Ascending by vendor from the start, matching the order the rows already arrive in: the
+  // API returns vendors name-ascending and Array.prototype.sort is stable, so this renders
+  // exactly what it did before while giving the header an honest icon to show. Papers keep
+  // their sheet order within a supplier.
+  const ordered = useMemo(() => {
+    if (!sort) return visible;
+    const direction = sort.dir === "asc" ? 1 : -1;
+    return [...visible].sort((a, b) => compareCells(a.vendor.name, b.vendor.name) * direction);
+  }, [visible, sort]);
+
   // A filter that shrinks the list under the current page would otherwise leave an empty
-  // table with no obvious way back.
+  // table with no obvious way back. Re-sorting reshuffles which rows land on which page,
+  // so it needs the same reset.
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, sort]);
 
-  const pageRows = pageOf(visible, page);
+  const pageRows = pageOf(ordered, page);
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -236,6 +259,11 @@ export default function RawMaterialPage() {
     // names the field instead of arriving as a validation error after a round trip.
     if (!paper.royal_touche_code && !paper.delta_code) {
       return notify("Enter a Royal Touche code or a Delta code.", "error");
+    }
+    // The input's `required` already blocks an empty field, but not one holding only
+    // spaces — which toPaper trims away to nothing, saving a blank row past the guard.
+    if (!paper.supplier_code_number) {
+      return notify("Enter the supplier code / name.", "error");
     }
 
     const target = vendors.find((v) => v.id === form.vendorId);
@@ -295,7 +323,7 @@ export default function RawMaterialPage() {
   return (
     <div>
       <PageHeader
-        title="Raw material"
+        title="Raw materials"
         subtitle="The Royal Touche paper codes, and the supplier each one comes from."
       />
 
@@ -323,10 +351,12 @@ export default function RawMaterialPage() {
                   <th>RT code</th>
                   <th>Delta code</th>
                   <th>Supplier code / name</th>
-                  <th>Vendor code</th>
-                  <th>Vendor name</th>
-                  <th>Found in</th>
-                  <th style={{ width: 70 }}>Common</th>
+                  <SortHeader
+                    label="Vendor name"
+                    sortKey="vendor"
+                    sort={sort}
+                    onToggle={(key) => setSort((prev) => nextSort(prev, key))}
+                  />
                   <th style={{ width: 120 }}></th>
                 </tr>
               </thead>
@@ -336,10 +366,7 @@ export default function RawMaterialPage() {
                     <td>{row.paper.royal_touche_code || "—"}</td>
                     <td>{row.paper.delta_code || "—"}</td>
                     <td>{row.paper.supplier_code_number || "—"}</td>
-                    <td>{row.vendor.vendor_code || "—"}</td>
                     <td>{row.vendor.name}</td>
-                    <td>{row.paper.found_in || "—"}</td>
-                    <td style={{ textAlign: "center" }}>{row.paper.is_common ? "✓" : "—"}</td>
                     <td>
                       <div className="row gap-8">
                         <button className="btn btn-sm" onClick={() => openEdit(row)}>
@@ -358,7 +385,7 @@ export default function RawMaterialPage() {
                 ))}
                 {pageRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={5} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {search ? "Nothing matches that search." : "Nothing here yet."}
                     </td>
                   </tr>
@@ -404,31 +431,15 @@ export default function RawMaterialPage() {
               />
             </label>
             <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
-              <span className="faint">Supplier code / name</span>
+              <span className="faint">Supplier code / name *</span>
               <input
                 className="input"
                 value={form.supplier_code_number}
                 onChange={(e) => setValue("supplier_code_number", e.target.value)}
-              />
-            </label>
-            <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
-              <span className="faint">Found in</span>
-              <input
-                className="input"
-                value={form.found_in}
-                onChange={(e) => setValue("found_in", e.target.value)}
+                required
               />
             </label>
           </div>
-
-          <label className="row gap-8" style={{ fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={form.is_common}
-              onChange={(e) => setValue("is_common", e.target.checked)}
-            />
-            <span>Common — the same paper serves RT and Delta under different design numbers</span>
-          </label>
 
           <p className="faint" style={{ margin: 0, fontSize: 12 }}>
             A raw material needs a Royal Touche code or a Delta code. Only rows with an RT

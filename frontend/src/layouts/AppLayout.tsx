@@ -69,7 +69,7 @@ const NAV: NavItem[] = [
       { to: "/masters/locations", label: "Locations" },
       { to: "/masters/material-types", label: "Material types" },
       { to: "/masters/remarks", label: "Remarks" },
-      { to: "/masters/raw-material", label: "Raw material" },
+      { to: "/masters/raw-material", label: "Raw materials" },
     ],
   },
   { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
