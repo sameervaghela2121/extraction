@@ -67,7 +67,7 @@ const NAV: NavItem[] = [
     children: [
       { to: "/masters/vendors", label: "Vendors & papers" },
       { to: "/masters/locations", label: "Locations" },
-      { to: "/masters/raw-materials", label: "Material types" },
+      { to: "/masters/material-types", label: "Material types" },
       { to: "/masters/remarks", label: "Remarks" },
     ],
   },

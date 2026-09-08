@@ -1,4 +1,4 @@
-import { vendorsApi, locationsApi, rawMaterialsApi, remarksApi } from "../../api/masters.api";
+import { vendorsApi, locationsApi, materialTypesApi, remarksApi } from "../../api/masters.api";
 import type { MasterStatus, VendorPaper } from "../../types";
 
 /** What every master row has in common. The rest is read through the field spec, which is
@@ -47,7 +47,7 @@ export interface MasterSpec {
 }
 
 // The typed clients are cast once here: the concrete row types (Vendor, GodownLocation,
-// RawMaterial) have no index signature, so they don't structurally satisfy MasterRow.
+// MaterialType) have no index signature, so they don't structurally satisfy MasterRow.
 const asMasterApi = (api: unknown) => api as MasterApi;
 
 export const VENDOR_SPEC: MasterSpec = {
@@ -81,15 +81,16 @@ export const LOCATION_SPEC: MasterSpec = {
   ],
 };
 
-export const RAW_MATERIAL_SPEC: MasterSpec = {
-  // The URL segment and the API path stay "raw-materials" — this is a rename of what the
-  // screen is called, not of the resource behind it.
-  key: "raw-materials",
+export const MATERIAL_TYPE_SPEC: MasterSpec = {
+  // `key` is the browser URL only — /masters/material-types. The API path behind it stays
+  // /api/raw-materials (see masters.api.ts): the backend resource was not renamed, and the
+  // mobile app reads the same endpoint.
+  key: "material-types",
   label: "Material types",
   subtitle: "The material types a roll can be booked against: codes, units and reorder levels.",
   noun: "material type",
   plural: "material types",
-  api: asMasterApi(rawMaterialsApi),
+  api: asMasterApi(materialTypesApi),
   fields: [
     { name: "material_code", label: "Material code", type: "text", required: true, inList: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
@@ -119,6 +120,6 @@ export const REMARK_SPEC: MasterSpec = {
 export const MASTER_SPECS: MasterSpec[] = [
   VENDOR_SPEC,
   LOCATION_SPEC,
-  RAW_MATERIAL_SPEC,
+  MATERIAL_TYPE_SPEC,
   REMARK_SPEC,
 ];

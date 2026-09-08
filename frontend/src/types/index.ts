@@ -244,7 +244,9 @@ export interface GodownLocation {
   status: MasterStatus;
 }
 
-export interface RawMaterial {
+/** A material type — the spec a roll is booked against, not a physical roll. Served by
+ *  /api/raw-materials, which keeps the older name on the backend. */
+export interface MaterialType {
   id: string;
   material_code: string;
   name: string;
