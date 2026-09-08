@@ -65,10 +65,11 @@ const NAV: NavItem[] = [
     icon: Database,
     supervisorVisible: true,
     children: [
-      { to: "/masters/vendors", label: "Vendors & papers" },
+      { to: "/masters/vendors", label: "Vendors" },
       { to: "/masters/locations", label: "Locations" },
       { to: "/masters/material-types", label: "Material types" },
       { to: "/masters/remarks", label: "Remarks" },
+      { to: "/masters/raw-material", label: "Raw material" },
     ],
   },
   { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },

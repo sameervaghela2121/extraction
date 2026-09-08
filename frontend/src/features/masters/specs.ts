@@ -42,8 +42,6 @@ export interface MasterSpec {
   plural: string;
   api: MasterApi;
   fields: MasterField[];
-  /** Vendors alone carry the embedded paper-codes sheet, which needs its own row editor. */
-  hasPapers?: boolean;
 }
 
 // The typed clients are cast once here: the concrete row types (Vendor, GodownLocation,
@@ -52,12 +50,12 @@ const asMasterApi = (api: unknown) => api as MasterApi;
 
 export const VENDOR_SPEC: MasterSpec = {
   key: "vendors",
-  label: "Vendors & papers",
-  subtitle: "Suppliers and the Royal Touche paper codes they supply.",
+  label: "Vendors",
+  // The paper codes moved to their own screen (Raw material) — this page is suppliers only.
+  subtitle: "The suppliers rolls are received from.",
   noun: "vendor",
   plural: "vendors",
   api: asMasterApi(vendorsApi),
-  hasPapers: true,
   fields: [
     { name: "vendor_code", label: "Vendor code", type: "text", required: true, inList: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },

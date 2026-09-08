@@ -3,21 +3,21 @@ import { Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
-import PapersEditor from "./PapersEditor";
 import Pager, { pageOf } from "./Pager";
 import type { MasterRow, MasterSpec } from "./specs";
-import type { VendorPaper } from "../../types";
 
-type FormState = { values: Record<string, string>; papers: VendorPaper[] };
+// Papers used to ride along here as a second editor inside the vendor form. They have their
+// own screen now (RawMaterialPage), so this is back to being one flat row of fields.
+type FormState = { values: Record<string, string> };
 
-const EMPTY: FormState = { values: {}, papers: [] };
+const EMPTY: FormState = { values: {} };
 
 function toForm(row: MasterRow): FormState {
   const values: Record<string, string> = {};
   for (const [k, v] of Object.entries(row)) {
     if (v !== null && v !== undefined && typeof v !== "object") values[k] = String(v);
   }
-  return { values, papers: row.papers ?? [] };
+  return { values };
 }
 
 export default function MasterSection({ spec }: { spec: MasterSpec }) {
@@ -30,8 +30,6 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
-  // The vendor whose papers are open in the read-only viewer, if any.
-  const [viewing, setViewing] = useState<MasterRow | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -88,11 +86,9 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
       if (!raw) continue;
       body[field.name] = field.type === "number" ? Number(raw) : raw;
     }
-    if (spec.hasPapers) {
-      // Drop rows the user added but left entirely blank — the backend rejects a paper
-      // with neither code, and an untouched row shouldn't fail the whole save.
-      body.papers = form.papers.filter((p) => p.royal_touche_code || p.delta_code);
-    }
+    // `papers` is deliberately never sent from here. applyUpdates skips undefined fields
+    // server-side, so a vendor PATCH from this form leaves its paper rows untouched rather
+    // than replacing them with an empty array.
     return body;
   };
 
@@ -161,7 +157,6 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                   {columns.map((c) => (
                     <th key={c.name}>{c.label}</th>
                   ))}
-                  {spec.hasPapers && <th>Papers</th>}
                   <th>Status</th>
                   <th style={{ width: 150 }}></th>
                 </tr>
@@ -172,17 +167,6 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                     {columns.map((c) => (
                       <td key={c.name}>{String(row[c.name] ?? "—")}</td>
                     ))}
-                    {spec.hasPapers && (
-                      <td>
-                        {row.papers?.length ? (
-                          <button className="btn btn-sm btn-ghost" onClick={() => setViewing(row)}>
-                            View {row.papers.length}
-                          </button>
-                        ) : (
-                          <span className="faint">0</span>
-                        )}
-                      </td>
-                    )}
                     <td style={{ textTransform: "capitalize" }}>{row.status}</td>
                     <td>
                       <div className="row gap-8">
@@ -199,7 +183,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                 {pageRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={columns.length + (spec.hasPapers ? 3 : 2)}
+                      colSpan={columns.length + 2}
                       className="faint"
                       style={{ textAlign: "center", padding: 20 }}
                     >
@@ -215,36 +199,10 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
       </div>
 
       <Modal
-        isOpen={viewing !== null}
-        onClose={() => setViewing(null)}
-        title={`Papers — ${String(viewing?.name ?? "")}`}
-        size="xlarge"
-      >
-        <div style={{ padding: 16 }}>
-          <PapersEditor papers={viewing?.papers ?? []} readOnly />
-          <div className="row gap-8" style={{ justifyContent: "flex-end", marginTop: 12 }}>
-            <button className="btn" onClick={() => setViewing(null)}>
-              Close
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                const row = viewing!;
-                setViewing(null);
-                openEdit(row);
-              }}
-            >
-              Edit vendor
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
         isOpen={editing !== null}
         onClose={() => setEditing(null)}
         title={editing === "new" ? `Add ${spec.noun}` : `Edit ${spec.noun}`}
-        size={spec.hasPapers ? "xlarge" : "medium"}
+        size="medium"
       >
         <form onSubmit={submit} style={{ display: "grid", gap: 12, padding: 16 }}>
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
@@ -264,13 +222,6 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
               </label>
             ))}
           </div>
-
-          {spec.hasPapers && (
-            <PapersEditor
-              papers={form.papers}
-              onChange={(papers) => setForm((prev) => ({ ...prev, papers }))}
-            />
-          )}
 
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn" onClick={() => setEditing(null)}>
