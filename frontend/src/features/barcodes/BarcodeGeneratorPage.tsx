@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Eye, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { PageHeader, Spinner } from "../../components/ui";
 import Label, { renderLabel, renderSheet, type LabelItem } from "./Label";
-import { buildSeries, seriesCode } from "./series";
+import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildPdf, dataUrlToBytes, type PdfPage } from "./pdf";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
@@ -62,8 +62,8 @@ export default function BarcodeGeneratorPage() {
   const [saving, setSaving] = useState(false);
   const [prefix, setPrefix] = useState("RT");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [from, setFrom] = useState("1");
-  const [to, setTo] = useState("10");
+  // How many labels this run prints. Where it starts is not asked for — see nextStart.
+  const [quantity, setQuantity] = useState("10");
 
   useEffect(() => {
     if (!ROLL_PICKER_ENABLED) {
@@ -127,13 +127,33 @@ export default function BarcodeGeneratorPage() {
   // under a page of rolls selected earlier.
   const sheet: LabelItem[] = [...seriesLabels, ...Object.values(selected).map(rollLabel)];
 
-  const seriesInput = { prefix, date, from: Number(from), to: Number(to) };
-  const seriesCount = Number(to) - Number(from) + 1;
-  const preview =
-    seriesCount > 0
-      ? `${seriesCount} label${seriesCount === 1 ? "" : "s"}: ${seriesCode(seriesInput, Number(from))}` +
-        (seriesCount > 1 ? ` to ${seriesCode(seriesInput, Number(to))}` : "")
-      : "Enter a start and end number.";
+  /**
+   * Where this run starts, read off what has already been printed rather than typed.
+   *
+   * A code is prefix + YYMMDD + sequence, so a number only has to be unique within one
+   * prefix on one date — which is exactly the set filtered here. No saved run for that
+   * combination means this is the first of the day, so it starts at 1.
+   *
+   * This replaces a Start number field. Nobody knew the right value without reading the
+   * saved-runs list first, and getting it wrong reprinted codes that were already stuck on
+   * physical rolls — the one mistake on this screen with a consequence in the warehouse.
+   */
+  const nextStart = useMemo(() => {
+    const key = prefix.trim().toUpperCase();
+    return (
+      batches
+        .filter((b) => b.prefix.toUpperCase() === key && b.date === date)
+        .reduce((highest, b) => Math.max(highest, b.to_number), 0) + 1
+    );
+  }, [batches, prefix, date]);
+
+  const count = Number(quantity);
+  const validCount = Number.isInteger(count) && count > 0;
+  const seriesInput = { prefix, date, from: nextStart, to: nextStart + Math.max(count, 1) - 1 };
+  const preview = !validCount
+    ? "Enter how many labels to print."
+    : `${count} label${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
+      (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
 
   // Merge by code so re-adding an overlapping range tops it up instead of printing the
   // same label twice.
@@ -184,6 +204,10 @@ export default function BarcodeGeneratorPage() {
   };
 
   const addSeries = async () => {
+    if (!validCount) {
+      notify("Enter how many labels to print.", "error");
+      return;
+    }
     const result = buildSeries(seriesInput);
     if (!result.ok) {
       notify(result.error, "error");
@@ -195,8 +219,8 @@ export default function BarcodeGeneratorPage() {
       const saved = await barcodeBatchesApi.create({
         prefix,
         date,
-        from_number: Number(from),
-        to_number: Number(to),
+        from_number: seriesInput.from,
+        to_number: seriesInput.to,
       });
       setBatches((prev) => [saved, ...prev]);
     } catch (err) {
@@ -206,10 +230,8 @@ export default function BarcodeGeneratorPage() {
     }
     setSaving(false);
     mergeLabels(result.labels);
-    // Move the range on by its own length, so the next run continues where this one ended
-    // instead of reprinting the same numbers — the easiest mistake to make on this screen.
-    setFrom(String(Number(to) + 1));
-    setTo(String(Number(to) + result.labels.length));
+    // Nothing to advance by hand any more: the saved run is now in `batches`, and nextStart
+    // recomputes from it, so the next run already begins where this one ended.
     notify(`Saved — ${result.labels.length} label${result.labels.length === 1 ? "" : "s"} on the sheet`);
   };
 
@@ -269,23 +291,14 @@ export default function BarcodeGeneratorPage() {
               />
             </label>
             <label className="barcode-field">
-              <span>Start number</span>
+              <span>Quantity</span>
               <input
                 className="input"
                 type="number"
-                min={0}
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </label>
-            <label className="barcode-field">
-              <span>End number</span>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
+                min={1}
+                max={MAX_SERIES}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
               />
             </label>
           </div>
