@@ -35,6 +35,11 @@ export interface MasterSpec {
   subtitle: string;
   /** Singular, for button and modal titles ("Add vendor"). */
   noun: string;
+  /** Plural, for the pager's count line ("40 material types"). Stated rather than derived
+   *  from `key`: the key is a URL segment that outlives whatever the screen is called, so
+   *  reading display text off it left the pager saying "raw materials" after the section
+   *  had been renamed. */
+  plural: string;
   api: MasterApi;
   fields: MasterField[];
   /** Vendors alone carry the embedded paper-codes sheet, which needs its own row editor. */
@@ -50,6 +55,7 @@ export const VENDOR_SPEC: MasterSpec = {
   label: "Vendors & papers",
   subtitle: "Suppliers and the Royal Touche paper codes they supply.",
   noun: "vendor",
+  plural: "vendors",
   api: asMasterApi(vendorsApi),
   hasPapers: true,
   fields: [
@@ -65,6 +71,7 @@ export const LOCATION_SPEC: MasterSpec = {
   label: "Locations",
   subtitle: "Godown bays that fill the roll location picker.",
   noun: "location",
+  plural: "locations",
   api: asMasterApi(locationsApi),
   fields: [
     { name: "location_code", label: "Location code", type: "text", required: true, inList: true },
@@ -75,10 +82,13 @@ export const LOCATION_SPEC: MasterSpec = {
 };
 
 export const RAW_MATERIAL_SPEC: MasterSpec = {
+  // The URL segment and the API path stay "raw-materials" — this is a rename of what the
+  // screen is called, not of the resource behind it.
   key: "raw-materials",
-  label: "Raw materials",
-  subtitle: "The raw materials master: codes, units and reorder levels.",
-  noun: "material",
+  label: "Material types",
+  subtitle: "The material types a roll can be booked against: codes, units and reorder levels.",
+  noun: "material type",
+  plural: "material types",
   api: asMasterApi(rawMaterialsApi),
   fields: [
     { name: "material_code", label: "Material code", type: "text", required: true, inList: true },
@@ -96,6 +106,7 @@ export const REMARK_SPEC: MasterSpec = {
   label: "Remarks",
   subtitle: "Standard notes an operator picks when a roll or a movement needs one.",
   noun: "remark",
+  plural: "remarks",
   api: asMasterApi(remarksApi),
   fields: [
     { name: "remark_code", label: "Remark code", type: "text", required: true, inList: true },

@@ -209,7 +209,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                 )}
               </tbody>
             </table>
-            <Pager page={page} total={visible.length} onChange={setPage} label={spec.key.replace("-", " ")} />
+            <Pager page={page} total={visible.length} onChange={setPage} label={spec.plural} />
           </div>
         )}
       </div>
