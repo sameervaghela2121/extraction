@@ -16,6 +16,10 @@ export interface IMaterialRoll {
   /** Royal Touche's code for the base paper, off the label. Shared by every roll of it.
    *  Optional for now — see createRollSchema. */
   royal_touche_code?: string;
+  /** The pre-printed label stuck on the roll, e.g. "RT2026040712345678" — generated in
+   *  the admin panel before the roll exists and scanned in at registration. Separate from
+   *  roll_number, which is the mill's own number off the roll. */
+  barcode?: string;
   material_id: Types.ObjectId;
   vendor_id: Types.ObjectId;
   batch_no?: string;
@@ -67,6 +71,12 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // Not required for now, at the client's request. Sparse is deliberate: without it the
     // index would carry an entry for every roll that has no code.
     royal_touche_code: { type: String, uppercase: true, trim: true, index: true, sparse: true },
+    // The label code printed by the barcode-batch screen. Indexed because scanning a
+    // label to find its roll is the whole point of it. Sparse — rolls registered before
+    // the labels existed, and any roll registered without one, carry nothing here.
+    // ponytail: indexed, not unique. Two rolls sharing a label is a real mistake, but a
+    // unique index has to be built on live data; add it once the app stops sending dupes.
+    barcode: { type: String, uppercase: true, trim: true, index: true, sparse: true },
     // No index: true here — the compound index below starts with material_id, and Mongo
     // serves a prefix query from a compound index. A standalone one would be a second
     // index to write on every insert for no read it can answer alone.
