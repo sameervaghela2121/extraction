@@ -8,6 +8,10 @@ COPY . .
 # to be supplied here via --build-arg, not as a Cloud Run runtime env var.
 ARG VITE_API_BASE_URL=/api
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Empty by default: a build without it produces a bundle that never initialises Sentry,
+# rather than one that fails or reports to the wrong project.
+ARG VITE_SENTRY_DSN=
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 RUN npm run build
 
 # ---- runtime ----
