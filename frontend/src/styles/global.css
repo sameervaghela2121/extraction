@@ -401,14 +401,28 @@ textarea {
   font-weight: 600;
   color: var(--text-muted);
 }
+/* Stands in for the "Add to sheet" button once a run is on the sheet — sized to match a
+   .btn-sm so the row does not reflow when it swaps in. */
 .barcode-run {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* The left border is transparent rather than absent, so the accent on a selected row
+     does not shift the content across by 3px when it appears. */
   padding: 8px 10px;
   border: 1px solid var(--border);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+/* Which run the preview is showing. The whole row carries it, not a badge inside it: the
+   row is the thing being looked at, and a highlighted row is the same "you are here" the
+   rest of the panel already uses for the active nav link. */
+.barcode-run.selected {
+  background: var(--brand-soft);
+  border-color: var(--brand-ring);
+  border-left-color: var(--brand);
 }
 .barcode-sheet {
   display: grid;

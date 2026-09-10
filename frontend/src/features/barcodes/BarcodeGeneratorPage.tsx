@@ -4,9 +4,9 @@ import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { PageHeader, Spinner } from "../../components/ui";
-import Label, { renderLabel, renderSheet, type LabelItem } from "./Label";
+import Label, { barPattern, type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
-import { buildPdf, dataUrlToBytes, type PdfPage } from "./pdf";
+import { buildLabelPdf, type PdfLabel } from "./pdf";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
 
@@ -14,21 +14,6 @@ const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
 // true to bring back the search, the "Select page" button and the roll table.
 const ROLL_PICKER_ENABLED = false;
-
-/** Labels per A4 page in the downloaded PDF — 2 columns of 7, which is what fits once
- *  the sheet is scaled to the page width. */
-const LABELS_PER_PAGE = 14;
-
-/** Render one label to a PNG and hand it to the browser. Done off-screen rather than by
- *  reading the printed label's canvas, so a download works before anything is selected in
- *  view and always comes out at full resolution. */
-function downloadPng(item: LabelItem): void {
-  const canvas = renderLabel(item);
-  const link = document.createElement("a");
-  link.href = canvas.toDataURL("image/png");
-  link.download = `${item.code}.png`;
-  link.click();
-}
 
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
  *  apart on a rack. */
@@ -155,14 +140,39 @@ export default function BarcodeGeneratorPage() {
     : `${count} label${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
       (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
 
-  // Merge by code so re-adding an overlapping range tops it up instead of printing the
-  // same label twice.
-  const mergeLabels = (labels: LabelItem[]) =>
-    setSeriesLabels((prev) => {
-      const byKey = new Map(prev.map((l) => [l.key, l]));
-      for (const label of labels) byKey.set(label.key, label);
-      return [...byKey.values()];
-    });
+  /**
+   * Which saved runs are already on the sheet.
+   *
+   * Checked by first and last code rather than by expanding every run: 50 runs of up to 500
+   * labels is 25,000 strings to rebuild on each render, and a run only ever goes on as a
+   * whole — addBatch merges the entire range at once — so its two ends answer the question.
+   */
+  const sheetKeys = useMemo(() => new Set(seriesLabels.map((l) => l.key)), [seriesLabels]);
+
+  const isOnSheet = (batch: BarcodeBatch) => {
+    const input = {
+      prefix: batch.prefix,
+      date: batch.date,
+      from: batch.from_number,
+      to: batch.to_number,
+    };
+    return (
+      sheetKeys.has(`series:${seriesCode(input, batch.from_number)}`) &&
+      sheetKeys.has(`series:${seriesCode(input, batch.to_number)}`)
+    );
+  };
+
+  /** "RT260910001-RT260910050" — the run's range, for the row heading and the filename. */
+  const batchName = (batch: BarcodeBatch) => {
+    const input = {
+      prefix: batch.prefix,
+      date: batch.date,
+      from: batch.from_number,
+      to: batch.to_number,
+    };
+    const first = seriesCode(input, batch.from_number);
+    return batch.count > 1 ? `${first}-${seriesCode(input, batch.to_number)}` : first;
+  };
 
   /** The codes of a saved run, rebuilt from its recipe — nothing is stored server-side. */
   const labelsOf = (batch: BarcodeBatch): LabelItem[] | null => {
@@ -185,13 +195,6 @@ export default function BarcodeGeneratorPage() {
     if (!labels) return;
     setSeriesLabels(labels);
     setSelected({});
-  };
-
-  const addBatch = (batch: BarcodeBatch) => {
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    mergeLabels(labels);
-    notify(`${labels.length} label${labels.length === 1 ? "" : "s"} added`);
   };
 
   const deleteBatch = async (batch: BarcodeBatch) => {
@@ -229,31 +232,41 @@ export default function BarcodeGeneratorPage() {
       return;
     }
     setSaving(false);
-    mergeLabels(result.labels);
+    // Replaces rather than merges: the sheet shows exactly one run — the one just made, or
+    // the one View was clicked on. Merging let two runs pile up invisibly, and printing a
+    // range twice puts the same code on two rolls, which is unrecoverable in the godown.
+    setSeriesLabels(result.labels);
+    setSelected({});
     // Nothing to advance by hand any more: the saved run is now in `batches`, and nextStart
     // recomputes from it, so the next run already begins where this one ended.
-    notify(`Saved — ${result.labels.length} label${result.labels.length === 1 ? "" : "s"} on the sheet`);
+    notify(`Generated ${result.labels.length} barcode${result.labels.length === 1 ? "" : "s"}`);
   };
 
-  const downloadSheet = () => {
-    // One A4 page per chunk: paging here
-    // rather than scaling the whole sheet down keeps every barcode the same size.
-    const pages: PdfPage[] = [];
-    for (let start = 0; start < sheet.length; start += LABELS_PER_PAGE) {
-      const canvas = renderSheet(sheet.slice(start, start + LABELS_PER_PAGE));
-      pages.push({
-        jpeg: dataUrlToBytes(canvas.toDataURL("image/jpeg", 0.92)),
-        width: canvas.width,
-        height: canvas.height,
-      });
-    }
-    const url = URL.createObjectURL(buildPdf(pages));
+  /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
+   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. */
+  const downloadLabels = (labels: LabelItem[], name: string) => {
+    if (labels.length === 0) return;
+    // One 100x50mm page per label, drawn as vectors — the page IS the sticker, so a
+    // thermal printer feeds one per label with nothing to scale or cut.
+    const pages: PdfLabel[] = labels.map((label) => ({
+      bars: barPattern(label.code),
+      code: label.code,
+      lines: label.lines,
+    }));
+    const url = URL.createObjectURL(buildLabelPdf(pages));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `label-sheet-${sheet.length}.pdf`;
+    link.download = `${name}.pdf`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${pages.length} page${pages.length === 1 ? "" : "s"} downloaded`);
+    notify(`${pages.length} label${pages.length === 1 ? "" : "s"} downloaded`);
+  };
+
+  /** Download a saved run straight from its row — no need to preview it first. */
+  const downloadBatch = (batch: BarcodeBatch) => {
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    downloadLabels(labels, batchName(batch));
   };
 
   return (
@@ -305,7 +318,7 @@ export default function BarcodeGeneratorPage() {
 
           <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn btn-primary" onClick={addSeries} disabled={saving}>
-              {saving ? "Saving…" : "Save & add to sheet"}
+              {saving ? "Saving…" : "Generate barcodes"}
             </button>
             <span className="faint" style={{ fontSize: 12 }}>
               {preview}
@@ -317,7 +330,7 @@ export default function BarcodeGeneratorPage() {
           <div className="row gap-8" style={{ marginBottom: 10, alignItems: "baseline" }}>
             <strong style={{ fontSize: 13 }}>Saved label runs</strong>
             <span className="faint" style={{ fontSize: 12 }}>
-              Everything made here before — add a run back to the sheet to print it again.
+              Everything made here before — open a run to print it again.
             </span>
           </div>
           {batches.length === 0 ? (
@@ -327,7 +340,10 @@ export default function BarcodeGeneratorPage() {
           ) : (
             <div className="stack" style={{ gap: 6, maxHeight: 260, overflowY: "auto" }}>
               {batches.map((batch) => (
-                <div key={batch.id} className="barcode-run">
+                <div
+                  key={batch.id}
+                  className={`barcode-run${isOnSheet(batch) ? " selected" : ""}`}
+                >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                       {seriesCode(
@@ -348,10 +364,14 @@ export default function BarcodeGeneratorPage() {
                   </div>
                   <div className="spacer" />
                   <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                    <Eye size={14} /> View sheet
+                    <Eye size={14} /> View barcodes
                   </button>
-                  <button className="btn btn-sm" onClick={() => addBatch(batch)}>
-                    Add to sheet
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => downloadBatch(batch)}
+                    title="Download this run as a PDF"
+                  >
+                    <Download size={14} /> PDF
                   </button>
                   <button
                     className="btn btn-sm btn-ghost"
@@ -366,35 +386,20 @@ export default function BarcodeGeneratorPage() {
           )}
         </div>
 
-        <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
-          {ROLL_PICKER_ENABLED && (
-            <>
-              <input
-                className="input"
-                style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by roll number, RT code or batch"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button className="btn" onClick={selectPage} disabled={rolls.length === 0}>
-                Select page
-              </button>
-            </>
-          )}
-          <button
-            className="btn"
-            onClick={() => {
-              setSelected({});
-              setSeriesLabels([]);
-            }}
-            disabled={sheet.length === 0}
-          >
-            Clear ({sheet.length})
-          </button>
-          <button className="btn btn-primary" onClick={downloadSheet} disabled={sheet.length === 0}>
-            <Download size={15} /> Download sheet (PDF)
-          </button>
-        </div>
+        {ROLL_PICKER_ENABLED && (
+          <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 200 }}
+              placeholder="Search by roll number, RT code or batch"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button className="btn" onClick={selectPage} disabled={rolls.length === 0}>
+              Select page
+            </button>
+          </div>
+        )}
 
         {ROLL_PICKER_ENABLED && (
         <div className="card" style={{ overflow: "hidden", marginBottom: 18 }}>
@@ -477,23 +482,17 @@ export default function BarcodeGeneratorPage() {
 
       <div className="barcode-sheet-wrap">
         <h2 style={{ fontSize: 15, margin: "0 0 10px" }} className="barcode-controls">
-          Label sheet ({sheet.length})
+          Ready to print ({sheet.length})
         </h2>
         {sheet.length === 0 ? (
           <p className="faint barcode-controls" style={{ fontSize: 12, margin: 0 }}>
-            Make some labels above — they appear here as you add them.
+            Generate a run above, or open a saved one — the barcodes appear here.
           </p>
         ) : (
           <div className="barcode-sheet">
             {sheet.map((item) => (
               <div key={item.key} className="barcode-label-slot">
                 <Label item={item} />
-                <button
-                  className="btn btn-sm btn-ghost barcode-controls"
-                  onClick={() => downloadPng(item)}
-                >
-                  <Download size={13} /> PNG
-                </button>
               </div>
             ))}
           </div>
