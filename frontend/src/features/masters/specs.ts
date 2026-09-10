@@ -101,6 +101,9 @@ export const MATERIAL_TYPE_SPEC: MasterSpec = {
     // createRawMaterialSchema requires it, so a create that omitted it would be a 400.
     { name: "category", label: "Category", type: "text" },
     { name: "unit", label: "Unit", type: "text", required: true },
+    // Same as the locations master: the picker should follow how the godown thinks about
+    // its materials, which is rarely alphabetical. Blank sorts last.
+    { name: "sort_order", label: "Sort order", type: "number", inList: true },
     // gsm, width_mm and reorder_level are off the form entirely. They are optional on the
     // API, and the backend's PATCH skips fields a body omits, so existing values survive an
     // edit here rather than being blanked. See the note in MasterSection.buildBody.

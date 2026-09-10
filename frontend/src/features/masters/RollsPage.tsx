@@ -36,6 +36,13 @@ const STATUS_LABEL: Record<MaterialRoll["status"], string> = {
   CONSUMED: "Consumed",
 };
 
+/** The tablet's three status colours: in stock is green, out is red, finished is grey. */
+const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
+  IN_STOCK: "status-in",
+  ISSUED: "status-out",
+  CONSUMED: "status-consumed",
+};
+
 interface FormState {
   material_id: string;
   location: string;
@@ -340,7 +347,7 @@ export default function RollsPage() {
                       {roll.remaining_weight ?? 0} {roll.unit}
                     </td>
                     <td>
-                      <span className={`roll-status roll-${roll.status.toLowerCase()}`}>
+                      <span className={`status ${STATUS_CLASS[roll.status]}`}>
                         {STATUS_LABEL[roll.status]}
                       </span>
                     </td>
@@ -669,13 +676,8 @@ export default function RollsPage() {
       </Modal>
 
       <style>{`
-        .roll-status {
-          display: inline-block; padding: 2px 8px; border-radius: 999px;
-          font-size: 12px; font-weight: 600;
-        }
-        .roll-in_stock { background: var(--brand-soft); color: var(--brand-strong); }
-        .roll-issued   { background: oklch(94% 0.06 75); color: oklch(45% 0.13 60); }
-        .roll-consumed { background: var(--surface-2); color: var(--text-muted); }
+        /* IN / OUT / CONSUMED now come from the shared .status classes in global.css,
+           which carry the same palette the tablet app uses. */
         .roll-readonly {
           display: grid; gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
