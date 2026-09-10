@@ -3,7 +3,7 @@ import { Download, Eye, Printer, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
-import { PageHeader, Spinner } from "../../components/ui";
+import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Label, { barPattern, type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
@@ -46,10 +46,16 @@ export default function BarcodeGeneratorPage() {
   // the next start number picked without guessing.
   const [batches, setBatches] = useState<BarcodeBatch[]>([]);
   const [saving, setSaving] = useState(false);
+  // Uppercased at the input, not at save time. CODE128 is case-sensitive, so a lowercase
+  // prefix produced labels the backend then stored uppercase — reprinting the same run
+  // gave a different barcode from the one already stuck on the roll.
   const [prefix, setPrefix] = useState("RT");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   // How many labels this run prints. Where it starts is not asked for — see nextStart.
   const [quantity, setQuantity] = useState("10");
+  // The run awaiting a "yes" before it is removed from the list.
+  const [deleting, setDeleting] = useState<BarcodeBatch | null>(null);
+  const [deletingNow, setDeletingNow] = useState(false);
 
   useEffect(() => {
     if (!ROLL_PICKER_ENABLED) {
@@ -114,32 +120,63 @@ export default function BarcodeGeneratorPage() {
   const sheet: LabelItem[] = [...seriesLabels, ...Object.values(selected).map(rollLabel)];
 
   /**
-   * Where this run starts, read off what has already been printed rather than typed.
+   * Where this run starts — answered by the server, not counted from the runs on screen.
    *
    * A code is prefix + YYMMDD + sequence, so a number only has to be unique within one
-   * prefix on one date — which is exactly the set filtered here. No saved run for that
-   * combination means this is the first of the day, so it starts at 1.
+   * prefix on one date. Working that out client-side meant reading the loaded runs, which
+   * both stops at a page boundary and cannot see runs that were removed from the list —
+   * and a removed run's labels are still on rolls in the godown.
    *
-   * This replaces a Start number field. Nobody knew the right value without reading the
-   * saved-runs list first, and getting it wrong reprinted codes that were already stuck on
-   * physical rolls — the one mistake on this screen with a consequence in the warehouse.
+   * Nothing is typed here. Nobody knew the right start number without reading the saved
+   * runs first, and getting it wrong reprinted codes already in use.
    */
-  const nextStart = useMemo(() => {
-    const key = prefix.trim().toUpperCase();
-    return (
-      batches
-        .filter((b) => b.prefix.toUpperCase() === key && b.date === date)
-        .reduce((highest, b) => Math.max(highest, b.to_number), 0) + 1
-    );
-  }, [batches, prefix, date]);
+  const [nextStart, setNextStart] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Debounced: the prefix box fires this on every keystroke.
+    const timer = setTimeout(async () => {
+      try {
+        const res = await barcodeBatchesApi.nextNumber({ prefix, date });
+        if (!cancelled) setNextStart(res.next);
+      } catch (err) {
+        // Left null, which disables Generate — better than defaulting to 1 and reissuing
+        // a number that is already on a roll.
+        if (!cancelled) {
+          setNextStart(null);
+          notify(apiErrorMessage(err), "error");
+        }
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefix, date, batches]);
 
   const count = Number(quantity);
-  const validCount = Number.isInteger(count) && count > 0;
-  const seriesInput = { prefix, date, from: nextStart, to: nextStart + Math.max(count, 1) - 1 };
-  const preview = !validCount
-    ? "Enter how many labels to print."
-    : `${count} label${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
-      (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
+  // Over the cap is refused here rather than after the click. The preview used to promise
+  // "501 labels: …" and only reveal the limit once the run had been submitted.
+  const validCount = Number.isInteger(count) && count > 0 && count <= MAX_SERIES;
+  // Null until the server says where to start; nothing can be generated before then.
+  const canGenerate = validCount && nextStart !== null && !saving;
+
+  const seriesInput = {
+    prefix,
+    date,
+    from: nextStart ?? 1,
+    to: (nextStart ?? 1) + Math.max(count, 1) - 1,
+  };
+  const preview =
+    !Number.isInteger(count) || count <= 0
+      ? "Enter how many barcodes to print."
+      : count > MAX_SERIES
+        ? `That's ${count} barcodes — ${MAX_SERIES} at a time is the limit.`
+        : nextStart === null
+          ? "Checking which numbers are still free…"
+          : `${count} barcode${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
+            (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
 
   /**
    * Which saved runs are already on the sheet.
@@ -198,18 +235,27 @@ export default function BarcodeGeneratorPage() {
     setSelected({});
   };
 
-  const deleteBatch = async (batch: BarcodeBatch) => {
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeletingNow(true);
     try {
-      await barcodeBatchesApi.remove(batch.id);
-      setBatches((prev) => prev.filter((b) => b.id !== batch.id));
+      await barcodeBatchesApi.remove(deleting.id);
+      setBatches((prev) => prev.filter((b) => b.id !== deleting.id));
+      // The preview may be showing the run that just went; leaving it up invites a
+      // download of something no longer in the list.
+      if (isOnSheet(deleting)) setSeriesLabels([]);
+      setDeleting(null);
+      notify("Barcodes removed from the list");
     } catch (err) {
       notify(apiErrorMessage(err), "error");
+    } finally {
+      setDeletingNow(false);
     }
   };
 
   const addSeries = async () => {
     if (!validCount) {
-      notify("Enter how many labels to print.", "error");
+      notify("Enter how many barcodes to print.", "error");
       return;
     }
     const result = buildSeries(seriesInput);
@@ -260,7 +306,7 @@ export default function BarcodeGeneratorPage() {
     link.download = `${name}.pdf`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${pages.length} label${pages.length === 1 ? "" : "s"} downloaded`);
+    notify(`${pages.length} barcode${pages.length === 1 ? "" : "s"} downloaded`);
   };
 
   /** Download a saved run straight from its row — no need to preview it first. */
@@ -288,20 +334,20 @@ export default function BarcodeGeneratorPage() {
     link.download = `${batchName(batch)}.zpl`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${labels.length} label${labels.length === 1 ? "" : "s"} ready for the printer`);
+    notify(`${labels.length} barcode${labels.length === 1 ? "" : "s"} ready for the printer`);
   };
 
   return (
     <div>
       <PageHeader
         title="Barcode generator"
-        subtitle="Make labels for rolls that aren't in the system yet, then download them as a PDF sheet."
+        subtitle="Print barcodes for rolls that aren't in the system yet — stick them on first, scan them later."
       />
 
       <div className="barcode-layout">
       <div className="barcode-controls">
         <div className="card" style={{ padding: 16, marginBottom: 14 }}>
-          <strong style={{ fontSize: 14 }}>Make blank labels</strong>
+          <strong style={{ fontSize: 14 }}>Make blank barcodes</strong>
           <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
             For rolls that don't exist in the system yet — stick these on first, scan them later.
           </p>
@@ -313,7 +359,7 @@ export default function BarcodeGeneratorPage() {
                 className="input"
                 placeholder="RT"
                 value={prefix}
-                onChange={(e) => setPrefix(e.target.value)}
+                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
               />
             </label>
             <label className="barcode-field">
@@ -339,7 +385,7 @@ export default function BarcodeGeneratorPage() {
           </div>
 
           <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-primary" onClick={addSeries} disabled={saving}>
+            <button className="btn btn-primary" onClick={addSeries} disabled={!canGenerate}>
               {saving ? "Saving…" : "Generate barcodes"}
             </button>
             <span className="faint" style={{ fontSize: 12 }}>
@@ -350,7 +396,7 @@ export default function BarcodeGeneratorPage() {
 
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
           <div className="row gap-8" style={{ marginBottom: 10, alignItems: "baseline" }}>
-            <strong style={{ fontSize: 13 }}>Saved label runs</strong>
+            <strong style={{ fontSize: 13 }}>Generated barcodes</strong>
             <span className="faint" style={{ fontSize: 12 }}>
               Everything made here before — open a run to print it again.
             </span>
@@ -380,7 +426,7 @@ export default function BarcodeGeneratorPage() {
                         )}
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
-                      {batch.count} label{batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
+                      {batch.count} barcode{batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
                       {new Date(batch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
@@ -404,8 +450,8 @@ export default function BarcodeGeneratorPage() {
                   </button>
                   <button
                     className="btn btn-sm btn-ghost"
-                    onClick={() => deleteBatch(batch)}
-                    title="Delete this run"
+                    onClick={() => setDeleting(batch)}
+                    title="Remove this run from the list"
                   >
                     <X size={14} />
                   </button>
@@ -528,6 +574,50 @@ export default function BarcodeGeneratorPage() {
         )}
       </div>
       </div>
+
+      <Modal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title={deleting ? `Remove ${batchName(deleting)}?` : "Remove run"}
+        size="medium"
+      >
+        {deleting && (
+          <div style={{ display: "grid", gap: 14, padding: 16 }}>
+            <p style={{ margin: 0, fontSize: 14 }}>
+              This takes the run off the list. The barcodes it covers stay used —{" "}
+              <strong>they will never be given out again</strong>, because labels from this
+              run may already be stuck on rolls.
+            </p>
+            <div className="facts-grid">
+              <div>
+                <span className="faint">Labels</span>
+                <strong>{deleting.count}</strong>
+              </div>
+              <div>
+                <span className="faint">Printed by</span>
+                <strong>{deleting.createdBy}</strong>
+              </div>
+              <div>
+                <span className="faint">On</span>
+                <strong>{new Date(deleting.createdAt).toLocaleDateString()}</strong>
+              </div>
+            </div>
+            <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
+              <button type="button" className="btn" onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={confirmDelete}
+                disabled={deletingNow}
+              >
+                {deletingNow ? "Removing…" : "Remove barcodes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

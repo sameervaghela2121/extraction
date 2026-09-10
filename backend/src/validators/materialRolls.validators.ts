@@ -92,6 +92,10 @@ export const listRollsQuerySchema = z.object({
   // to updatedAt ascending so the client can page through the backlog oldest-first and
   // save the last updatedAt it saw as the next checkpoint.
   updated_after: z.coerce.date().optional(),
+  // An allow-list rather than any field name: a free-form sort key lets a caller order by
+  // an unindexed field and turn a paged list into a collection scan.
+  sort: z.enum(["roll_number", "date"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),
 });

@@ -403,6 +403,25 @@ textarea {
 }
 /* Stands in for the "Add to sheet" button once a run is on the sheet — sized to match a
    .btn-sm so the row does not reflow when it swaps in. */
+/* A read-only block of "here is what you are acting on" facts, for confirmation dialogs. */
+.facts-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.facts-grid > div {
+  display: grid;
+  gap: 2px;
+}
+.facts-grid span {
+  font-size: 11px;
+}
+.facts-grid strong {
+  font-size: 13px;
+}
 .barcode-run {
   display: flex;
   align-items: center;

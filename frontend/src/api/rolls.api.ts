@@ -10,7 +10,13 @@ export const rollsApi = {
       .then((r) => r.data),
 
   /** The full roll — the list item is deliberately narrower than this. */
-  listFull: (params: { q?: string; page?: number; pageSize?: number }) =>
+  listFull: (params: {
+    q?: string;
+    sort?: "roll_number" | "date";
+    order?: "asc" | "desc";
+    page?: number;
+    pageSize?: number;
+  }) =>
     api.get<Paginated<MaterialRoll>>("/material-rolls", { params }).then((r) => r.data),
 
   get: (id: string) => api.get<MaterialRoll>(`/material-rolls/${id}`).then((r) => r.data),

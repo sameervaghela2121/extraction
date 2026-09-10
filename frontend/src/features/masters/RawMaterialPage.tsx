@@ -185,6 +185,10 @@ export default function RawMaterialPage() {
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
+  // Deleting splices a row out of its vendor's papers array — there is no undo, and a
+  // roll booked against that RT code is left pointing at a paper nobody can look up.
+  const [deleting, setDeleting] = useState<Row | null>(null);
+  const [deletingNow, setDeletingNow] = useState(false);
   // Vendor is the only sortable column here, and the table starts on it — never in an
   // "unsorted" state, for the reason spelled out in sorting.ts's nextSort.
   const [sort, setSort] = useState<Sort>({ key: "vendor", dir: "asc" });
@@ -308,15 +312,20 @@ export default function RawMaterialPage() {
     }
   };
 
-  const remove = async (row: Row) => {
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeletingNow(true);
     try {
-      await vendorsApi.update(row.vendor.id, {
-        papers: (row.vendor.papers ?? []).filter((_, i) => i !== row.index),
+      await vendorsApi.update(deleting.vendor.id, {
+        papers: (deleting.vendor.papers ?? []).filter((_, i) => i !== deleting.index),
       });
       await load();
+      setDeleting(null);
       notify("Raw material removed");
     } catch (err) {
       notify(apiErrorMessage(err), "error");
+    } finally {
+      setDeletingNow(false);
     }
   };
 
@@ -375,7 +384,7 @@ export default function RawMaterialPage() {
                         <button
                           className="btn btn-sm btn-ghost"
                           title="Delete raw material"
-                          onClick={() => remove(row)}
+                          onClick={() => setDeleting(row)}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -396,6 +405,50 @@ export default function RawMaterialPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Delete this raw material?"
+        size="medium"
+      >
+        {deleting && (
+          <div style={{ display: "grid", gap: 14, padding: 16 }}>
+            <p style={{ margin: 0, fontSize: 14 }}>
+              This removes the paper from{" "}
+              <strong>{deleting.vendor.name}</strong>. It cannot be undone — and any roll
+              already booked against this code will point at a paper that no longer exists.
+            </p>
+            <div className="facts-grid">
+              <div>
+                <span className="faint">RT code</span>
+                <strong>{deleting.paper.royal_touche_code || "—"}</strong>
+              </div>
+              <div>
+                <span className="faint">Delta code</span>
+                <strong>{deleting.paper.delta_code || "—"}</strong>
+              </div>
+              <div>
+                <span className="faint">Supplier code</span>
+                <strong>{deleting.paper.supplier_code_number || "—"}</strong>
+              </div>
+            </div>
+            <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
+              <button type="button" className="btn" onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={confirmDelete}
+                disabled={deletingNow}
+              >
+                {deletingNow ? "Deleting…" : "Delete raw material"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={editing !== null}

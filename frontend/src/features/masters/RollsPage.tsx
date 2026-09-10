@@ -6,6 +6,7 @@ import { rollsApi } from "../../api/rolls.api";
 import { stockApi } from "../../api/stock.api";
 import { locationsApi, materialTypesApi } from "../../api/masters.api";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
+import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
   GodownLocation,
   MaterialRoll,
@@ -63,6 +64,18 @@ export default function RollsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  /**
+   * Sorted server-side, unlike the master tables.
+   *
+   * This list is paged by the API, so ordering the rows already on screen would reorder 25
+   * of however many thousand and quietly lie about the rest.
+   *
+   * Ordered by the date received, newest first — the most recently added roll is the one
+   * someone is usually looking for. The control sits on the Roll number column because
+   * that is the column identifying the row; alphabetical order of mill numbers like
+   * "DP24" and "R9863" is not something anyone wants to read a roll list in.
+   */
+  const [sort, setSort] = useState<Sort>({ key: "date", dir: "desc" });
 
   const [editing, setEditing] = useState<MaterialRoll | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -87,6 +100,8 @@ export default function RollsPage() {
     try {
       const res = await rollsApi.listFull({
         q: q.trim() || undefined,
+        sort: (sort?.key as "roll_number" | "date") ?? undefined,
+        order: sort?.dir,
         page: targetPage,
         pageSize: PAGE_SIZE,
       });
@@ -122,6 +137,12 @@ export default function RollsPage() {
     load(page, search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+  useEffect(() => {
+    setPage(1);
+    load(1, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort]);
 
   // The two pickers. Both masters are read whole, so this is one call each, once.
   useEffect(() => {
@@ -181,6 +202,16 @@ export default function RollsPage() {
    */
   const untouched = movementCount !== null && movementCount <= 1;
 
+  /**
+   * A finished roll's weight is not correctable.
+   *
+   * CONSUMED means the core came back empty, so the figure is 0 by definition. Editing it
+   * produced a roll marked Consumed carrying stock — a state no sequence of movements can
+   * reach, because `status` follows the ledger and a direct correction does not touch it.
+   */
+  const weightLocked = editing?.status === "CONSUMED";
+  const lockReason = "This roll is consumed, so its weight can no longer be changed.";
+
   const setValue = (field: keyof FormState, value: string) =>
     setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
 
@@ -196,7 +227,11 @@ export default function RollsPage() {
     if (Number(form.gsm) !== editing.gsm) patch.gsm = Number(form.gsm);
     if (Number(form.width) !== editing.width) patch.width = Number(form.width);
 
-    if (untouched) {
+    // Guarded here as well as on the input: a disabled field is a UI convention, not a
+    // rule, and the submit path is what actually writes.
+    if (weightLocked) {
+      // Nothing weight-related may go, whichever branch the form was showing.
+    } else if (untouched) {
       // One field on screen, both figures behind it: a roll that has not moved holds exactly
       // what arrived on it. Sent together in a single PATCH so they cannot drift apart.
       if (newWeight !== editing.weight) {
@@ -269,7 +304,7 @@ export default function RollsPage() {
         <input
           className="input"
           style={{ flex: 1, minWidth: 200 }}
-          placeholder="Search by roll number, RT code or batch"
+          placeholder="Search by roll number or RT code"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -283,7 +318,13 @@ export default function RollsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Roll number</th>
+                  {/* Sorts by date received, not by the number itself — see `sort` above. */}
+                  <SortHeader
+                    label="Roll number"
+                    sortKey="date"
+                    sort={sort}
+                    onToggle={(key) => setSort((prev) => nextSort(prev, key))}
+                  />
                   <th>RT code</th>
                   <th>Current weight</th>
                   <th>Status</th>
@@ -305,7 +346,19 @@ export default function RollsPage() {
                     </td>
                     <td>
                       <div className="row gap-8">
-                        <button className="btn btn-sm" onClick={() => openEdit(roll)}>
+                        {/* A finished roll has nothing left to correct: its weight is 0 by
+                            definition and it will never move again. Disabled outright
+                            rather than opening a form where every field is locked. */}
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => openEdit(roll)}
+                          disabled={roll.status === "CONSUMED"}
+                          title={
+                            roll.status === "CONSUMED"
+                              ? "This roll is consumed, so it can no longer be edited."
+                              : undefined
+                          }
+                        >
                           Edit
                         </button>
                         <button
@@ -531,9 +584,13 @@ export default function RollsPage() {
                     value={form.weight}
                     onChange={(e) => setValue("weight", e.target.value)}
                     required
+                    disabled={weightLocked}
+                    title={weightLocked ? lockReason : undefined}
                   />
                   <span className="faint" style={{ fontSize: 11 }}>
-                    This roll has not moved, so this is both what arrived and what is on it now.
+                    {weightLocked
+                      ? lockReason
+                      : "This roll has not moved, so this is both what arrived and what is on it now."}
                   </span>
                 </label>
               ) : (
@@ -556,9 +613,13 @@ export default function RollsPage() {
                       value={form.remaining_weight}
                       onChange={(e) => setValue("remaining_weight", e.target.value)}
                       required
+                      disabled={weightLocked}
+                      title={weightLocked ? lockReason : undefined}
                     />
                     <span className="faint" style={{ fontSize: 11 }}>
-                      Corrected on the roll — no new movement; the last history row's balance follows it.
+                      {weightLocked
+                        ? lockReason
+                        : "Corrected on the roll — no new movement; the last history row's balance follows it."}
                     </span>
                   </label>
                 </>

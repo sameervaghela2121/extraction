@@ -271,6 +271,8 @@ export const materialRollsService = {
     status?: RollStatus;
     location?: string;
     updated_after?: Date;
+    sort?: "roll_number" | "date";
+    order?: "asc" | "desc";
     page?: number;
     pageSize?: number;
   }) {
@@ -295,10 +297,18 @@ export const materialRollsService = {
 
     const [items, total] = await Promise.all([
       MaterialRoll.find(filter)
-        // A delta pull walks forward through updatedAt; every other caller wants newest
-        // received first. _id breaks ties so two rolls saved in the same millisecond
-        // cannot swap places between pages and hide one of themselves.
-        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { date: -1 })
+        // A delta pull walks forward through updatedAt and cannot be reordered — the
+        // client checkpoints on the last row it saw, so any other order breaks resuming.
+        // Otherwise: whatever the caller asked for, defaulting to newest received first.
+        // _id breaks ties so two rolls saved in the same millisecond cannot swap places
+        // between pages and hide one of themselves.
+        .sort(
+          query.updated_after
+            ? { updatedAt: 1, _id: 1 }
+            : query.sort
+              ? { [query.sort]: query.order === "asc" ? 1 : -1, _id: 1 }
+              : { date: -1, _id: -1 },
+        )
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate(REF_POPULATE)
