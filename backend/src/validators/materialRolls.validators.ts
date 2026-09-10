@@ -63,14 +63,13 @@ export const createRollSchema = z.object({
 export const updateRollSchema = createRollSchema
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: "Provide at least one field to update" })
-  // Editing either of these here would move stock with no ledger row behind it —
-  // status because a roll leaving IN_STOCK drops out of the on-hand totals. Both stay
-  // in the schema so the caller gets this explanation rather than a silently ignored
-  // update.
-  .refine((v) => v.remaining_weight === undefined, {
-    message: "Stock changes must be recorded as a movement, not edited on the roll",
-    path: ["remaining_weight"],
-  })
+  // remaining_weight IS editable here. It used to be refused so that a stock figure could
+  // only move behind a ledger row, but correcting a number that was mistyped at registration
+  // is not a movement — recording it as one wrote ADJUSTMENT rows for events that never
+  // happened. The roll's own figure is corrected directly and the ledger is left alone.
+  //
+  // status stays refused: a roll leaving IN_STOCK drops out of the on-hand totals, and that
+  // genuinely does follow from a movement.
   .refine((v) => v.status === undefined, {
     message: "A roll's status follows its movements — issue or consume it instead",
     path: ["status"],
