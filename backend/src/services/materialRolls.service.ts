@@ -115,6 +115,7 @@ async function toResponse(r: PopulatedRoll) {
     barcode: r.barcode,
     remark_code: r.remark_code,
     remarks: r.remarks,
+    remark_codes: r.remark_codes,
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
     batch_no: r.batch_no,
@@ -385,6 +386,23 @@ export const materialRollsService = {
     }
     await roll.save();
     await refreshSummaries([previousMaterialId, roll.material_id]);
+    await roll.populate(REF_POPULATE);
+    return toResponse(roll as unknown as PopulatedRoll);
+  },
+
+  /** Replaces the roll's remark_codes wholesale — the caller sends the complete set it
+   *  wants, not a delta. Kept off the general update endpoint because this list gets
+   *  revised long after registration, by whoever is looking at the roll that day, not by
+   *  the flow that filled in the rest of the form. */
+  async updateRemarkCodes(id: string, remarkCodes: string[]) {
+    const roll = await findRoll(id);
+    // Uppercased and de-duplicated here rather than left to the schema cast, so two
+    // callers picking the same code differently ("color-var" / "COLOR-VAR") collapse to
+    // one entry instead of the array silently growing duplicates.
+    const codes = [...new Set(remarkCodes.map((c) => c.trim().toUpperCase()))];
+    // Undefined rather than [], matching remark_codes' own "unset, not empty" convention.
+    roll.remark_codes = codes.length ? codes : undefined;
+    await roll.save();
     await roll.populate(REF_POPULATE);
     return toResponse(roll as unknown as PopulatedRoll);
   },

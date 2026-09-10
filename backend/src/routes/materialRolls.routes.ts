@@ -7,6 +7,7 @@ import { validate } from "../middleware/validate.middleware";
 import {
   createRollSchema,
   updateRollSchema,
+  updateRollRemarkCodesSchema,
   listRollsQuerySchema,
 } from "../validators/materialRolls.validators";
 
@@ -33,6 +34,12 @@ router.patch(
   canWrite,
   validate({ body: updateRollSchema }),
   asyncHandler(materialRollsController.update),
+);
+router.patch(
+  "/:id/remark-codes",
+  canWrite,
+  validate({ body: updateRollRemarkCodesSchema }),
+  asyncHandler(materialRollsController.updateRemarkCodes),
 );
 router.delete("/:id", canWrite, asyncHandler(materialRollsController.remove));
 

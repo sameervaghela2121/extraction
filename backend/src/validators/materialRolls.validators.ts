@@ -83,6 +83,14 @@ export const updateRollSchema = createRollSchema
     path: ["client_id"],
   });
 
+// The separate endpoint that sets remark_codes — deliberately not part of createRollSchema
+// or updateRollSchema, since this list is revised after registration rather than filled in
+// once with the rest of the form. An empty array is valid: it clears every code back off
+// the roll, same as sending no photos clears a photo slot.
+export const updateRollRemarkCodesSchema = z.object({
+  remark_codes: z.array(z.string().trim().min(1)).max(20, "Too many remark codes"),
+});
+
 export const listRollsQuerySchema = z.object({
   q: z.string().trim().optional(),
   material_id: objectId.optional(),
