@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Eye, X } from "lucide-react";
+import { Download, Eye, Printer, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
@@ -7,6 +7,7 @@ import { PageHeader, Spinner } from "../../components/ui";
 import Label, { barPattern, type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
+import { buildZpl } from "./zpl";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
 
@@ -269,6 +270,27 @@ export default function BarcodeGeneratorPage() {
     downloadLabels(labels, batchName(batch));
   };
 
+  /**
+   * The same run as printer commands rather than a document.
+   *
+   * Plain text, so it can go to the printer however the office finds easiest — dragged into
+   * the printer's utility, or copied to its share. The browser has to produce this rather
+   * than the server: the printer sits on their LAN and the backend runs in Cloud Run, so
+   * the two can never reach each other.
+   */
+  const downloadBatchZpl = (batch: BarcodeBatch) => {
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    const blob = new Blob([buildZpl(labels)], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${batchName(batch)}.zpl`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify(`${labels.length} label${labels.length === 1 ? "" : "s"} ready for the printer`);
+  };
+
   return (
     <div>
       <PageHeader
@@ -368,6 +390,13 @@ export default function BarcodeGeneratorPage() {
                   </button>
                   <button
                     className="btn btn-sm btn-primary"
+                    onClick={() => downloadBatchZpl(batch)}
+                    title="Send this run to the label printer"
+                  >
+                    <Printer size={14} /> Print file
+                  </button>
+                  <button
+                    className="btn btn-sm"
                     onClick={() => downloadBatch(batch)}
                     title="Download this run as a PDF"
                   >
