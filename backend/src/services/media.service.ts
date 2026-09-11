@@ -38,6 +38,24 @@ function buildObjectPath(mimetype: string, originalName: string): string {
   return `rolls/${year}/${month}/${crypto.randomUUID()}${extension}`;
 }
 
+/**
+ * Signing fails for the same reason on every object — almost always missing or unusable
+ * credentials — so a page of 25 rolls would otherwise log one identical error per photo.
+ * Once a minute is enough to notice it without burying everything else.
+ */
+let lastSigningLog = 0;
+const SIGNING_LOG_INTERVAL_MS = 60_000;
+
+function logSigningFailure(objectPath: string, err: unknown): void {
+  const now = Date.now();
+  if (now - lastSigningLog < SIGNING_LOG_INTERVAL_MS) return;
+  lastSigningLog = now;
+  logger.error(
+    `[media] could not sign a read URL for gs://${env.gcsBucket}/${objectPath} — photos render as missing until this is fixed:`,
+    (err as Error).message,
+  );
+}
+
 export const mediaService = {
   /** Uploads the buffer and returns the stored object path — not a URL. */
   async upload(file: { buffer: Buffer; mimetype: string; originalname: string }) {
@@ -73,10 +91,16 @@ export const mediaService = {
   },
 
   /**
-   * A time-limited read URL for a stored object.
+   * A time-limited read URL for a stored object. Throws if it cannot be minted.
    *
-   * Signing is local crypto — no network call — so minting these per response is cheap
-   * enough to do on every roll response.
+   * Signing is local crypto only when the credentials carry a private key — which is what
+   * Cloud Run's runtime service account provides. Under user ADC there is no key, so the
+   * library falls back to the IAM signBlob API and each URL becomes a network call. That
+   * is also why this fails outright on a machine with no credentials at all.
+   *
+   * Left strict for the upload response: a URL that cannot be minted there means the
+   * storage setup is wrong, and the caller should hear about it rather than be handed a
+   * success with a hole in it.
    */
   async signedReadUrl(objectPath: string): Promise<string> {
     const [url] = await bucket.file(objectPath).getSignedUrl({
@@ -87,8 +111,23 @@ export const mediaService = {
     return url;
   },
 
-  /** Convenience for the roll responses, which carry four optional photos. */
+  /**
+   * The same URL, for a response that only renders it — where a failure must not take the
+   * rest of the payload down with it.
+   *
+   * A roll list is weights, locations and statuses; a movement list is a stock ledger.
+   * Neither stops being worth reading because a photo cannot be signed, yet one unsignable
+   * path used to return 500 for the whole page. Null instead — the value these responses
+   * already carry for a photo slot that was never filled, so no client meets a shape it
+   * was not already handling.
+   */
   async signedReadUrlOrNull(objectPath?: string | null): Promise<string | null> {
-    return objectPath ? this.signedReadUrl(objectPath) : null;
+    if (!objectPath) return null;
+    try {
+      return await this.signedReadUrl(objectPath);
+    } catch (err) {
+      logSigningFailure(objectPath, err);
+      return null;
+    }
   },
 };

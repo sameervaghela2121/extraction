@@ -32,13 +32,13 @@ export const barcodeBatchesService = {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
     const [items, total] = await Promise.all([
-      BarcodeBatch.find()
+      BarcodeBatch.find({ deleted_at: null })
         .sort({ createdAt: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate("createdBy", "name")
         .lean<IBarcodeBatch[]>(),
-      BarcodeBatch.countDocuments(),
+      BarcodeBatch.countDocuments({ deleted_at: null }),
     ]);
     return {
       items: items.map(toResponse),
@@ -47,6 +47,28 @@ export const barcodeBatchesService = {
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
+  },
+
+  /**
+   * Where the next run for this prefix and date should start.
+   *
+   * A code is prefix + YYMMDD + sequence, so a number only has to be unique within one
+   * prefix on one date — which is exactly what is filtered here.
+   *
+   * Deleted runs count. Their labels were printed and are on rolls somewhere, so the
+   * counter must never rewind past them. This is also why the client no longer works this
+   * out from the runs it happens to have loaded: that list is paginated and hides removed
+   * runs, so it could only ever see part of the answer.
+   */
+  async nextNumber(prefix: string, date: string) {
+    const highest = await BarcodeBatch.findOne({
+      prefix: prefix.trim().toUpperCase(),
+      date: date.trim(),
+    })
+      .sort({ to_number: -1 })
+      .select("to_number")
+      .lean();
+    return { next: (highest?.to_number ?? 0) + 1 };
   },
 
   async create(input: BatchInput, auth: AuthPayload) {
@@ -71,11 +93,20 @@ export const barcodeBatchesService = {
     }
   },
 
-  // A hard delete: a batch is a record of what was printed, not something other records
-  // point at, so there is nothing for a soft delete to protect.
+  /**
+   * Soft, and deliberately so.
+   *
+   * The row is a record of numbers that were physically printed. Removing it used to let
+   * nextNumber hand those same codes out again — two rolls carrying one barcode, which is
+   * unrecoverable once they are in the godown. The run leaves the list; the numbers stay
+   * spent.
+   */
   async remove(id: string) {
     const batch = await findOr404(BarcodeBatch, id, "barcode batch");
-    await batch.deleteOne();
+    if (!batch.deleted_at) {
+      batch.deleted_at = new Date();
+      await batch.save();
+    }
     return { id };
   },
 };

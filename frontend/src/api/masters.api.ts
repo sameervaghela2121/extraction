@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { GodownLocation, RawMaterial, Remark, Vendor } from "../types";
+import type { GodownLocation, MaterialType, Remark, Vendor } from "../types";
 
 /** The master collections are the same CRUD shape over different paths, so one factory
  *  covers all of them. None of them paginate — they are read whole into pickers. */
@@ -15,5 +15,7 @@ function crud<T extends { id: string }>(path: string) {
 
 export const vendorsApi = crud<Vendor>("/vendors");
 export const locationsApi = crud<GodownLocation>("/locations");
-export const rawMaterialsApi = crud<RawMaterial>("/raw-materials");
+// Path stays "/raw-materials": the backend resource is unchanged, only what the screen
+// calls it. Renaming the endpoint would break the mobile app, which reads the same list.
+export const materialTypesApi = crud<MaterialType>("/raw-materials");
 export const remarksApi = crud<Remark>("/remarks");

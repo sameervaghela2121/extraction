@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import { Download, Eye, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, Eye, Printer, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
-import { PageHeader, Spinner } from "../../components/ui";
-import Label, { renderLabel, renderSheet, type LabelItem } from "./Label";
-import { buildSeries, seriesCode } from "./series";
-import { buildPdf, dataUrlToBytes, type PdfPage } from "./pdf";
+import { Modal, PageHeader, Spinner } from "../../components/ui";
+import Label, { barPattern, type LabelItem } from "./Label";
+import { buildSeries, seriesCode, MAX_SERIES } from "./series";
+import { buildLabelPdf, type PdfLabel } from "./pdf";
+import { buildZpl } from "./zpl";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
 
@@ -14,21 +15,6 @@ const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
 // true to bring back the search, the "Select page" button and the roll table.
 const ROLL_PICKER_ENABLED = false;
-
-/** Labels per A4 page in the downloaded PDF — 2 columns of 7, which is what fits once
- *  the sheet is scaled to the page width. */
-const LABELS_PER_PAGE = 14;
-
-/** Render one label to a PNG and hand it to the browser. Done off-screen rather than by
- *  reading the printed label's canvas, so a download works before anything is selected in
- *  view and always comes out at full resolution. */
-function downloadPng(item: LabelItem): void {
-  const canvas = renderLabel(item);
-  const link = document.createElement("a");
-  link.href = canvas.toDataURL("image/png");
-  link.download = `${item.code}.png`;
-  link.click();
-}
 
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
  *  apart on a rack. */
@@ -60,10 +46,16 @@ export default function BarcodeGeneratorPage() {
   // the next start number picked without guessing.
   const [batches, setBatches] = useState<BarcodeBatch[]>([]);
   const [saving, setSaving] = useState(false);
+  // Uppercased at the input, not at save time. CODE128 is case-sensitive, so a lowercase
+  // prefix produced labels the backend then stored uppercase — reprinting the same run
+  // gave a different barcode from the one already stuck on the roll.
   const [prefix, setPrefix] = useState("RT");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [from, setFrom] = useState("1");
-  const [to, setTo] = useState("10");
+  // How many labels this run prints. Where it starts is not asked for — see nextStart.
+  const [quantity, setQuantity] = useState("10");
+  // The run awaiting a "yes" before it is removed from the list.
+  const [deleting, setDeleting] = useState<BarcodeBatch | null>(null);
+  const [deletingNow, setDeletingNow] = useState(false);
 
   useEffect(() => {
     if (!ROLL_PICKER_ENABLED) {
@@ -127,22 +119,98 @@ export default function BarcodeGeneratorPage() {
   // under a page of rolls selected earlier.
   const sheet: LabelItem[] = [...seriesLabels, ...Object.values(selected).map(rollLabel)];
 
-  const seriesInput = { prefix, date, from: Number(from), to: Number(to) };
-  const seriesCount = Number(to) - Number(from) + 1;
-  const preview =
-    seriesCount > 0
-      ? `${seriesCount} label${seriesCount === 1 ? "" : "s"}: ${seriesCode(seriesInput, Number(from))}` +
-        (seriesCount > 1 ? ` to ${seriesCode(seriesInput, Number(to))}` : "")
-      : "Enter a start and end number.";
+  /**
+   * Where this run starts — answered by the server, not counted from the runs on screen.
+   *
+   * A code is prefix + YYMMDD + sequence, so a number only has to be unique within one
+   * prefix on one date. Working that out client-side meant reading the loaded runs, which
+   * both stops at a page boundary and cannot see runs that were removed from the list —
+   * and a removed run's labels are still on rolls in the godown.
+   *
+   * Nothing is typed here. Nobody knew the right start number without reading the saved
+   * runs first, and getting it wrong reprinted codes already in use.
+   */
+  const [nextStart, setNextStart] = useState<number | null>(null);
 
-  // Merge by code so re-adding an overlapping range tops it up instead of printing the
-  // same label twice.
-  const mergeLabels = (labels: LabelItem[]) =>
-    setSeriesLabels((prev) => {
-      const byKey = new Map(prev.map((l) => [l.key, l]));
-      for (const label of labels) byKey.set(label.key, label);
-      return [...byKey.values()];
-    });
+  useEffect(() => {
+    let cancelled = false;
+    // Debounced: the prefix box fires this on every keystroke.
+    const timer = setTimeout(async () => {
+      try {
+        const res = await barcodeBatchesApi.nextNumber({ prefix, date });
+        if (!cancelled) setNextStart(res.next);
+      } catch (err) {
+        // Left null, which disables Generate — better than defaulting to 1 and reissuing
+        // a number that is already on a roll.
+        if (!cancelled) {
+          setNextStart(null);
+          notify(apiErrorMessage(err), "error");
+        }
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefix, date, batches]);
+
+  const count = Number(quantity);
+  // Over the cap is refused here rather than after the click. The preview used to promise
+  // "501 labels: …" and only reveal the limit once the run had been submitted.
+  const validCount = Number.isInteger(count) && count > 0 && count <= MAX_SERIES;
+  // Null until the server says where to start; nothing can be generated before then.
+  const canGenerate = validCount && nextStart !== null && !saving;
+
+  const seriesInput = {
+    prefix,
+    date,
+    from: nextStart ?? 1,
+    to: (nextStart ?? 1) + Math.max(count, 1) - 1,
+  };
+  const preview =
+    !Number.isInteger(count) || count <= 0
+      ? "Enter how many barcodes to print."
+      : count > MAX_SERIES
+        ? `That's ${count} barcodes — ${MAX_SERIES} at a time is the limit.`
+        : nextStart === null
+          ? "Checking which numbers are still free…"
+          : `${count} barcode${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
+            (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
+
+  /**
+   * Which saved runs are already on the sheet.
+   *
+   * Checked by first and last code rather than by expanding every run: 50 runs of up to 500
+   * labels is 25,000 strings to rebuild on each render, and a run only ever goes on as a
+   * whole — addBatch merges the entire range at once — so its two ends answer the question.
+   */
+  const sheetKeys = useMemo(() => new Set(seriesLabels.map((l) => l.key)), [seriesLabels]);
+
+  const isOnSheet = (batch: BarcodeBatch) => {
+    const input = {
+      prefix: batch.prefix,
+      date: batch.date,
+      from: batch.from_number,
+      to: batch.to_number,
+    };
+    return (
+      sheetKeys.has(`series:${seriesCode(input, batch.from_number)}`) &&
+      sheetKeys.has(`series:${seriesCode(input, batch.to_number)}`)
+    );
+  };
+
+  /** "RT260910001-RT260910050" — the run's range, for the row heading and the filename. */
+  const batchName = (batch: BarcodeBatch) => {
+    const input = {
+      prefix: batch.prefix,
+      date: batch.date,
+      from: batch.from_number,
+      to: batch.to_number,
+    };
+    const first = seriesCode(input, batch.from_number);
+    return batch.count > 1 ? `${first}-${seriesCode(input, batch.to_number)}` : first;
+  };
 
   /** The codes of a saved run, rebuilt from its recipe — nothing is stored server-side. */
   const labelsOf = (batch: BarcodeBatch): LabelItem[] | null => {
@@ -167,23 +235,29 @@ export default function BarcodeGeneratorPage() {
     setSelected({});
   };
 
-  const addBatch = (batch: BarcodeBatch) => {
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    mergeLabels(labels);
-    notify(`${labels.length} label${labels.length === 1 ? "" : "s"} added`);
-  };
-
-  const deleteBatch = async (batch: BarcodeBatch) => {
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeletingNow(true);
     try {
-      await barcodeBatchesApi.remove(batch.id);
-      setBatches((prev) => prev.filter((b) => b.id !== batch.id));
+      await barcodeBatchesApi.remove(deleting.id);
+      setBatches((prev) => prev.filter((b) => b.id !== deleting.id));
+      // The preview may be showing the run that just went; leaving it up invites a
+      // download of something no longer in the list.
+      if (isOnSheet(deleting)) setSeriesLabels([]);
+      setDeleting(null);
+      notify("Barcodes removed from the list");
     } catch (err) {
       notify(apiErrorMessage(err), "error");
+    } finally {
+      setDeletingNow(false);
     }
   };
 
   const addSeries = async () => {
+    if (!validCount) {
+      notify("Enter how many barcodes to print.", "error");
+      return;
+    }
     const result = buildSeries(seriesInput);
     if (!result.ok) {
       notify(result.error, "error");
@@ -195,8 +269,8 @@ export default function BarcodeGeneratorPage() {
       const saved = await barcodeBatchesApi.create({
         prefix,
         date,
-        from_number: Number(from),
-        to_number: Number(to),
+        from_number: seriesInput.from,
+        to_number: seriesInput.to,
       });
       setBatches((prev) => [saved, ...prev]);
     } catch (err) {
@@ -205,46 +279,75 @@ export default function BarcodeGeneratorPage() {
       return;
     }
     setSaving(false);
-    mergeLabels(result.labels);
-    // Move the range on by its own length, so the next run continues where this one ended
-    // instead of reprinting the same numbers — the easiest mistake to make on this screen.
-    setFrom(String(Number(to) + 1));
-    setTo(String(Number(to) + result.labels.length));
-    notify(`Saved — ${result.labels.length} label${result.labels.length === 1 ? "" : "s"} on the sheet`);
+    // Replaces rather than merges: the sheet shows exactly one run — the one just made, or
+    // the one View was clicked on. Merging let two runs pile up invisibly, and printing a
+    // range twice puts the same code on two rolls, which is unrecoverable in the godown.
+    setSeriesLabels(result.labels);
+    setSelected({});
+    // Nothing to advance by hand any more: the saved run is now in `batches`, and nextStart
+    // recomputes from it, so the next run already begins where this one ended.
+    notify(`Generated ${result.labels.length} barcode${result.labels.length === 1 ? "" : "s"}`);
   };
 
-  const downloadSheet = () => {
-    // One A4 page per chunk: paging here
-    // rather than scaling the whole sheet down keeps every barcode the same size.
-    const pages: PdfPage[] = [];
-    for (let start = 0; start < sheet.length; start += LABELS_PER_PAGE) {
-      const canvas = renderSheet(sheet.slice(start, start + LABELS_PER_PAGE));
-      pages.push({
-        jpeg: dataUrlToBytes(canvas.toDataURL("image/jpeg", 0.92)),
-        width: canvas.width,
-        height: canvas.height,
-      });
-    }
-    const url = URL.createObjectURL(buildPdf(pages));
+  /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
+   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. */
+  const downloadLabels = (labels: LabelItem[], name: string) => {
+    if (labels.length === 0) return;
+    // One 100x50mm page per label, drawn as vectors — the page IS the sticker, so a
+    // thermal printer feeds one per label with nothing to scale or cut.
+    const pages: PdfLabel[] = labels.map((label) => ({
+      bars: barPattern(label.code),
+      code: label.code,
+      lines: label.lines,
+    }));
+    const url = URL.createObjectURL(buildLabelPdf(pages));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `label-sheet-${sheet.length}.pdf`;
+    link.download = `${name}.pdf`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${pages.length} page${pages.length === 1 ? "" : "s"} downloaded`);
+    notify(`${pages.length} barcode${pages.length === 1 ? "" : "s"} downloaded`);
+  };
+
+  /** Download a saved run straight from its row — no need to preview it first. */
+  const downloadBatch = (batch: BarcodeBatch) => {
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    downloadLabels(labels, batchName(batch));
+  };
+
+  /**
+   * The same run as printer commands rather than a document.
+   *
+   * Plain text, so it can go to the printer however the office finds easiest — dragged into
+   * the printer's utility, or copied to its share. The browser has to produce this rather
+   * than the server: the printer sits on their LAN and the backend runs in Cloud Run, so
+   * the two can never reach each other.
+   */
+  const downloadBatchZpl = (batch: BarcodeBatch) => {
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    const blob = new Blob([buildZpl(labels)], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${batchName(batch)}.zpl`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify(`${labels.length} barcode${labels.length === 1 ? "" : "s"} ready for the printer`);
   };
 
   return (
     <div>
       <PageHeader
         title="Barcode generator"
-        subtitle="Make labels for rolls that aren't in the system yet, then download them as a PDF sheet."
+        subtitle="Print barcodes for rolls that aren't in the system yet — stick them on first, scan them later."
       />
 
       <div className="barcode-layout">
       <div className="barcode-controls">
         <div className="card" style={{ padding: 16, marginBottom: 14 }}>
-          <strong style={{ fontSize: 14 }}>Make blank labels</strong>
+          <strong style={{ fontSize: 14 }}>Make blank barcodes</strong>
           <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
             For rolls that don't exist in the system yet — stick these on first, scan them later.
           </p>
@@ -256,7 +359,7 @@ export default function BarcodeGeneratorPage() {
                 className="input"
                 placeholder="RT"
                 value={prefix}
-                onChange={(e) => setPrefix(e.target.value)}
+                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
               />
             </label>
             <label className="barcode-field">
@@ -269,30 +372,21 @@ export default function BarcodeGeneratorPage() {
               />
             </label>
             <label className="barcode-field">
-              <span>Start number</span>
+              <span>Quantity</span>
               <input
                 className="input"
                 type="number"
-                min={0}
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </label>
-            <label className="barcode-field">
-              <span>End number</span>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
+                min={1}
+                max={MAX_SERIES}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
               />
             </label>
           </div>
 
           <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-primary" onClick={addSeries} disabled={saving}>
-              {saving ? "Saving…" : "Save & add to sheet"}
+            <button className="btn btn-primary" onClick={addSeries} disabled={!canGenerate}>
+              {saving ? "Saving…" : "Generate barcodes"}
             </button>
             <span className="faint" style={{ fontSize: 12 }}>
               {preview}
@@ -302,9 +396,9 @@ export default function BarcodeGeneratorPage() {
 
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
           <div className="row gap-8" style={{ marginBottom: 10, alignItems: "baseline" }}>
-            <strong style={{ fontSize: 13 }}>Saved label runs</strong>
+            <strong style={{ fontSize: 13 }}>Generated barcodes</strong>
             <span className="faint" style={{ fontSize: 12 }}>
-              Everything made here before — add a run back to the sheet to print it again.
+              Everything made here before — open a run to print it again.
             </span>
           </div>
           {batches.length === 0 ? (
@@ -314,7 +408,10 @@ export default function BarcodeGeneratorPage() {
           ) : (
             <div className="stack" style={{ gap: 6, maxHeight: 260, overflowY: "auto" }}>
               {batches.map((batch) => (
-                <div key={batch.id} className="barcode-run">
+                <div
+                  key={batch.id}
+                  className={`barcode-run${isOnSheet(batch) ? " selected" : ""}`}
+                >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                       {seriesCode(
@@ -329,21 +426,32 @@ export default function BarcodeGeneratorPage() {
                         )}
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
-                      {batch.count} label{batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
+                      {batch.count} barcode{batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
                       {new Date(batch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div className="spacer" />
                   <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                    <Eye size={14} /> View sheet
+                    <Eye size={14} /> View barcodes
                   </button>
-                  <button className="btn btn-sm" onClick={() => addBatch(batch)}>
-                    Add to sheet
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => downloadBatchZpl(batch)}
+                    title="Send this run to the label printer"
+                  >
+                    <Printer size={14} /> Print file
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => downloadBatch(batch)}
+                    title="Download this run as a PDF"
+                  >
+                    <Download size={14} /> PDF
                   </button>
                   <button
                     className="btn btn-sm btn-ghost"
-                    onClick={() => deleteBatch(batch)}
-                    title="Delete this run"
+                    onClick={() => setDeleting(batch)}
+                    title="Remove this run from the list"
                   >
                     <X size={14} />
                   </button>
@@ -353,35 +461,20 @@ export default function BarcodeGeneratorPage() {
           )}
         </div>
 
-        <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
-          {ROLL_PICKER_ENABLED && (
-            <>
-              <input
-                className="input"
-                style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by roll number, RT code or batch"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button className="btn" onClick={selectPage} disabled={rolls.length === 0}>
-                Select page
-              </button>
-            </>
-          )}
-          <button
-            className="btn"
-            onClick={() => {
-              setSelected({});
-              setSeriesLabels([]);
-            }}
-            disabled={sheet.length === 0}
-          >
-            Clear ({sheet.length})
-          </button>
-          <button className="btn btn-primary" onClick={downloadSheet} disabled={sheet.length === 0}>
-            <Download size={15} /> Download sheet (PDF)
-          </button>
-        </div>
+        {ROLL_PICKER_ENABLED && (
+          <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 200 }}
+              placeholder="Search by roll number, RT code or batch"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button className="btn" onClick={selectPage} disabled={rolls.length === 0}>
+              Select page
+            </button>
+          </div>
+        )}
 
         {ROLL_PICKER_ENABLED && (
         <div className="card" style={{ overflow: "hidden", marginBottom: 18 }}>
@@ -464,29 +557,67 @@ export default function BarcodeGeneratorPage() {
 
       <div className="barcode-sheet-wrap">
         <h2 style={{ fontSize: 15, margin: "0 0 10px" }} className="barcode-controls">
-          Label sheet ({sheet.length})
+          Ready to print ({sheet.length})
         </h2>
         {sheet.length === 0 ? (
           <p className="faint barcode-controls" style={{ fontSize: 12, margin: 0 }}>
-            Make some labels above — they appear here as you add them.
+            Generate a run above, or open a saved one — the barcodes appear here.
           </p>
         ) : (
           <div className="barcode-sheet">
             {sheet.map((item) => (
               <div key={item.key} className="barcode-label-slot">
                 <Label item={item} />
-                <button
-                  className="btn btn-sm btn-ghost barcode-controls"
-                  onClick={() => downloadPng(item)}
-                >
-                  <Download size={13} /> PNG
-                </button>
               </div>
             ))}
           </div>
         )}
       </div>
       </div>
+
+      <Modal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title={deleting ? `Remove ${batchName(deleting)}?` : "Remove run"}
+        size="medium"
+      >
+        {deleting && (
+          <div style={{ display: "grid", gap: 14, padding: 16 }}>
+            <p style={{ margin: 0, fontSize: 14 }}>
+              This takes the run off the list. The barcodes it covers stay used —{" "}
+              <strong>they will never be given out again</strong>, because labels from this
+              run may already be stuck on rolls.
+            </p>
+            <div className="facts-grid">
+              <div>
+                <span className="faint">Labels</span>
+                <strong>{deleting.count}</strong>
+              </div>
+              <div>
+                <span className="faint">Printed by</span>
+                <strong>{deleting.createdBy}</strong>
+              </div>
+              <div>
+                <span className="faint">On</span>
+                <strong>{new Date(deleting.createdAt).toLocaleDateString()}</strong>
+              </div>
+            </div>
+            <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
+              <button type="button" className="btn" onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={confirmDelete}
+                disabled={deletingNow}
+              >
+                {deletingNow ? "Removing…" : "Remove barcodes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

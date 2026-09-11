@@ -6,6 +6,11 @@ export const barcodeBatchesController = {
     res.json(await barcodeBatchesService.list(req.query));
   },
 
+  async nextNumber(req: Request, res: Response) {
+    const { prefix, date } = req.query as { prefix: string; date: string };
+    res.json(await barcodeBatchesService.nextNumber(prefix, date));
+  },
+
   async create(req: Request, res: Response) {
     res.status(201).json(await barcodeBatchesService.create(req.body, req.auth!));
   },

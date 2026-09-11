@@ -39,3 +39,15 @@ export const listBarcodeBatchesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+/** Same shape the create schema accepts, so the number this hands out is for the run the
+ *  caller is about to save. */
+export const nextNumberQuerySchema = z.object({
+  prefix: z.string().trim().max(12).optional().default(""),
+  date: z
+    .string()
+    .trim()
+    .regex(/^(\d{4}-\d{2}-\d{2})?$/, "Date must be YYYY-MM-DD")
+    .optional()
+    .default(""),
+});

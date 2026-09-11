@@ -12,6 +12,10 @@ export interface IRawMaterial {
   width_mm?: number;
   unit: string;
   reorder_level?: number;
+  /** Where this material sits in a picker, low first. Same idea as a location's: the list
+   *  should follow how the godown actually thinks about its materials, which is rarely
+   *  alphabetical. Absent sorts last, so an unnumbered material never jumps to the top. */
+  sort_order?: number;
   status: RawMaterialStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +33,7 @@ const rawMaterialSchema = new Schema<IRawMaterial>(
     unit: { type: String, required: true, trim: true },
     // Stock threshold that should trigger a reorder. Absent = nobody tracks it yet.
     reorder_level: { type: Number, min: 0 },
+    sort_order: { type: Number },
     status: { type: String, enum: [...RAW_MATERIAL_STATUSES], default: "active" },
   },
   { timestamps: true, collection: "raw_materials" },

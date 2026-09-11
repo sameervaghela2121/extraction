@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   // Icons for the temporarily-disabled nav entries above — restore alongside them.
   // Upload,
@@ -9,21 +10,30 @@ import {
   // Download,
   // Settings,
   Users,
-  Truck,
-  MapPin,
-  Boxes,
-  MessageSquare,
+  Database,
   ScanBarcode,
+  ChevronDown,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "../components/ui";
 
-interface NavItem {
+/** One entry inside a group. No icon of its own — the group's icon stands for the set,
+ *  and a column of near-identical glyphs under it reads as noise rather than navigation. */
+interface NavChild {
   to: string;
   label: string;
+}
+
+interface NavItem {
+  /** Absent on a group: it toggles its children open instead of navigating anywhere. */
+  to?: string;
+  label: string;
   icon: LucideIcon;
+  /** Present makes this a group. Role flags are read off the parent only — a group and
+   *  its children are one section, so they are shown or hidden together. */
+  children?: NavChild[];
   adminOnly?: boolean;
   /** Staff only need the GRN workflow — everything else is hidden for them unless
    *  opted in here. Admins always see the full nav regardless of this flag. */
@@ -36,7 +46,7 @@ interface NavItem {
 }
 
 // ponytail: masters are built and working, just not wanted in the nav yet. Flip to true to
-// bring the four Royal Touche master entries back — nothing else has to change.
+// bring the Master group back — nothing else has to change.
 const MASTERS_ENABLED = true;
 
 // TEMPORARILY DISABLED, in step with the matching routes commented out in router.tsx —
@@ -52,19 +62,49 @@ const NAV: NavItem[] = [
   // { to: "/export", label: "Export", icon: Download },
   // { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
-  // Royal Touche masters — one entry each, in the order they're maintained.
-  { to: "/masters/vendors", label: "Vendors & papers", icon: Truck, supervisorVisible: true },
-  { to: "/masters/locations", label: "Locations", icon: MapPin, supervisorVisible: true },
-  { to: "/masters/raw-materials", label: "Raw materials", icon: Boxes, supervisorVisible: true },
-  { to: "/masters/remarks", label: "Remarks", icon: MessageSquare, supervisorVisible: true },
+  // The Royal Touche masters, grouped: four entries that are always maintained together
+  // read as one section, not as four peers of Barcode generator.
+  {
+    label: "Master",
+    icon: Database,
+    supervisorVisible: true,
+    children: [
+      { to: "/masters/vendors", label: "Vendors" },
+      { to: "/masters/locations", label: "Locations" },
+      { to: "/masters/material-types", label: "Material types" },
+      { to: "/masters/remarks", label: "Remarks" },
+      { to: "/masters/raw-material", label: "Raw materials" },
+      { to: "/masters/rolls", label: "Rolls" },
+    ],
+  },
   { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
 ];
+
+/** Every leaf a nav item points at. A group contributes its children; anything else is
+ *  its own leaf. Used for the mobile bar, which is a flat strip of icons and has no way
+ *  to nest — flattening keeps all four masters reachable on a phone. */
+function leaves(item: NavItem): Array<{ to: string; label: string; icon: LucideIcon; end?: boolean }> {
+  if (item.children) return item.children.map((c) => ({ ...c, icon: item.icon }));
+  return [{ to: item.to!, label: item.label, icon: item.icon, end: item.end }];
+}
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Which groups the user has CLOSED. Absent means open, so a group starts expanded and
+  // only ever collapses because someone collapsed it.
+  //
+  // Deliberately not keyed off the route: deriving it from "is the current page inside
+  // this group" meant navigating to Barcode generator folded the group shut, and it only
+  // appeared to work once the user had clicked the header, because that finally wrote an
+  // entry here for the route to stop overriding.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
   const items = NAV.filter((i) => {
-    if (!MASTERS_ENABLED && i.to.startsWith("/masters")) return false;
+    // Master is a group with no `to` of its own, so the check has to look at its
+    // children's routes rather than i.to (which main's version of this check assumed).
+    if (!MASTERS_ENABLED && leaves(i).some((l) => l.to.startsWith("/masters"))) return false;
     // super_admin is the one role with no ceiling: unlike admin, it sees the
     // supervisor-only master section too, not just everything admin sees.
     if (user?.role === "super_admin") return true;
@@ -77,6 +117,12 @@ export default function AppLayout() {
     if (i.adminOnly) return false;
     return Boolean(i.staffVisible);
   });
+
+  // Only for highlighting the header — the group's open state no longer depends on it.
+  const isInside = (item: NavItem) => Boolean(item.children?.some((c) => pathname.startsWith(c.to)));
+  const isOpen = (item: NavItem) => !collapsed[item.label];
+  const toggle = (item: NavItem) =>
+    setCollapsed((prev) => ({ ...prev, [item.label]: isOpen(item) }));
 
   const handleLogout = () => {
     logout();
@@ -117,12 +163,37 @@ export default function AppLayout() {
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>
-          {items.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className="nav-link">
-              <item.icon size={18} />
-              {item.label}
-            </NavLink>
-          ))}
+          {items.map((item) =>
+            item.children ? (
+              <div key={item.label}>
+                <button
+                  type="button"
+                  className={`nav-link nav-group${isInside(item) ? " inside" : ""}`}
+                  onClick={() => toggle(item)}
+                  aria-expanded={isOpen(item)}
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                  <span className="spacer" />
+                  <ChevronDown size={15} className={`nav-chev${isOpen(item) ? " open" : ""}`} />
+                </button>
+                {isOpen(item) && (
+                  <div className="nav-sub">
+                    {item.children.map((child) => (
+                      <NavLink key={child.to} to={child.to} className="nav-sublink">
+                        {child.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <NavLink key={item.to} to={item.to!} end={item.end} className="nav-link">
+                <item.icon size={18} />
+                {item.label}
+              </NavLink>
+            ),
+          )}
         </nav>
 
         <div className="spacer" />
@@ -167,12 +238,14 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav. A horizontal icon strip cannot nest, so groups are flattened
+          here rather than collapsed — otherwise three of the four masters would have no
+          route to them at all on a phone. */}
       <nav className="app-bottomnav">
-        {items.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className="bottomnav-link">
-            <item.icon size={18} />
-            <span style={{ fontSize: 10 }}>{item.label.split(" ")[0]}</span>
+        {items.flatMap(leaves).map((leaf) => (
+          <NavLink key={leaf.to} to={leaf.to} end={leaf.end} className="bottomnav-link">
+            <leaf.icon size={18} />
+            <span style={{ fontSize: 10 }}>{leaf.label.split(" ")[0]}</span>
           </NavLink>
         ))}
       </nav>
@@ -185,6 +258,29 @@ export default function AppLayout() {
         }
         .nav-link:hover { background: var(--surface-2); text-decoration: none; }
         .nav-link.active { background: var(--brand-soft); color: var(--brand-strong); }
+        /* The group header is a button, not a link — it toggles rather than navigates, so
+           it needs the browser's button chrome stripped back to match its siblings. */
+        .nav-group {
+          width: 100%; background: none; border: 0;
+          font: inherit; font-weight: 500; text-align: left; cursor: pointer;
+        }
+        /* Darkened, not brand-tinted: the active pill belongs to the child you are on,
+           and two highlights in one group would compete for it. */
+        .nav-group.inside { color: var(--text); }
+        .nav-chev { flex: none; transition: transform 150ms ease; }
+        .nav-chev.open { transform: rotate(180deg); }
+        /* The rail sits under the parent's icon, so the children read as hanging off it. */
+        .nav-sub {
+          display: flex; flex-direction: column; gap: 2px;
+          margin: 2px 0 4px 18px; padding-left: 10px;
+          border-left: 1px solid var(--border);
+        }
+        .nav-sublink {
+          padding: 7px 10px; border-radius: 8px;
+          color: var(--text-muted); font-size: 13px; text-decoration: none;
+        }
+        .nav-sublink:hover { background: var(--surface-2); text-decoration: none; }
+        .nav-sublink.active { background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; }
         /* display/flex-direction live here, not as inline styles on the <aside>, so the
            max-width:900px override below can actually win — an inline style beats a
            plain class rule regardless of media query, !important or not. */

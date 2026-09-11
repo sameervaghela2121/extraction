@@ -249,7 +249,9 @@ export interface GodownLocation {
   status: MasterStatus;
 }
 
-export interface RawMaterial {
+/** A material type — the spec a roll is booked against, not a physical roll. Served by
+ *  /api/raw-materials, which keeps the older name on the backend. */
+export interface MaterialType {
   id: string;
   material_code: string;
   name: string;
@@ -272,6 +274,8 @@ export interface Paginated<T> {
 
 /** Only the fields the barcode screen prints or filters on — a roll response carries
  *  photos, weights and refs the label has no use for. */
+export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED";
+
 export interface MaterialRollListItem {
   id: string;
   roll_number: string;
@@ -281,7 +285,69 @@ export interface MaterialRollListItem {
   width: number;
   unit: string;
   location: string;
-  status: "IN_STOCK" | "ISSUED" | "CONSUMED";
+  status: RollStatus;
+}
+
+/** A populated reference as a roll response returns it: the id to submit back, the label to
+ *  render. `name` is null when the target was deleted but the roll still points at it. */
+export interface RollRef {
+  id: string;
+  name: string | null;
+}
+
+/** The full roll. Wider than MaterialRollListItem, which stays trimmed to what the barcode
+ *  screen prints. `remaining_weight` and `status` are server-owned — both only move through
+ *  a stock movement, and PATCHing either is refused. */
+export interface MaterialRoll {
+  id: string;
+  roll_number: string;
+  royal_touche_code?: string;
+  /** The pre-printed label from the Barcode generator, scanned at registration. Separate
+   *  from roll_number, which is the mill's own number off the roll. */
+  barcode?: string;
+  material_id: RollRef;
+  vendor_id?: RollRef & { vendor_code?: string };
+  batch_no?: string;
+  /** What the roll held on arrival — its ceiling. Reference data, not the stock figure. */
+  weight: number;
+  /** What is on it now. THE stock figure. */
+  remaining_weight?: number;
+  quantity?: number;
+  unit: string;
+  gsm: number;
+  width: number;
+  location: string;
+  status: RollStatus;
+  date: string;
+  remark_code?: string;
+  remarks?: string;
+  tag_photo_url: string | null;
+  stitched_barcode_photo_url: string | null;
+  side1_photo_url: string | null;
+  side2_photo_url: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME";
+
+/** One row of the append-only ledger. `description` is rendered server-side and is meant to
+ *  be shown as-is — don't rebuild it from the numbers. */
+export interface StockMovement {
+  id: string;
+  transaction_type: TransactionType;
+  transaction_date: string;
+  weight: number;
+  used_weight: number | null;
+  description: string;
+  from_location?: string;
+  to_location?: string;
+  /** The roll's weight after this row — the running balance a history reads down. */
+  roll_weight_after: number | null;
+  issued_to?: string;
+  remarks?: string;
+  created_by?: { id: string; name: string | null };
+  createdAt: string;
 }
 
 /** A standard note an operator picks instead of typing — "Misprint", "Color variant". */
