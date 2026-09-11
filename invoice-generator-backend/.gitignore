@@ -1,7 +1,8 @@
 .claude
 .remember
 files
-.env
+.env*
+!api/.env.example
 api/venv
 api/__pycache__
 Original

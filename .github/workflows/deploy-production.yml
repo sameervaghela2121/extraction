@@ -1,21 +1,18 @@
-name: Deploy to Cloud Run
+name: Deploy to Cloud Run (production)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# Scaling/billing flags are stated explicitly on every deploy rather than
-# left off. gcloud run deploy only overwrites the settings it is given and
-# inherits the rest from the previous revision, so an omitted flag makes a
-# revision's config depend on deploy history instead of on this file. That
-# is how these services drifted to min-instances=1 and sat billing idle
-# instances 24/7 - roughly 95% of the Cloud Run bill - before it was caught.
+# See the matching comment in deploy-development.yml: every flag is stated explicitly
+# on every deploy rather than left off, so a revision's config never depends on deploy
+# history.
 
 env:
-  PROJECT_ID: sameerv
+  PROJECT_ID: royal-touche
   REGION: asia-south1
-  REPO: asia-south1-docker.pkg.dev/sameerv/extraction
+  REPO: asia-south1-docker.pkg.dev/royal-touche/extraction
 
 jobs:
   changes:
@@ -46,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
       - name: Build and push
@@ -55,17 +52,15 @@ jobs:
           docker build -t "$IMG" ./invoice-generator-backend
           docker push "$IMG"
       - name: Deploy
-        # EasyOCR/torch are gone — roll-label reads are a Gemini API call now, so this
-        # service is I/O-bound like the other three: 1 CPU, 1Gi, scales to zero.
         run: |
-          gcloud run deploy docflow-ai-backend \
+          gcloud run deploy royaltouche-ai-backend \
             --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 --timeout=600 \
             --min-instances=0 --max-instances=1 --cpu-throttling --cpu-boost \
-            --set-env-vars=GCS_BUCKET=sameerv-docflow-invoices \
+            --set-env-vars=GCS_BUCKET=royal-touche-docflow-invoices \
             --set-secrets=GEMINI_API_KEY=ai-backend-gemini-api-key:latest,MONGODB_URI=ai-backend-mongodb-uri:latest,APP_USER=ai-backend-app-user:latest,APP_PASSWORD=ai-backend-app-password:latest
 
   deploy-backend:
@@ -76,21 +71,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
       - name: Look up the AI backend's and frontend's current URLs
         id: urls
-        # Every service here answers on two URLs (see the run.googleapis.com/urls
-        # annotation) — the newer <service>-<project-number>.<region>.run.app one, and the
-        # older <service>-<hash>.a.run.app one from before Cloud Run switched formats.
-        # `status.url` only ever reports the OLDER of the two, which is not what anyone's
-        # browser is actually pointed at, so every deploy that used it was quietly setting
-        # CORS/API URLs back to a dead-looking (but still technically live) alias. The
-        # annotation lists the current one first.
+        # See the matching comment in deploy-development.yml — status.url reports the
+        # older of the service's two live URL aliases, not the one anything is actually
+        # pointed at. The run.googleapis.com/urls annotation lists the current one first.
         run: |
-          AI_URL=$(gcloud run services describe docflow-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
-          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          AI_URL=$(gcloud run services describe royaltouche-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          FRONTEND_URL=$(gcloud run services describe royaltouche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
           echo "ai_url=$AI_URL" >> "$GITHUB_OUTPUT"
           echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
       - name: Build and push
@@ -100,14 +91,14 @@ jobs:
           docker push "$IMG"
       - name: Deploy
         run: |
-          gcloud run deploy docflow-backend \
+          gcloud run deploy royaltouche-backend \
             --image="${{ env.REPO }}/backend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --service-account=backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
             --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost \
-            --set-env-vars=NODE_ENV=production,GCS_BUCKET=sameerv-royaltouch-rolls,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
+            --set-env-vars=NODE_ENV=production,GCS_BUCKET=royal-touche-royaltouch-rolls,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
             --set-secrets=MONGODB_URI=backend-mongodb-uri:latest,JWT_ACCESS_SECRET=backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=backend-jwt-refresh-secret:latest,SMTP_USER=backend-smtp-user:latest,SMTP_PASSWORD=backend-smtp-password:latest,INVOICE_GENERATOR_APP_USER=backend-invoice-generator-app-user:latest,INVOICE_GENERATOR_APP_PASSWORD=backend-invoice-generator-app-password:latest
 
   deploy-frontend:
@@ -118,27 +109,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
       - name: Look up the backend's current URL
         id: urls
-        # See the matching comment in deploy-backend — status.url reports the older of the
-        # service's two live URL aliases, not the one anything is actually pointed at.
+        # See the matching comment in deploy-backend above.
         run: |
-          BACKEND_URL=$(gcloud run services describe docflow-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          BACKEND_URL=$(gcloud run services describe royaltouche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
           echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
       - name: Build and push
         run: |
           IMG="${{ env.REPO }}/frontend:${{ github.sha }}"
           docker build -t "$IMG" \
             --build-arg VITE_API_BASE_URL="${{ steps.urls.outputs.backend_url }}/api" \
-            --build-arg VITE_SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
             ./frontend
           docker push "$IMG"
       - name: Deploy
         run: |
-          gcloud run deploy docflow-frontend \
+          gcloud run deploy royaltouche-frontend \
             --image="${{ env.REPO }}/frontend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --allow-unauthenticated \
@@ -152,28 +141,10 @@ jobs:
     steps:
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Point the backend's CORS at the frontend's URL
-        # See the matching comment in deploy-backend — status.url reports the older of the
-        # service's two live URL aliases, not the one anything is actually pointed at.
+        # See the matching comment in deploy-backend above.
         run: |
-          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
-          gcloud run services update docflow-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL
-
-  # Keep `development` level with `main` after a successful deploy, so branching from it
-  # is never stale. This is a fast-forward push, not a merge or rebase: if anyone has
-  # committed to `development` directly, the push is rejected and this job goes red
-  # rather than rewriting or clobbering their work.
-  sync-development:
-    needs: [deploy-ai-backend, deploy-backend, deploy-frontend]
-    if: ${{ github.event_name == 'push' && !cancelled() && !failure() }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fast-forward development to main
-        run: git push origin ${{ github.sha }}:refs/heads/development
+          FRONTEND_URL=$(gcloud run services describe royaltouche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          gcloud run services update royaltouche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL
