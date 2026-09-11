@@ -226,7 +226,7 @@ export default function DocumentDetailPage() {
                       fontSize: 13,
                       padding: "8px 12px",
                       background: "var(--danger-soft)",
-                      color: "oklch(40% 0.16 25)",
+                      color: "var(--rt-on-error-container)",
                       borderRadius: "var(--radius-sm)",
                       marginBottom: 14,
                     }}

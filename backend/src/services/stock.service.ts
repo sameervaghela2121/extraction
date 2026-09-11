@@ -96,7 +96,11 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
 async function toResponse(t: PopulatedTransaction) {
   // Signing is local crypto, no network call, so doing it per row is cheap.
   const photoPaths = t.photo_paths ?? [];
-  const photoUrls = await Promise.all(photoPaths.map((p) => mediaService.signedReadUrl(p)));
+  // Nulls dropped rather than passed through: photo_urls is declared as a list of usable
+  // URLs, and a client mapping it straight into image sources must never be handed one.
+  // Filtering keeps the type exactly as it was; photo_paths still carries every path.
+  const signed = await Promise.all(photoPaths.map((p) => mediaService.signedReadUrlOrNull(p)));
+  const photoUrls = signed.filter((url): url is string => url !== null);
 
   return {
     id: t._id.toString(),

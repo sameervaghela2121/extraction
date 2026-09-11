@@ -7,6 +7,7 @@ import { validate } from "../middleware/validate.middleware";
 import {
   createBarcodeBatchSchema,
   listBarcodeBatchesQuerySchema,
+  nextNumberQuerySchema,
 } from "../validators/barcodeBatches.validators";
 
 const router = Router();
@@ -17,6 +18,12 @@ router.get(
   "/",
   validate({ query: listBarcodeBatchesQuerySchema }),
   asyncHandler(barcodeBatchesController.list),
+);
+// Before "/:id" would ever match it, and read-only, so it needs no write role.
+router.get(
+  "/next-number",
+  validate({ query: nextNumberQuerySchema }),
+  asyncHandler(barcodeBatchesController.nextNumber),
 );
 router.post(
   "/",

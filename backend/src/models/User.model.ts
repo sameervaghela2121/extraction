@@ -2,12 +2,18 @@ import { Schema, model, Types } from "mongoose";
 
 // godown_supervisor uses both the admin panel and the mobile app; godown_operator is
 // app-only (the web login refuses it, same as store_manager).
+//
+// super_admin is deliberately absent from ASSIGNABLE_USER_ROLES (users.validators.ts) — it
+// exists on this list only so the rest of the codebase (auth, rbac, responses) treats it as
+// a normal role. No API path can set a user to it or off it; the only way one exists is a
+// direct write to Mongo. See requireRole in rbac.middleware.ts for the access side.
 export const USER_ROLES = [
   "staff",
   "admin",
   "store_manager",
   "godown_supervisor",
   "godown_operator",
+  "super_admin",
 ] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = "invited" | "active" | "suspended";

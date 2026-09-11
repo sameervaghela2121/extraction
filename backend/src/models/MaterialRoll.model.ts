@@ -47,6 +47,12 @@ export interface IMaterialRoll {
    *  remark_code rather than replacing it: the code is what reports group by, the text is
    *  what the next person actually reads. */
   remarks?: string;
+  /** Zero or more codes from the remark master, picked after the roll already exists —
+   *  unlike remark_code (set once, at registration), this can be revised over the roll's
+   *  life, so it is set through its own endpoint rather than the general update. Same
+   *  "store the code, not a live reference" convention: not validated against the master
+   *  here either. */
+  remark_codes?: string[];
   /** The date the roll was received. */
   date: Date;
   status: RollStatus;
@@ -100,6 +106,9 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     side2_photo_path: { type: String, trim: true },
     remark_code: { type: String, uppercase: true, trim: true },
     remarks: { type: String, trim: true },
+    // Undefined rather than [] when empty, like photo_paths — so clearing it back to none
+    // reads as "not set" rather than an empty list sitting in every roll document.
+    remark_codes: { type: [String], uppercase: true, trim: true, default: undefined },
     date: { type: Date, required: true },
     status: { type: String, enum: [...ROLL_STATUSES], default: "IN_STOCK", index: true },
     client_id: { type: String, trim: true },

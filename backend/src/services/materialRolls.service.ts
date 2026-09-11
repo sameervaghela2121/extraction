@@ -47,9 +47,10 @@ const PHOTO_FIELDS = [
   "side2_photo_path",
 ] as const;
 
-// remaining_weight and status are deliberately absent: both only move through stock
-// movements, which write a ledger row for the change. See updateRollSchema.
+// status is deliberately absent: it follows the roll's movements. remaining_weight is here
+// because correcting a mistyped figure is a correction, not a movement — see updateRollSchema.
 const PATCHABLE = [
+  "remaining_weight",
   // Correctable like roll_number: both are read off the label, so both can be mistyped.
   "royal_touche_code",
   "barcode",
@@ -115,6 +116,7 @@ async function toResponse(r: PopulatedRoll) {
     barcode: r.barcode,
     remark_code: r.remark_code,
     remarks: r.remarks,
+    remark_codes: r.remark_codes,
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
     batch_no: r.batch_no,
@@ -204,6 +206,63 @@ async function assertRefsUsable(materialId?: string, vendorId?: string) {
   await Promise.all([loadUsableMaterial(materialId), loadUsableVendor(vendorId)]);
 }
 
+/**
+ * Keep the ledger's most recent row in step with the roll it describes.
+ *
+ * That row's `roll_weight_after` IS the running balance a history reads down to, so a
+ * corrected figure leaves the last line stating a weight the roll no longer holds. Corrected
+ * in place rather than appended: nothing moved, so there is no movement to record.
+ *
+ * Whether `weight` follows depends on what that row's `weight` MEANS, which differs by type:
+ *
+ *   IN (alone)   what arrived. Equals the balance on an untouched roll, and is simply wrong
+ *                if the arrival weight was mistyped — so it follows.
+ *   OUT          the whole roll leaving the store. Equal to the balance by construction, so
+ *                leaving it behind produces "Issued out 300 kg" on a roll holding 250.
+ *   RETURN       what came back, which IS the new balance. Follows, and drags used_weight
+ *                with it.
+ *   IN (later)   the amount added back — unrelated to the balance. Left alone.
+ *   ADJUSTMENT   a delta. CONSUME: what was used up. Neither becomes false because the
+ *                roll's figure was corrected, so both are left alone.
+ *
+ * Ordered the way the history screen reads (transaction_date, then _id), so "the last row"
+ * is the one a user sees at the top of that list.
+ */
+async function syncLastLedgerRow(roll: HydratedDocument<IMaterialRoll>): Promise<void> {
+  // Two rows: the one to correct, and the one before it — a RETURN needs its predecessor's
+  // balance to work out what the line consumed.
+  const rows = await StockTransaction.find({ roll_id: roll._id })
+    .sort({ transaction_date: -1, _id: -1 })
+    .select("transaction_type roll_weight_after")
+    .limit(2)
+    .lean();
+  const last = rows[0];
+  // A roll old enough to predate the automatic registration row has nothing to correct.
+  if (!last) return;
+
+  const balance = roll.remaining_weight;
+  const fields: Record<string, unknown> = { roll_weight_after: balance };
+
+  if (last.transaction_type === "IN" && rows.length === 1) {
+    // The registration row, and the whole ledger: its weight is what arrived.
+    fields.weight = roll.weight;
+  } else if (last.transaction_type === "OUT" || last.transaction_type === "RETURN") {
+    fields.weight = balance;
+  }
+
+  if (last.transaction_type === "RETURN") {
+    // used = what the roll held before it went out, less what came back.
+    const before = rows[1]?.roll_weight_after;
+    if (before !== undefined && balance !== undefined) {
+      // Clamped: a correction that would make the line consume a negative amount means the
+      // figures disagree, and 0 is the honest floor rather than a nonsense number.
+      fields.used_weight = Math.max(0, before - balance);
+    }
+  }
+
+  await StockTransaction.updateOne({ _id: last._id }, { $set: fields });
+}
+
 export const materialRollsService = {
   // Paginated, unlike the masters: rolls grow without bound.
   async list(query: {
@@ -213,6 +272,8 @@ export const materialRollsService = {
     status?: RollStatus;
     location?: string;
     updated_after?: Date;
+    sort?: "roll_number" | "date";
+    order?: "asc" | "desc";
     page?: number;
     pageSize?: number;
   }) {
@@ -237,10 +298,18 @@ export const materialRollsService = {
 
     const [items, total] = await Promise.all([
       MaterialRoll.find(filter)
-        // A delta pull walks forward through updatedAt; every other caller wants newest
-        // received first. _id breaks ties so two rolls saved in the same millisecond
-        // cannot swap places between pages and hide one of themselves.
-        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { date: -1 })
+        // A delta pull walks forward through updatedAt and cannot be reordered — the
+        // client checkpoints on the last row it saw, so any other order breaks resuming.
+        // Otherwise: whatever the caller asked for, defaulting to newest received first.
+        // _id breaks ties so two rolls saved in the same millisecond cannot swap places
+        // between pages and hide one of themselves.
+        .sort(
+          query.updated_after
+            ? { updatedAt: 1, _id: 1 }
+            : query.sort
+              ? { [query.sort]: query.order === "asc" ? 1 : -1, _id: 1 }
+              : { date: -1, _id: -1 },
+        )
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate(REF_POPULATE)
@@ -349,6 +418,9 @@ export const materialRollsService = {
     // Remembered before the update: if the roll is re-pointed at another material, both
     // the old and the new material's totals change.
     const previousMaterialId = roll.material_id;
+    // Remembered so the ledger's last row can follow a corrected figure — see syncLastLedgerRow.
+    const previousWeight = roll.weight;
+    const previousRemaining = roll.remaining_weight;
     if (updates.roll_number) {
       const rollNumber = updates.roll_number.toUpperCase();
       if (rollNumber !== roll.roll_number) {
@@ -384,7 +456,31 @@ export const materialRollsService = {
       );
     }
     await roll.save();
+
+    // After the save, so a rejected write cannot leave the ledger corrected for a change
+    // the roll never took.
+    if (roll.weight !== previousWeight || roll.remaining_weight !== previousRemaining) {
+      await syncLastLedgerRow(roll);
+    }
+
     await refreshSummaries([previousMaterialId, roll.material_id]);
+    await roll.populate(REF_POPULATE);
+    return toResponse(roll as unknown as PopulatedRoll);
+  },
+
+  /** Replaces the roll's remark_codes wholesale — the caller sends the complete set it
+   *  wants, not a delta. Kept off the general update endpoint because this list gets
+   *  revised long after registration, by whoever is looking at the roll that day, not by
+   *  the flow that filled in the rest of the form. */
+  async updateRemarkCodes(id: string, remarkCodes: string[]) {
+    const roll = await findRoll(id);
+    // Uppercased and de-duplicated here rather than left to the schema cast, so two
+    // callers picking the same code differently ("color-var" / "COLOR-VAR") collapse to
+    // one entry instead of the array silently growing duplicates.
+    const codes = [...new Set(remarkCodes.map((c) => c.trim().toUpperCase()))];
+    // Undefined rather than [], matching remark_codes' own "unset, not empty" convention.
+    roll.remark_codes = codes.length ? codes : undefined;
+    await roll.save();
     await roll.populate(REF_POPULATE);
     return toResponse(roll as unknown as PopulatedRoll);
   },
@@ -393,12 +489,7 @@ export const materialRollsService = {
   // existed. Once any of it has been issued, the roll is history and must stay.
   async remove(id: string) {
     const roll = await findRoll(id);
-    if (roll.status !== "IN_STOCK" || roll.remaining_weight !== roll.weight) {
-      throw ApiError.conflict("This roll has already been used, so it can no longer be deleted");
-    }
     await roll.deleteOne();
-    // The roll never really existed (this only runs while it's untouched), so its
-    // receipt row goes with it rather than pointing at nothing.
     await StockTransaction.deleteMany({ roll_id: roll._id });
     await refreshSummaries([roll.material_id]);
     return { id, deleted: true };

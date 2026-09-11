@@ -1,35 +1,102 @@
 :root {
-  /* DocFlow palette — taken from the html-reference prototype (OKLCH, hue 260 indigo,
-     emerald success hue 150, red danger hue 25, amber warn hue 60) */
-  --brand: oklch(55% 0.16 260);
-  --brand-strong: oklch(48% 0.16 260);
-  --brand-link: oklch(50% 0.16 260);
-  --brand-soft: oklch(93% 0.05 260);
-  --brand-ring: oklch(55% 0.16 260 / 0.32);
+  /* Royal Touche — Industrial Flow.
+     Ported from the Android app (RT-Roll-Receive) so the tablet and the admin panel are
+     one product. Light only: there is no dark scheme, by design.
 
-  --bg: oklch(98.5% 0.004 260);
-  --surface: #ffffff;
-  --surface-2: oklch(97% 0.006 260);
-  --border: oklch(92% 0.008 260);
-  --border-strong: oklch(88% 0.01 260);
+     The --rt-* names are the canonical tokens from the design system; the shorter names
+     below them are what this codebase already uses everywhere, aliased so the whole app
+     moves at once instead of touching every component. */
 
-  --text: oklch(24% 0.02 260);
-  --text-muted: oklch(52% 0.02 260);
-  --text-faint: oklch(62% 0.02 260);
+  /* Surfaces */
+  --rt-bg: #f7f9fb;
+  --rt-surface-lowest: #ffffff;
+  --rt-surface-low: #f2f4f6;
+  --rt-surface-high: #e6e8ea;
+  --rt-surface-highest: #e0e3e5;
 
-  --success: oklch(60% 0.14 150);
-  --success-soft: oklch(93% 0.05 150);
-  --warn: oklch(70% 0.16 60);
-  --warn-soft: oklch(94% 0.06 60);
-  --danger: oklch(55% 0.2 25);
-  --danger-soft: oklch(94% 0.04 25);
+  /* Brand */
+  --rt-primary: #003d9b;
+  --rt-primary-container: #0052cc;
+  --rt-on-primary: #ffffff;
+  --rt-on-primary-container: #c4d2ff;
 
-  --radius: 14px;
-  --radius-sm: 9px;
-  --shadow-sm: 0 1px 2px oklch(30% 0.02 260 / 0.05), 0 1px 3px oklch(30% 0.02 260 / 0.04);
-  --shadow-md: 0 6px 20px oklch(30% 0.02 260 / 0.08);
+  /* Success — IN stock */
+  --rt-secondary: #006e2f;
+  --rt-secondary-container: #6bff8f;
+
+  /* Error — OUT, destructive */
+  --rt-error: #ba1a1a;
+  --rt-error-container: #ffdad6;
+  --rt-on-error-container: #93000a;
+
+  /* Warning */
+  --rt-warning-container: #ffe8c2;
+  --rt-on-warning-container: #7a4f00;
+
+  /* Info — kept apart from primary blue so the operator role pill (below) doesn't read
+     as the supervisor's brand-blue pill; no Android equivalent, so picked in the same
+     key/container/on-container shape as the rest of the tokens above. */
+  --rt-info: #0e7490;
+  --rt-info-container: #cffafe;
+  --rt-on-info-container: #164e63;
+
+  /* Text & chrome */
+  --rt-on-surface: #191c1e;
+  --rt-on-surface-variant: #434654;
+  --rt-outline: #737685;
+  --rt-outline-variant: #c3c6d6;
+  --rt-card-border: #e2e8f0;
+  --rt-headline: #0f172a;
+
+  /* Consumed / neutral status */
+  --rt-consumed: #6b7280;
+  --rt-consumed-container: #e5e7eb;
+  --rt-on-consumed: #4b5563;
+
+  /* ---- aliases the existing components read ---- */
+  --brand: var(--rt-primary);
+  /* Hover/pressed. Darker than primary rather than lighter: the design system has no
+     "primary dark", and going lighter on hover reads as disabled against white text. */
+  --brand-strong: #002e75;
+  --brand-link: var(--rt-primary);
+  /* Soft primary tint for the active nav pill. Derived — the system defines soft fills for
+     success/error/warning but none for primary. */
+  --brand-soft: #e7edfa;
+  --brand-ring: rgba(0, 61, 155, 0.28);
+
+  --bg: var(--rt-bg);
+  --surface: var(--rt-surface-lowest);
+  --surface-2: var(--rt-surface-low);
+  --border: var(--rt-card-border);
+  --border-strong: var(--rt-outline);
+
+  --text: var(--rt-on-surface);
+  --text-muted: var(--rt-on-surface-variant);
+  --text-faint: var(--rt-outline);
+  --headline: var(--rt-headline);
+
+  --success: var(--rt-secondary);
+  --success-soft: var(--rt-secondary-container);
+  --warn: var(--rt-on-warning-container);
+  --warn-soft: var(--rt-warning-container);
+  --danger: var(--rt-error);
+  --danger-soft: var(--rt-error-container);
+  --info: var(--rt-info);
+  --info-soft: var(--rt-info-container);
+
+  /* Shape. Cards 12, panels and buttons 16, badges 6 — flat, no elevation. */
+  --radius: 12px;
+  --radius-sm: 12px;
+  --radius-lg: 16px;
+  --radius-badge: 6px;
+
+  /* Kept as variables because components reference them, but the system is flat: a card
+     is a white rectangle with a hairline border, not a floating surface. */
+  --shadow-sm: none;
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+
   --sidebar-w: 248px;
-  font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -67,7 +134,9 @@ h1,
 h2,
 h3 {
   margin: 0;
-  color: var(--text);
+  /* Headline is deliberately darker than body text — the system separates the two. */
+  color: var(--headline);
+  letter-spacing: -0.01em;
 }
 
 button {
@@ -87,9 +156,10 @@ textarea {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 8px 14px;
-  border-radius: var(--radius-sm);
+  /* 16px, not the card radius — the system gives buttons their own, larger shape. */
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
@@ -126,8 +196,9 @@ textarea {
   background: var(--surface-2);
 }
 .btn-sm {
-  padding: 5px 10px;
+  padding: 6px 12px;
   font-size: 13px;
+  border-radius: var(--radius);
 }
 
 /* ---- Inputs ---- */
@@ -159,7 +230,8 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  /* Flat by design: "avoid drop shadows on every card". */
+  box-shadow: none;
 }
 
 /* ---- Pills / badges ---- */
@@ -175,11 +247,11 @@ textarea {
 }
 .pill-pending {
   background: var(--warn-soft);
-  color: oklch(45% 0.13 70);
+  color: var(--rt-on-warning-container);
 }
 .pill-verified {
   background: var(--success-soft);
-  color: oklch(38% 0.12 150);
+  color: var(--rt-secondary);
 }
 .pill-archived {
   background: var(--surface-2);
@@ -187,19 +259,51 @@ textarea {
 }
 .pill-processing {
   background: var(--warn-soft);
-  color: oklch(45% 0.13 70);
+  color: var(--rt-on-warning-container);
 }
 .pill-done {
   background: var(--success-soft);
-  color: oklch(38% 0.12 150);
+  color: var(--rt-secondary);
 }
 .pill-failed {
   background: var(--danger-soft);
-  color: oklch(40% 0.16 25);
+  color: var(--rt-on-error-container);
 }
 .pill-unknown {
   background: var(--surface-2);
   color: var(--text-faint);
+}
+/* Roll status. Same three colours the tablet uses, so a supervisor reading the panel and
+   an operator reading the app see the same thing. Soft variants for row badges; the solid
+   ones are for the app's larger banners. */
+.status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-badge);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-in {
+  background: var(--rt-secondary-container);
+  color: var(--rt-secondary);
+}
+.status-out {
+  background: var(--rt-error-container);
+  color: var(--rt-on-error-container);
+}
+.status-consumed {
+  background: var(--rt-consumed-container);
+  color: var(--rt-on-consumed);
+}
+
+.pill-role-supervisor {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.pill-role-operator {
+  background: var(--info-soft);
+  color: var(--rt-on-info-container);
 }
 .dot {
   width: 8px;
@@ -257,9 +361,10 @@ textarea {
 }
 .table th {
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
+  background: var(--surface-2);
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   user-select: none;
@@ -268,6 +373,30 @@ textarea {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+}
+/* A header cell that happens to be a button — inherits the th's own type styling rather
+   than the browser's button chrome. The icon is darker than the muted header text so it
+   reads as an affordance rather than decoration. */
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sort-header svg {
+  color: var(--text);
+  transition: color 120ms ease;
+}
+.sort-header:hover,
+.sort-header:hover svg,
+.sort-header.active,
+.sort-header.active svg {
+  color: var(--brand-strong);
 }
 .table tbody tr:hover {
   background: var(--surface-2);
@@ -377,14 +506,47 @@ textarea {
   font-weight: 600;
   color: var(--text-muted);
 }
+/* Stands in for the "Add to sheet" button once a run is on the sheet — sized to match a
+   .btn-sm so the row does not reflow when it swaps in. */
+/* A read-only block of "here is what you are acting on" facts, for confirmation dialogs. */
+.facts-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.facts-grid > div {
+  display: grid;
+  gap: 2px;
+}
+.facts-grid span {
+  font-size: 11px;
+}
+.facts-grid strong {
+  font-size: 13px;
+}
 .barcode-run {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* The left border is transparent rather than absent, so the accent on a selected row
+     does not shift the content across by 3px when it appears. */
   padding: 8px 10px;
   border: 1px solid var(--border);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+/* Which run the preview is showing. The whole row carries it, not a badge inside it: the
+   row is the thing being looked at, and a highlighted row is the same "you are here" the
+   rest of the panel already uses for the active nav link. */
+.barcode-run.selected {
+  background: var(--brand-soft);
+  border-color: var(--brand-ring);
+  border-left-color: var(--brand);
 }
 .barcode-sheet {
   display: grid;

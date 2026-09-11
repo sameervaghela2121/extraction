@@ -33,6 +33,13 @@ export function seriesCode(input: SeriesInput, n: number): string {
   return `${input.prefix.trim()}${dateDigits(input.date)}${String(n).padStart(width, "0")}`;
 }
 
+/** "Royal Touche · 10-09-2026" — the company and the day the run was made for. */
+function captionFor(input: SeriesInput): string {
+  const match = input.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const printed = match ? `${match[3]}-${match[2]}-${match[1]}` : "";
+  return printed ? `Royal Touche \u00b7 ${printed}` : "Royal Touche";
+}
+
 /** Expand the form into labels. Kept out of the component so the rules — the only real
  *  logic on this screen — can be read and checked on their own. */
 export function buildSeries(input: SeriesInput): SeriesResult {
@@ -47,10 +54,15 @@ export function buildSeries(input: SeriesInput): SeriesResult {
     return { ok: false, error: `That's ${count} labels — ${MAX_SERIES} at a time is the limit.` };
   }
 
+  // Printed small under the code. A blank label carries nothing about the roll — it does
+  // not exist yet — so this says where the label came from, which is what someone holding
+  // a stray one off the floor actually needs.
+  const caption = captionFor(input);
+
   const labels: LabelItem[] = [];
   for (let n = from; n <= to; n++) {
     const code = seriesCode(input, n);
-    labels.push({ key: `series:${code}`, code, lines: [] });
+    labels.push({ key: `series:${code}`, code, lines: caption ? [caption] : [] });
   }
   return { ok: true, labels };
 }

@@ -4,6 +4,7 @@ import AuthLayout from "../../layouts/AuthLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
 import { isMobileOnlyRole } from "../../types";
+import { homeForRole } from "../../components/guards";
 
 export default function LoginPage() {
   const { login, logout } = useAuth();
@@ -27,9 +28,7 @@ export default function LoginPage() {
         setError("This account is for the mobile app.");
         return;
       }
-      // Staff can't see /documents (nav hides it, and StaffRestrictedRoute would bounce
-      // them straight back out) — land them on the one section they actually have.
-      navigate(user.role === "staff" ? "/grn" : "/documents");
+      navigate(homeForRole(user.role));
     } catch (err) {
       setError(apiErrorMessage(err, "Login failed"));
     } finally {
