@@ -1,14 +1,27 @@
 import { Schema, model, Types } from "mongoose";
 
 /**
- * IN         - stock arriving: a roll being received (written automatically on create).
- * OUT        - a whole roll leaving the store for a location. Nothing is consumed yet,
- *              so no weight changes; the roll is simply somewhere else.
- * RETURN     - that roll coming back. This is where consumption is recorded: the
- *              operator states what was used and the roll's weight drops by it.
- * ADJUSTMENT - a correction from a physical count.
+ * IN               - stock arriving: a roll being received (written automatically on create).
+ * OUT              - a whole roll leaving the store for a location. Nothing is consumed
+ *                     yet, so no weight changes; the roll is simply somewhere else.
+ * RETURN           - that roll coming back. This is where consumption is recorded: the
+ *                     operator states what was used and the roll's weight drops by it.
+ * ADJUSTMENT       - a correction from a physical count.
+ * RETURN_TO_VENDOR - a defective roll going back to the vendor it came from, instead of
+ *                     an ordinary OUT. Unlike OUT, this is terminal: whatever was left on
+ *                     the roll drops out of on-hand immediately (nobody is issuing it to a
+ *                     work floor to come back later), and the roll's journey ends the same
+ *                     way CONSUME's does. The vendor is read off the roll itself, not
+ *                     retyped — see stock.service.ts.
  */
-export const TRANSACTION_TYPES = ["IN", "OUT", "RETURN", "ADJUSTMENT", "CONSUME"] as const;
+export const TRANSACTION_TYPES = [
+  "IN",
+  "OUT",
+  "RETURN",
+  "ADJUSTMENT",
+  "CONSUME",
+  "RETURN_TO_VENDOR",
+] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 export interface IStockTransaction {

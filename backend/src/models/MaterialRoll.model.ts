@@ -1,13 +1,18 @@
 import { Schema, model, Types } from "mongoose";
 
 /**
- * IN_STOCK = still has weight on it, however much has been drawn off.
- * CONSUMED = emptied; nothing left to issue.
- * ISSUED   = the whole roll left the store as a unit. Nothing sets this today — a normal
- *            issue draws quantity off the roll and it stays IN_STOCK until it hits zero.
- *            Kept so older rows and a future whole-roll handover still have a value.
+ * IN_STOCK          = still has weight on it, however much has been drawn off.
+ * CONSUMED          = emptied through ordinary use; nothing left to issue.
+ * ISSUED            = the whole roll left the store as a unit. Nothing sets this today — a
+ *                      normal issue draws quantity off the roll and it stays IN_STOCK until
+ *                      it hits zero. Kept so older rows and a future whole-roll handover
+ *                      still have a value.
+ * RETURNED_TO_VENDOR = a defective roll shipped back, not used up on-site. Terminal, same
+ *                      as CONSUMED — no more inward/outward — but kept as its own value
+ *                      rather than folded into CONSUMED, so "why did this roll stop" reads
+ *                      correctly on the roll itself, not just in its transaction history.
  */
-export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED"] as const;
+export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR"] as const;
 export type RollStatus = (typeof ROLL_STATUSES)[number];
 
 export interface IMaterialRoll {
