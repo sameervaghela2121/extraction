@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
+import * as Sentry from "@sentry/react";
 import AppLayout from "./layouts/AppLayout";
 import { ProtectedRoute, AdminRoute, RoleRoute, RoleHome } from "./components/guards";
 import LoginPage from "./features/auth/LoginPage";
@@ -21,7 +22,11 @@ import MasterDataPage from "./features/masters/MasterDataPage";
 import BarcodeGeneratorPage from "./features/barcodes/BarcodeGeneratorPage";
 import NoAccessPage from "./features/misc/NoAccessPage";
 
-export const router = createBrowserRouter([
+// Wrapped so reactRouterV6BrowserTracingIntegration can see the route definitions and
+// report "/documents/:id" rather than a separate transaction per document.
+const createRouter = Sentry.wrapCreateBrowserRouterV6(createBrowserRouter);
+
+export const router = createRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/accept-invite/:token", element: <AcceptInvitePage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },

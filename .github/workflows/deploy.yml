@@ -131,7 +131,10 @@ jobs:
       - name: Build and push
         run: |
           IMG="${{ env.REPO }}/frontend:${{ github.sha }}"
-          docker build -t "$IMG" --build-arg VITE_API_BASE_URL="${{ steps.urls.outputs.backend_url }}/api" ./frontend
+          docker build -t "$IMG" \
+            --build-arg VITE_API_BASE_URL="${{ steps.urls.outputs.backend_url }}/api" \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
+            ./frontend
           docker push "$IMG"
       - name: Deploy
         run: |

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { authApi } from "../api/auth.api";
 import { tokenStore } from "../api/client";
+import { setSentryUser } from "../sentry";
 import type { AuthResult, AuthUser } from "../types";
 
 interface AuthContextValue {
@@ -30,6 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => tokenStore.clear())
       .finally(() => setLoading(false));
   }, []);
+
+  // One effect rather than a call at each of the three places `user` changes — the session
+  // restore above, login, and logout. A fourth path added later gets it for free instead of
+  // being the one that silently reports errors against the previous user.
+  useEffect(() => {
+    setSentryUser(user ? { userId: user.userId, role: user.role } : null);
+  }, [user]);
 
   const applyAuthResult = (result: AuthResult) => {
     tokenStore.set(result.accessToken, result.refreshToken);
