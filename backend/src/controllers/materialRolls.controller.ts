@@ -18,6 +18,10 @@ export const materialRollsController = {
     res.json(await materialRollsService.update(req.params.id, req.body));
   },
 
+  async updateRemarkCodes(req: Request, res: Response) {
+    res.json(await materialRollsService.updateRemarkCodes(req.params.id, req.body.remark_codes));
+  },
+
   async remove(req: Request, res: Response) {
     res.json(await materialRollsService.remove(req.params.id));
   },

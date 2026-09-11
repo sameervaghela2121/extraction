@@ -33,6 +33,13 @@
   --rt-warning-container: #ffe8c2;
   --rt-on-warning-container: #7a4f00;
 
+  /* Info — kept apart from primary blue so the operator role pill (below) doesn't read
+     as the supervisor's brand-blue pill; no Android equivalent, so picked in the same
+     key/container/on-container shape as the rest of the tokens above. */
+  --rt-info: #0e7490;
+  --rt-info-container: #cffafe;
+  --rt-on-info-container: #164e63;
+
   /* Text & chrome */
   --rt-on-surface: #191c1e;
   --rt-on-surface-variant: #434654;
@@ -74,6 +81,8 @@
   --warn-soft: var(--rt-warning-container);
   --danger: var(--rt-error);
   --danger-soft: var(--rt-error-container);
+  --info: var(--rt-info);
+  --info-soft: var(--rt-info-container);
 
   /* Shape. Cards 12, panels and buttons 16, badges 6 — flat, no elevation. */
   --radius: 12px;
@@ -288,6 +297,14 @@ textarea {
   color: var(--rt-on-consumed);
 }
 
+.pill-role-supervisor {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.pill-role-operator {
+  background: var(--info-soft);
+  color: var(--rt-on-info-container);
+}
 .dot {
   width: 8px;
   height: 8px;

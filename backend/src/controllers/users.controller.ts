@@ -7,7 +7,7 @@ export const usersController = {
   },
 
   async invite(req: Request, res: Response) {
-    res.status(201).json(await usersService.invite(req.body));
+    res.status(201).json(await usersService.invite(req.body, req.auth!.role));
   },
 
   async update(req: Request, res: Response) {

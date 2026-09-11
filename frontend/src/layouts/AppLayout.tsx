@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Upload,
-  FolderOpen,
-  ClipboardList,
-  ClipboardCheck,
-  Receipt,
-  Download,
-  Settings,
+  // Icons for the temporarily-disabled nav entries above — restore alongside them.
+  // Upload,
+  // FolderOpen,
+  // ClipboardList,
+  // ClipboardCheck,
+  // Receipt,
+  // Download,
+  // Settings,
   Users,
   Database,
   ScanBarcode,
@@ -48,15 +49,18 @@ interface NavItem {
 // bring the Master group back — nothing else has to change.
 const MASTERS_ENABLED = true;
 
+// TEMPORARILY DISABLED, in step with the matching routes commented out in router.tsx —
+// restore these entries and their routes together, and flip HOME_FOR_ROLE.staff back to
+// "/grn" and HOME_FOR_ROLE.admin/super_admin back to "/documents" in guards.tsx.
 const NAV: NavItem[] = [
-  { to: "/upload", label: "Upload & Scan", icon: Upload },
-  { to: "/documents", label: "Documents", icon: FolderOpen },
-  { to: "/grn/new", label: "Create GRN", icon: ClipboardList, staffVisible: true },
-  { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true, staffVisible: true },
-  { to: "/general-vouchers/upload", label: "Upload Voucher", icon: Receipt },
-  { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
-  { to: "/export", label: "Export", icon: Download },
-  { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
+  // { to: "/upload", label: "Upload & Scan", icon: Upload },
+  // { to: "/documents", label: "Documents", icon: FolderOpen },
+  // { to: "/grn/new", label: "Create GRN", icon: ClipboardList, staffVisible: true },
+  // { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true, staffVisible: true },
+  // { to: "/general-vouchers/upload", label: "Upload Voucher", icon: Receipt },
+  // { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
+  // { to: "/export", label: "Export", icon: Download },
+  // { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
   // The Royal Touche masters, grouped: four entries that are always maintained together
   // read as one section, not as four peers of Barcode generator.
@@ -98,7 +102,16 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const items = NAV.filter((i) => {
+    // Master is a group with no `to` of its own, so the check has to look at its
+    // children's routes rather than i.to (which main's version of this check assumed).
     if (!MASTERS_ENABLED && leaves(i).some((l) => l.to.startsWith("/masters"))) return false;
+    // super_admin is the one role with no ceiling: unlike admin, it sees the
+    // supervisor-only master section too, not just everything admin sees.
+    if (user?.role === "super_admin") return true;
+    // The one nav item godown_supervisor shares with admin instead of the masters
+    // section — they invite the operators under them (see router.tsx's RoleRoute for
+    // /users). Special-cased here rather than a new NavItem flag for one exception.
+    if (i.to === "/users") return user?.role === "admin" || user?.role === "godown_supervisor";
     if (user?.role === "admin") return !i.supervisorVisible;
     if (user?.role === "godown_supervisor") return Boolean(i.supervisorVisible);
     if (i.adminOnly) return false;
