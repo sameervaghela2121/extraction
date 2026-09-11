@@ -53,7 +53,7 @@ jobs:
           docker push "$IMG"
       - name: Deploy
         run: |
-          gcloud run deploy royaltouche-ai-backend \
+          gcloud run deploy royal-touche-ai-backend \
             --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
@@ -80,8 +80,8 @@ jobs:
         # older of the service's two live URL aliases, not the one anything is actually
         # pointed at. The run.googleapis.com/urls annotation lists the current one first.
         run: |
-          AI_URL=$(gcloud run services describe royaltouche-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
-          FRONTEND_URL=$(gcloud run services describe royaltouche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          AI_URL=$(gcloud run services describe royal-touche-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          FRONTEND_URL=$(gcloud run services describe royal-touche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
           echo "ai_url=$AI_URL" >> "$GITHUB_OUTPUT"
           echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
       - name: Build and push
@@ -91,7 +91,7 @@ jobs:
           docker push "$IMG"
       - name: Deploy
         run: |
-          gcloud run deploy royaltouche-backend \
+          gcloud run deploy royal-touche-backend \
             --image="${{ env.REPO }}/backend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --service-account=backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
@@ -116,18 +116,19 @@ jobs:
         id: urls
         # See the matching comment in deploy-backend above.
         run: |
-          BACKEND_URL=$(gcloud run services describe royaltouche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          BACKEND_URL=$(gcloud run services describe royal-touche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
           echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
       - name: Build and push
         run: |
           IMG="${{ env.REPO }}/frontend:${{ github.sha }}"
           docker build -t "$IMG" \
             --build-arg VITE_API_BASE_URL="${{ steps.urls.outputs.backend_url }}/api" \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.SENTRY_DSN_PROD }}" \
             ./frontend
           docker push "$IMG"
       - name: Deploy
         run: |
-          gcloud run deploy royaltouche-frontend \
+          gcloud run deploy royal-touche-frontend \
             --image="${{ env.REPO }}/frontend:${{ github.sha }}" \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --allow-unauthenticated \
@@ -146,5 +147,5 @@ jobs:
       - name: Point the backend's CORS at the frontend's URL
         # See the matching comment in deploy-backend above.
         run: |
-          FRONTEND_URL=$(gcloud run services describe royaltouche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
-          gcloud run services update royaltouche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL
+          FRONTEND_URL=$(gcloud run services describe royal-touche-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          gcloud run services update royal-touche-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --update-env-vars=FRONTEND_ORIGIN=$FRONTEND_URL
