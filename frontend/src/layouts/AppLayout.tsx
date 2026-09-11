@@ -1,12 +1,13 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Upload,
-  FolderOpen,
-  ClipboardList,
-  ClipboardCheck,
-  Receipt,
-  Download,
-  Settings,
+  // Icons for the temporarily-disabled nav entries above — restore alongside them.
+  // Upload,
+  // FolderOpen,
+  // ClipboardList,
+  // ClipboardCheck,
+  // Receipt,
+  // Download,
+  // Settings,
   Users,
   Truck,
   MapPin,
@@ -38,15 +39,18 @@ interface NavItem {
 // bring the four Royal Touche master entries back — nothing else has to change.
 const MASTERS_ENABLED = true;
 
+// TEMPORARILY DISABLED, in step with the matching routes commented out in router.tsx —
+// restore these entries and their routes together, and flip HOME_FOR_ROLE.staff back to
+// "/grn" and HOME_FOR_ROLE.admin/super_admin back to "/documents" in guards.tsx.
 const NAV: NavItem[] = [
-  { to: "/upload", label: "Upload & Scan", icon: Upload },
-  { to: "/documents", label: "Documents", icon: FolderOpen },
-  { to: "/grn/new", label: "Create GRN", icon: ClipboardList, staffVisible: true },
-  { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true, staffVisible: true },
-  { to: "/general-vouchers/upload", label: "Upload Voucher", icon: Receipt },
-  { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
-  { to: "/export", label: "Export", icon: Download },
-  { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
+  // { to: "/upload", label: "Upload & Scan", icon: Upload },
+  // { to: "/documents", label: "Documents", icon: FolderOpen },
+  // { to: "/grn/new", label: "Create GRN", icon: ClipboardList, staffVisible: true },
+  // { to: "/grn", label: "GRN", icon: ClipboardCheck, end: true, staffVisible: true },
+  // { to: "/general-vouchers/upload", label: "Upload Voucher", icon: Receipt },
+  // { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
+  // { to: "/export", label: "Export", icon: Download },
+  // { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
   // Royal Touche masters — one entry each, in the order they're maintained.
   { to: "/masters/vendors", label: "Vendors & papers", icon: Truck, supervisorVisible: true },
@@ -61,6 +65,13 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const items = NAV.filter((i) => {
     if (!MASTERS_ENABLED && i.to.startsWith("/masters")) return false;
+    // super_admin is the one role with no ceiling: unlike admin, it sees the
+    // supervisor-only master section too, not just everything admin sees.
+    if (user?.role === "super_admin") return true;
+    // The one nav item godown_supervisor shares with admin instead of the masters
+    // section — they invite the operators under them (see router.tsx's RoleRoute for
+    // /users). Special-cased here rather than a new NavItem flag for one exception.
+    if (i.to === "/users") return user?.role === "admin" || user?.role === "godown_supervisor";
     if (user?.role === "admin") return !i.supervisorVisible;
     if (user?.role === "godown_supervisor") return Boolean(i.supervisorVisible);
     if (i.adminOnly) return false;

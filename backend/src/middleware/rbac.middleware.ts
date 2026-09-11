@@ -2,13 +2,17 @@ import type { Request, Response, NextFunction } from "express";
 import type { UserRole } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
 
-/** Gate a route to one or more roles. Must run after requireAuth. */
+/** Gate a route to one or more roles. Must run after requireAuth.
+ *
+ *  super_admin always passes, whatever roles are listed — it is the one role with no
+ *  ceiling, and the only one that can never be granted through the app (see USER_ROLES in
+ *  User.model.ts). Checked here, once, rather than added to every call site below. */
 export function requireRole(...roles: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.auth) {
       throw ApiError.unauthorized();
     }
-    if (!roles.includes(req.auth.role)) {
+    if (req.auth.role !== "super_admin" && !roles.includes(req.auth.role)) {
       throw ApiError.forbidden("You do not have permission to perform this action");
     }
     next();
