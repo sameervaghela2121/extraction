@@ -23,6 +23,8 @@
   --warn-soft: oklch(94% 0.06 60);
   --danger: oklch(55% 0.2 25);
   --danger-soft: oklch(94% 0.04 25);
+  --info: oklch(55% 0.12 210);
+  --info-soft: oklch(93% 0.05 210);
 
   --radius: 14px;
   --radius-sm: 9px;
@@ -200,6 +202,14 @@ textarea {
 .pill-unknown {
   background: var(--surface-2);
   color: var(--text-faint);
+}
+.pill-role-supervisor {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.pill-role-operator {
+  background: var(--info-soft);
+  color: oklch(40% 0.12 210);
 }
 .dot {
   width: 8px;

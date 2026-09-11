@@ -5,6 +5,7 @@ import { authApi } from "../../api/auth.api";
 import { useAuth } from "../../context/AuthContext";
 import { apiErrorMessage } from "../../api/client";
 import { isMobileOnlyRole } from "../../types";
+import { homeForRole } from "../../components/guards";
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
@@ -44,7 +45,7 @@ export default function ResetPasswordPage() {
         return;
       }
       applyAuthResult(result);
-      navigate(result.user.role === "staff" ? "/grn" : "/documents");
+      navigate(homeForRole(result.user.role));
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

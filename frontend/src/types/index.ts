@@ -1,12 +1,17 @@
 // store_manager and godown_operator exist on the backend for the mobile app. The web UI
 // never offers them as a choice — they're here only so the auth pages can recognise one
 // and stay put. godown_supervisor uses both surfaces, so it does sign in here.
+//
+// super_admin is never offered as a choice either — the backend only ever hands this role
+// out via a direct Mongo write (see USER_ROLES in the backend's User.model.ts). It's in
+// this union only so pages that already have one (nav, the users table) can render it.
 export type UserRole =
   | "staff"
   | "admin"
   | "store_manager"
   | "godown_supervisor"
-  | "godown_operator";
+  | "godown_operator"
+  | "super_admin";
 
 /** Roles whose account is app-only — the web login sets the password but won't sign them in. */
 export function isMobileOnlyRole(role: UserRole): boolean {
