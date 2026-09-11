@@ -90,7 +90,11 @@ export const usersService = {
     };
   },
 
-  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, actingUserId: string) {
+  // actingUserId is no longer read: the GODOWN_ROLES scope check below already makes a
+  // self-edit unreachable (an admin's own account is role "admin", never a godown role),
+  // so the old id-equality check it fed became redundant. Kept in the signature — the
+  // controller still passes it — in case a future self-edit exception needs it back.
+  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, _actingUserId: string) {
     if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid user id");
     const user = await User.findById(id);
     if (!user) throw ApiError.notFound("User not found");
@@ -101,8 +105,14 @@ export const usersService = {
     if (user.role === "super_admin") {
       throw ApiError.forbidden("Super admin accounts can only be changed directly in the database");
     }
-    if (user._id.toString() === actingUserId && updates.role && updates.role !== "admin") {
-      throw ApiError.badRequest("You cannot remove your own admin role");
+    // Same boundary list()/invite() already hold: this panel reaches godown accounts only.
+    // Without this, an admin could PATCH the id of a fellow admin, a staff account, or a
+    // store_manager — updateUserSchema's role field only accepts godown_supervisor /
+    // godown_operator now, so that call would demote whoever it's pointed at into a godown
+    // role, or (role omitted) just suspend them — neither of which this endpoint should be
+    // able to reach.
+    if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
     }
     if (updates.role) user.role = updates.role;
     if (updates.status) user.status = updates.status;
@@ -123,6 +133,10 @@ export const usersService = {
     if (!user) throw ApiError.notFound("User not found");
     if (user.role === "super_admin") {
       throw ApiError.forbidden("Super admin accounts can only be changed directly in the database");
+    }
+    // Same scope boundary as update() — see the comment there.
+    if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
     }
     user.status = "suspended";
     await user.save();
