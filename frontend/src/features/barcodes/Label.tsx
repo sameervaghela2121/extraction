@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
+import { drawQr } from "./qr";
+import type { LabelKind } from "./labelSizes";
 
 /** One printable label: the value that gets encoded, plus whatever should read under it. */
 export interface LabelItem {
@@ -42,15 +44,20 @@ export function barPattern(value: string): string {
   return out.encodings?.[0]?.data ?? "";
 }
 
-export default function Label({ item }: { item: LabelItem }) {
+export default function Label({ item, kind = "barcode" }: { item: LabelItem; kind?: LabelKind }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (canvasRef.current) drawBarcode(canvasRef.current, item.code);
-  }, [item.code]);
+    if (!canvasRef.current) return;
+    if (kind === "qr") {
+      void drawQr(canvasRef.current, item.code);
+    } else {
+      drawBarcode(canvasRef.current, item.code);
+    }
+  }, [item.code, kind]);
 
   return (
-    <div className="barcode-label">
+    <div className={`barcode-label${kind === "qr" ? " barcode-label--qr" : ""}`}>
       <canvas ref={canvasRef} />
       <div className="barcode-label-code">{item.code}</div>
       {item.lines.map((line) => (

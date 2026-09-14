@@ -4,13 +4,14 @@ import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
-import Label, { barPattern, type LabelItem } from "./Label";
+import Label, { type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
 import { buildZpl } from "./zpl";
 import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
+import { defaultSizeFor, findSize, sizesFor, type LabelKind } from "./labelSizes";
 
 const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
@@ -67,28 +68,49 @@ function errorMessage(err: unknown): string {
 const LOG = "[barcode-print]";
 
 interface LabelSizeMm {
-  width: string;
-  height: string;
+  widthMm: number;
+  heightMm: number;
 }
 
-/** The 100 x 50mm label this page always printed before custom sizing existed. */
-const DEFAULT_LABEL_SIZE: LabelSizeMm = { width: "100", height: "50" };
-const LABEL_SIZE_STORAGE_KEY = "barcode-label-size-mm";
-const MIN_LABEL_MM = 10;
-const MAX_LABEL_MM = 300;
+const LABEL_KIND_STORAGE_KEY = "barcode-label-kind";
+const DEFAULT_LABEL_KIND: LabelKind = "barcode";
 
-/** Remembered per browser, not per batch — a computer is wired to one printer loaded with
- *  one roll, so the size is a setting of this screen, not a fact about any run of codes. */
-function loadLabelSize(): LabelSizeMm {
+/** Remembered per browser, same reasoning as sticker size below — a computer is wired to
+ *  one printer, so which kind of code it prints is a setting of this screen. */
+function loadLabelKind(): LabelKind {
+  const raw = localStorage.getItem(LABEL_KIND_STORAGE_KEY);
+  return raw === "qr" ? "qr" : DEFAULT_LABEL_KIND;
+}
+
+/** One size remembered per code type, so switching from barcode to QR and back doesn't lose
+ *  either one's last pick — a 100x50mm barcode roll and a 40x40mm QR roll are both real
+ *  setups an operator might alternate between. */
+const LABEL_SIZE_STORAGE_KEY = "barcode-label-size-by-kind";
+
+function loadLabelSize(kind: LabelKind): LabelSizeMm {
   try {
     const raw = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
-    if (!raw) return DEFAULT_LABEL_SIZE;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.width === "string" && typeof parsed.height === "string") return parsed;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const saved = parsed?.[kind];
+      // Only trust it if it's still one of this kind's standard sizes — the list of
+      // choices, not the stored value, is the source of truth for what's selectable.
+      if (saved && findSize(kind, saved.widthMm, saved.heightMm)) return saved;
+    }
   } catch {
     // Corrupt or blocked storage — fall back to the default rather than fail the page.
   }
-  return DEFAULT_LABEL_SIZE;
+  return defaultSizeFor(kind);
+}
+
+function saveLabelSize(kind: LabelKind, size: LabelSizeMm): void {
+  try {
+    const raw = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify({ ...parsed, [kind]: size }));
+  } catch {
+    // Best effort — printing still works even if the size isn't remembered next visit.
+  }
 }
 
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
@@ -117,6 +139,11 @@ export default function BarcodeGeneratorPage() {
   const [selected, setSelected] = useState<Record<string, MaterialRollListItem>>({});
   // Labels generated from a number range rather than picked from the list.
   const [seriesLabels, setSeriesLabels] = useState<LabelItem[]>([]);
+  // Which kind the labels currently on the sheet actually are — set from the batch's own
+  // saved kind when "View barcodes" is clicked, or from the current code-type setting when
+  // a new run is generated. Never the live code-type setting directly: switching that
+  // setting must not repaint an already-viewed run in the other kind.
+  const [sheetKind, setSheetKind] = useState<LabelKind>("barcode");
   // Saved runs, newest first — what was printed before, so a series can be reprinted or
   // the next start number picked without guessing.
   const [batches, setBatches] = useState<BarcodeBatch[]>([]);
@@ -131,28 +158,28 @@ export default function BarcodeGeneratorPage() {
   // The run awaiting a "yes" before it is removed from the list.
   const [deleting, setDeleting] = useState<BarcodeBatch | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
-  // The physical sticker size — set once per computer/printer, not per run of codes.
-  const [labelSize, setLabelSize] = useState<LabelSizeMm>(loadLabelSize);
-  const labelWidthMm = Number(labelSize.width);
-  const labelHeightMm = Number(labelSize.height);
-  const validLabelSize =
-    Number.isFinite(labelWidthMm) &&
-    labelWidthMm >= MIN_LABEL_MM &&
-    labelWidthMm <= MAX_LABEL_MM &&
-    Number.isFinite(labelHeightMm) &&
-    labelHeightMm >= MIN_LABEL_MM &&
-    labelHeightMm <= MAX_LABEL_MM;
+  // Barcode or QR — set once per computer/printer, not per run of codes. Drives which
+  // standard sizes are offered below, and how every download/print renders the code.
+  const [labelKind, setLabelKind] = useState<LabelKind>(loadLabelKind);
+  // One size remembered per kind (see loadLabelSize) — switching kind swaps in that kind's
+  // own last pick rather than carrying over a size that belongs to the other one.
+  const [labelSize, setLabelSize] = useState<LabelSizeMm>(() => loadLabelSize(loadLabelKind()));
+  const labelWidthMm = labelSize.widthMm;
+  const labelHeightMm = labelSize.heightMm;
 
   useEffect(() => {
-    // Only a size that will actually print is worth remembering — an in-progress edit
-    // (like a cleared field) shouldn't overwrite the last size that worked.
-    if (!validLabelSize) return;
-    try {
-      localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify(labelSize));
-    } catch {
-      // Best effort — printing still works even if the size isn't remembered next visit.
-    }
-  }, [labelSize, validLabelSize]);
+    localStorage.setItem(LABEL_KIND_STORAGE_KEY, labelKind);
+  }, [labelKind]);
+
+  const changeLabelKind = (kind: LabelKind) => {
+    setLabelKind(kind);
+    setLabelSize(loadLabelSize(kind));
+  };
+
+  const changeLabelSize = (size: LabelSizeMm) => {
+    setLabelSize(size);
+    saveLabelSize(labelKind, size);
+  };
 
   // Direct printing via QZ Tray — see qzPrint.ts. Nothing here talks to the backend.
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(loadPrinterSettings);
@@ -388,6 +415,7 @@ export default function BarcodeGeneratorPage() {
     const labels = labelsOf(batch);
     if (!labels) return;
     setSeriesLabels(labels);
+    setSheetKind(batch.kind);
     setSelected({});
   };
 
@@ -427,6 +455,7 @@ export default function BarcodeGeneratorPage() {
         date,
         from_number: seriesInput.from,
         to_number: seriesInput.to,
+        kind: labelKind,
       });
       setBatches((prev) => [saved, ...prev]);
     } catch (err) {
@@ -439,6 +468,7 @@ export default function BarcodeGeneratorPage() {
     // the one View was clicked on. Merging let two runs pile up invisibly, and printing a
     // range twice puts the same code on two rolls, which is unrecoverable in the godown.
     setSeriesLabels(result.labels);
+    setSheetKind(labelKind);
     setSelected({});
     // Nothing to advance by hand any more: the saved run is now in `batches`, and nextStart
     // recomputes from it, so the next run already begins where this one ended.
@@ -446,18 +476,18 @@ export default function BarcodeGeneratorPage() {
   };
 
   /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
-   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. */
-  const downloadLabels = (labels: LabelItem[], name: string) => {
-    if (labels.length === 0 || !validLabelSize) return;
+   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` is the
+   *  batch's own saved kind, not necessarily the generator's current code-type setting. */
+  const downloadLabels = (labels: LabelItem[], name: string, kind: LabelKind) => {
+    if (labels.length === 0) return;
     // One page per label, drawn as vectors at the configured sticker size — the page IS
     // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
-    // Each barcode is duplicated so the same code can be stuck on two different packages.
+    // Each code is duplicated so the same value can be stuck on two different packages.
     const pages: PdfLabel[] = duplicateForPrint(labels).map((label) => ({
-      bars: barPattern(label.code),
       code: label.code,
       lines: label.lines,
     }));
-    const url = URL.createObjectURL(buildLabelPdf(pages, labelWidthMm, labelHeightMm));
+    const url = URL.createObjectURL(buildLabelPdf(pages, labelWidthMm, labelHeightMm, kind));
     const link = document.createElement("a");
     link.href = url;
     link.download = `${name}.pdf`;
@@ -470,7 +500,7 @@ export default function BarcodeGeneratorPage() {
   const downloadBatch = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
-    downloadLabels(labels, batchName(batch));
+    downloadLabels(labels, batchName(batch), batch.kind);
   };
 
   /**
@@ -482,13 +512,15 @@ export default function BarcodeGeneratorPage() {
    * the two can never reach each other.
    */
   const downloadBatchZpl = (batch: BarcodeBatch) => {
-    if (!validLabelSize) return;
     const labels = labelsOf(batch);
     if (!labels) return;
     // Duplicated for the same reason the PDF path is: two identical stickers per code, one
     // for each package.
     const printLabels = duplicateForPrint(labels);
-    const blob = new Blob([buildZpl(printLabels, labelWidthMm, labelHeightMm)], { type: "text/plain" });
+    const blob = new Blob(
+      [buildZpl(printLabels, labelWidthMm, labelHeightMm, undefined, batch.kind)],
+      { type: "text/plain" },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -512,10 +544,9 @@ export default function BarcodeGeneratorPage() {
    */
   const confirmPrint = async () => {
     const batch = printDialogBatch;
-    if (!batch || !validLabelSize || !printerSettings.name) {
+    if (!batch || !printerSettings.name) {
       console.warn(`${LOG} Print clicked with nothing to print`, {
         hasBatch: Boolean(batch),
-        validLabelSize,
         printerName: printerSettings.name,
       });
       return;
@@ -527,6 +558,7 @@ export default function BarcodeGeneratorPage() {
       printer: printerSettings.name,
       dpi: printerSettings.dpi,
       copies: printerSettings.copies,
+      kind: batch.kind,
       stickerSizeMm: `${labelWidthMm}x${labelHeightMm}`,
       uniqueBarcodes: labels.length,
     });
@@ -536,7 +568,7 @@ export default function BarcodeGeneratorPage() {
       const printLabels = duplicateForPrint(labels, Number(printerSettings.copies));
       await printRaw(
         printerSettings.name,
-        buildZpl(printLabels, labelWidthMm, labelHeightMm, printerSettings.dpi),
+        buildZpl(printLabels, labelWidthMm, labelHeightMm, printerSettings.dpi, batch.kind),
       );
       console.log(`${LOG} print succeeded — ${printLabels.length} labels sent`);
       notify(
@@ -561,40 +593,43 @@ export default function BarcodeGeneratorPage() {
       <div className="barcode-layout">
       <div className="barcode-controls">
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-          <strong style={{ fontSize: 13 }}>Sticker size</strong>
+          <strong style={{ fontSize: 13 }}>Label type & size</strong>
           <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
-            Match the roll loaded in your barcode printer — used for both the PDF and the
-            print file. Remembered on this computer.
+            Match what's loaded in your printer — used for the PDF, the print file, and direct
+            printing. Remembered on this computer.
           </p>
           <div className="barcode-fields">
             <label className="barcode-field">
-              <span>Width (mm)</span>
-              <input
+              <span>Code type</span>
+              <select
                 className="input"
-                type="number"
-                min={MIN_LABEL_MM}
-                max={MAX_LABEL_MM}
-                value={labelSize.width}
-                onChange={(e) => setLabelSize((prev) => ({ ...prev, width: e.target.value }))}
-              />
+                value={labelKind}
+                onChange={(e) => changeLabelKind(e.target.value === "qr" ? "qr" : "barcode")}
+              >
+                <option value="barcode">Barcode (CODE128)</option>
+                <option value="qr">QR code</option>
+              </select>
             </label>
             <label className="barcode-field">
-              <span>Height (mm)</span>
-              <input
+              <span>Sticker size</span>
+              <select
                 className="input"
-                type="number"
-                min={MIN_LABEL_MM}
-                max={MAX_LABEL_MM}
-                value={labelSize.height}
-                onChange={(e) => setLabelSize((prev) => ({ ...prev, height: e.target.value }))}
-              />
+                value={`${labelSize.widthMm}x${labelSize.heightMm}`}
+                onChange={(e) => {
+                  const option = sizesFor(labelKind).find(
+                    (s) => `${s.widthMm}x${s.heightMm}` === e.target.value,
+                  );
+                  if (option) changeLabelSize({ widthMm: option.widthMm, heightMm: option.heightMm });
+                }}
+              >
+                {sizesFor(labelKind).map((s) => (
+                  <option key={s.label} value={`${s.widthMm}x${s.heightMm}`}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
-          {!validLabelSize && (
-            <p style={{ color: "var(--danger)", fontSize: 12, margin: "8px 0 0" }}>
-              Enter a width and height between {MIN_LABEL_MM} and {MAX_LABEL_MM}mm.
-            </p>
-          )}
         </div>
 
         <div className="card" style={{ padding: 16, marginBottom: 14 }}>
@@ -637,7 +672,7 @@ export default function BarcodeGeneratorPage() {
 
           <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn btn-primary" onClick={addSeries} disabled={!canGenerate}>
-              {saving ? "Saving…" : "Generate barcodes"}
+              {saving ? "Saving…" : labelKind === "qr" ? "Generate QR codes" : "Generate barcodes"}
             </button>
             <span className="faint" style={{ fontSize: 12 }}>
               {preview}
@@ -677,44 +712,33 @@ export default function BarcodeGeneratorPage() {
                         )}
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
-                      {batch.count} barcode{batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
+                      {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
+                      {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
                       {new Date(batch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div className="spacer" />
+                  <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
+                    {batch.kind === "qr" ? "QR" : "Barcode"}
+                  </span>
                   <div className="barcode-run-actions">
                     <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                      <Eye size={14} /> View barcodes
+                      <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
                     </button>
                     <button
                       className="btn btn-sm btn-primary"
                       onClick={() => downloadBatchZpl(batch)}
-                      disabled={!validLabelSize}
-                      title={
-                        validLabelSize
-                          ? "Send this run to the label printer"
-                          : "Enter a valid sticker size first"
-                      }
+                      title="Send this run to the label printer"
                     >
                       <Printer size={14} /> Print file
                     </button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => downloadBatch(batch)}
-                      disabled={!validLabelSize}
-                      title={validLabelSize ? "Download this run as a PDF" : "Enter a valid sticker size first"}
-                    >
+                    <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
                       <Download size={14} /> PDF
                     </button>
                     <button
                       className="btn btn-sm"
                       onClick={() => openPrintDialog(batch)}
-                      disabled={!validLabelSize}
-                      title={
-                        validLabelSize
-                          ? "Send this run straight to the printer over QZ Tray, skipping the file/dialog"
-                          : "Enter a valid sticker size first"
-                      }
+                      title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
                     >
                       <Send size={14} /> Print directly
                     </button>
@@ -838,7 +862,7 @@ export default function BarcodeGeneratorPage() {
           <div className="barcode-sheet">
             {sheet.map((item) => (
               <div key={item.key} className="barcode-label-slot">
-                <Label item={item} />
+                <Label item={item} kind={sheetKind} />
               </div>
             ))}
           </div>
