@@ -62,6 +62,10 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Same tag qzPrint.ts logs under — filter DevTools' console on "[barcode-print]" to see
+ *  the whole direct-print flow in one place, from dialog open through the QZ Tray reply. */
+const LOG = "[barcode-print]";
+
 interface LabelSizeMm {
   width: string;
   height: string;
@@ -177,17 +181,23 @@ export default function BarcodeGeneratorPage() {
       : availablePrinters;
 
   const detectPrinters = async () => {
+    console.log(`${LOG} detecting printers…`);
     setDetectingPrinters(true);
     setPrinterError(null);
     try {
       const found = await listPrinters();
       setAvailablePrinters(found);
       if (found.length === 0) {
+        console.warn(`${LOG} QZ Tray connected but reported zero printers`);
         setPrinterError("QZ Tray is running but sees no printers — check it's installed and turned on.");
       } else if (!found.includes(printerSettings.name)) {
+        console.log(`${LOG} auto-selecting "${found[0]}" (previous selection not in this list)`);
         setPrinterSettings((prev) => ({ ...prev, name: found[0] }));
+      } else {
+        console.log(`${LOG} keeping existing selection "${printerSettings.name}"`);
       }
     } catch (err) {
+      console.error(`${LOG} detection failed`, err);
       setPrinterError(`Couldn't reach QZ Tray — install it and make sure it's running. (${errorMessage(err)})`);
     } finally {
       setDetectingPrinters(false);
@@ -197,6 +207,7 @@ export default function BarcodeGeneratorPage() {
   /** Opens the print dialog for this run and immediately starts looking for a printer, so
    *  by the time the operator has read the dialog a printer is usually already selected. */
   const openPrintDialog = (batch: BarcodeBatch) => {
+    console.log(`${LOG} opening print dialog for batch ${batchName(batch)} (${batch.count} barcodes)`);
     setPrintDialogBatch(batch);
     setPrinterError(null);
     void detectPrinters();
@@ -501,9 +512,24 @@ export default function BarcodeGeneratorPage() {
    */
   const confirmPrint = async () => {
     const batch = printDialogBatch;
-    if (!batch || !validLabelSize || !printerSettings.name) return;
+    if (!batch || !validLabelSize || !printerSettings.name) {
+      console.warn(`${LOG} Print clicked with nothing to print`, {
+        hasBatch: Boolean(batch),
+        validLabelSize,
+        printerName: printerSettings.name,
+      });
+      return;
+    }
     const labels = labelsOf(batch);
     if (!labels) return;
+    console.log(`${LOG} confirmed print`, {
+      batch: batchName(batch),
+      printer: printerSettings.name,
+      dpi: printerSettings.dpi,
+      copies: printerSettings.copies,
+      stickerSizeMm: `${labelWidthMm}x${labelHeightMm}`,
+      uniqueBarcodes: labels.length,
+    });
     setSendingPrint(true);
     setPrinterError(null);
     try {
@@ -512,11 +538,13 @@ export default function BarcodeGeneratorPage() {
         printerSettings.name,
         buildZpl(printLabels, labelWidthMm, labelHeightMm, printerSettings.dpi),
       );
+      console.log(`${LOG} print succeeded — ${printLabels.length} labels sent`);
       notify(
         `${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} sent to ${printerSettings.name}`,
       );
       setPrintDialogBatch(null);
     } catch (err) {
+      console.error(`${LOG} print failed`, err);
       setPrinterError(`Couldn't print — is QZ Tray running and the printer on? (${errorMessage(err)})`);
     } finally {
       setSendingPrint(false);
