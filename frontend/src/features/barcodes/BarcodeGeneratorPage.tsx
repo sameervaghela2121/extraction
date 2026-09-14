@@ -7,7 +7,7 @@ import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Label, { type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
-import { buildZpl } from "./zpl";
+import { buildZpl, type ZplOrientation } from "./zpl";
 import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
@@ -33,6 +33,8 @@ function duplicateForPrint(labels: LabelItem[], copies: number = COPIES_PER_LABE
   return labels.flatMap((label) => Array<LabelItem>(copies).fill(label));
 }
 
+const ORIENTATIONS: ZplOrientation[] = ["N", "R", "I", "B"];
+
 interface PrinterSettings {
   /** Exactly as QZ Tray reports it — this is a driver/queue name, not something to guess. */
   name: string;
@@ -41,9 +43,14 @@ interface PrinterSettings {
    *  the wrong physical size on that printer. */
   dpi: 203 | 300;
   copies: "1" | "2";
+  /** How the whole label is turned before printing — see zpl.ts's ZplOrientation for what
+   *  each letter does. Needed because a roll can be mounted in the printer either way round,
+   *  and the app has no way to detect that; the operator picks whichever way makes the
+   *  physical sticker come out readable. */
+  orientation: ZplOrientation;
 }
 
-const DEFAULT_PRINTER_SETTINGS: PrinterSettings = { name: "", dpi: 203, copies: "2" };
+const DEFAULT_PRINTER_SETTINGS: PrinterSettings = { name: "", dpi: 203, copies: "2", orientation: "N" };
 const PRINTER_SETTINGS_STORAGE_KEY = "barcode-printer-settings";
 
 /** Remembered per browser, same reasoning as the sticker size: one computer, one printer. */
@@ -57,7 +64,10 @@ function loadPrinterSettings(): PrinterSettings {
       (parsed.dpi === 203 || parsed.dpi === 300) &&
       (parsed.copies === "1" || parsed.copies === "2")
     ) {
-      return parsed;
+      // Settings saved before orientation existed have none — default those to "N" rather
+      // than reject the whole saved object.
+      const orientation = ORIENTATIONS.includes(parsed.orientation) ? parsed.orientation : "N";
+      return { ...parsed, orientation };
     }
   } catch {
     // Corrupt or blocked storage — fall back to the default rather than fail the page.
@@ -566,6 +576,7 @@ export default function BarcodeGeneratorPage() {
       printer: printerSettings.name,
       dpi: printerSettings.dpi,
       copies: printerSettings.copies,
+      orientation: printerSettings.orientation,
       kind: batch.kind,
       stickerSizeMm: `${labelWidthMm}x${labelHeightMm}`,
       uniqueBarcodes: labels.length,
@@ -576,7 +587,14 @@ export default function BarcodeGeneratorPage() {
       const printLabels = duplicateForPrint(labels, Number(printerSettings.copies));
       await printRaw(
         printerSettings.name,
-        buildZpl(printLabels, labelWidthMm, labelHeightMm, printerSettings.dpi, batch.kind),
+        buildZpl(
+          printLabels,
+          labelWidthMm,
+          labelHeightMm,
+          printerSettings.dpi,
+          batch.kind,
+          printerSettings.orientation,
+        ),
       );
       console.log(`${LOG} print succeeded — ${printLabels.length} labels sent`);
       notify(
@@ -985,6 +1003,26 @@ export default function BarcodeGeneratorPage() {
                 >
                   <option value="1">1 (one sticker each)</option>
                   <option value="2">2 (for two packages)</option>
+                </select>
+              </label>
+              <label className="barcode-field">
+                <span>Orientation</span>
+                <select
+                  className="input"
+                  value={printerSettings.orientation}
+                  onChange={(e) =>
+                    setPrinterSettings((prev) => ({
+                      ...prev,
+                      orientation: ORIENTATIONS.includes(e.target.value as ZplOrientation)
+                        ? (e.target.value as ZplOrientation)
+                        : "N",
+                    }))
+                  }
+                >
+                  <option value="N">Normal</option>
+                  <option value="R">Turned right</option>
+                  <option value="I">Upside down</option>
+                  <option value="B">Turned left</option>
                 </select>
               </label>
             </div>
