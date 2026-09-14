@@ -9,14 +9,29 @@ import qz from "qz-tray";
  * No signing certificate is configured, so QZ Tray shows its own one-time "allow this site
  * to print?" prompt rather than printing silently. That's a deliberate, temporary choice —
  * see BarcodeGeneratorPage.tsx — not a limitation of this module.
+ *
+ * Every step logs under the "[barcode-print]" tag — this is the one part of the app that
+ * fails on hardware and setup outside our control (QZ Tray not running, wrong driver, printer
+ * off), so the console is the fastest way for whoever's on-site with the printer to see
+ * which step it got stuck on, filterable in DevTools with that tag.
  */
+const LOG = "[barcode-print]";
 
 /** Idempotent: does nothing if a connection is already open. Throws QZ Tray's own error
  *  (e.g. "Unable to establish connection with QZ") if the app isn't running, which callers
  *  should show to the operator rather than swallow — the fix is "start QZ Tray," not code. */
 export async function ensureConnected(): Promise<void> {
-  if (!qz.websocket.isActive()) {
+  if (qz.websocket.isActive()) {
+    console.log(`${LOG} already connected to QZ Tray`);
+    return;
+  }
+  console.log(`${LOG} connecting to QZ Tray on localhost…`);
+  try {
     await qz.websocket.connect();
+    console.log(`${LOG} connected to QZ Tray`);
+  } catch (err) {
+    console.error(`${LOG} could not connect to QZ Tray — is it installed and running?`, err);
+    throw err;
   }
 }
 
@@ -24,8 +39,16 @@ export async function ensureConnected(): Promise<void> {
  *  asking the operator to type a driver name exactly right. */
 export async function listPrinters(): Promise<string[]> {
   await ensureConnected();
-  const found = await qz.printers.find();
-  return Array.isArray(found) ? found : [found];
+  console.log(`${LOG} asking QZ Tray for connected printers…`);
+  try {
+    const found = await qz.printers.find();
+    const names = Array.isArray(found) ? found : [found];
+    console.log(`${LOG} printers found:`, names);
+    return names;
+  } catch (err) {
+    console.error(`${LOG} printers.find() failed`, err);
+    throw err;
+  }
 }
 
 /**
@@ -37,6 +60,14 @@ export async function listPrinters(): Promise<string[]> {
  */
 export async function printRaw(printerName: string, commands: string): Promise<void> {
   await ensureConnected();
-  const config = qz.configs.create(printerName);
-  await qz.print(config, [commands]);
+  console.log(`${LOG} sending job to "${printerName}" (${commands.length} bytes of ZPL)`);
+  console.log(`${LOG} ZPL payload:\n${commands}`);
+  try {
+    const config = qz.configs.create(printerName);
+    await qz.print(config, [commands]);
+    console.log(`${LOG} QZ Tray accepted the job for "${printerName}"`);
+  } catch (err) {
+    console.error(`${LOG} qz.print() failed for "${printerName}"`, err);
+    throw err;
+  }
 }
