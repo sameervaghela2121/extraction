@@ -16,21 +16,13 @@
  * same file is sharp on a 203 DPI thermal printer and a 1200 DPI laser.
  */
 
+import { clamp, computeLabelLayoutMm } from "./labelLayout";
+
 /** PDF works in points; everything below is authored in mm and converted once. */
 const MM = 72 / 25.4;
 
-/** 100 x 50mm — the standard inventory/barcode label, and what the printer is loaded with.
- *  The page IS the label: a thermal printer feeds one sticker per page. */
-const LABEL_W = 100 * MM;
-const LABEL_H = 50 * MM;
-
-const SIDE_MARGIN = 4 * MM;
-const TOP_MARGIN = 4 * MM;
-const BOTTOM_MARGIN = 4 * MM;
-
 /** Tall bars give a handheld more scan lines to find, which is what makes an angled read
- *  off a curved roll work. */
-const BAR_HEIGHT = 24 * MM;
+ *  off a curved roll work — see labelLayout.ts for how this scales with label height. */
 
 /**
  * Narrow-bar width, and the number that decides whether any of this scans.
@@ -44,8 +36,6 @@ const TARGET_MODULE = 0.5 * MM;
  *  at all. The most commonly violated part of the spec, and it fails silently. */
 const QUIET_MODULES = 10;
 
-const CODE_FONT = 11;
-const DETAIL_FONT = 7;
 const GAP = 1.5 * MM;
 
 const encoder = new TextEncoder();
@@ -93,10 +83,38 @@ function pdfString(text: string): string {
 }
 
 /** Centred single line of text as a content-stream fragment. */
-function centredText(text: string, size: number, baseline: number): string {
+function centredText(text: string, size: number, baseline: number, labelW: number): string {
   if (!text) return "";
-  const x = (LABEL_W - textWidth(text, size)) / 2;
+  const x = (labelW - textWidth(text, size)) / 2;
   return `BT /F1 ${size} Tf ${x.toFixed(2)} ${baseline.toFixed(2)} Td (${pdfString(text)}) Tj ET\n`;
+}
+
+/** Every measurement one label's drawing commands need, in points, for the requested
+ *  physical size — computed once per PDF rather than once per label. */
+interface Geometry {
+  labelW: number;
+  labelH: number;
+  sideMargin: number;
+  topMargin: number;
+  bottomMargin: number;
+  barHeight: number;
+  codeFont: number;
+  detailFont: number;
+}
+
+function computeGeometry(widthMm: number, heightMm: number): Geometry {
+  const layout = computeLabelLayoutMm(widthMm, heightMm);
+  return {
+    labelW: widthMm * MM,
+    labelH: heightMm * MM,
+    sideMargin: layout.sideMarginMm * MM,
+    topMargin: layout.topMarginMm * MM,
+    bottomMargin: layout.bottomMarginMm * MM,
+    barHeight: layout.barHeightMm * MM,
+    // Tuned to reproduce the original fixed 11pt/7pt at the original 100x50mm label.
+    codeFont: clamp(heightMm * 0.22, 7, 11),
+    detailFont: clamp(heightMm * 0.14, 5, 7),
+  };
 }
 
 /**
@@ -107,15 +125,15 @@ function centredText(text: string, size: number, baseline: number): string {
  * leave hairline seams where a renderer rounds their edges differently, and a seam inside
  * a bar is exactly what a scanner reads as a narrower bar.
  */
-function labelContent(label: PdfLabel): string {
+function labelContent(label: PdfLabel, g: Geometry): string {
   const modules = label.bars.length;
-  const available = LABEL_W - SIDE_MARGIN * 2;
+  const available = g.labelW - g.sideMargin * 2;
   // Shrink to fit a long code; never widen beyond the target.
   const module = Math.min(TARGET_MODULE, available / (modules + QUIET_MODULES * 2));
 
   const barsWidth = modules * module;
-  const startX = (LABEL_W - barsWidth) / 2;
-  const barsBottom = LABEL_H - TOP_MARGIN - BAR_HEIGHT;
+  const startX = (g.labelW - barsWidth) / 2;
+  const barsBottom = g.labelH - g.topMargin - g.barHeight;
 
   let content = "0 0 0 rg\n";
   let index = 0;
@@ -126,31 +144,33 @@ function labelContent(label: PdfLabel): string {
       const x = startX + index * module;
       content +=
         `${x.toFixed(3)} ${barsBottom.toFixed(2)} ` +
-        `${(run * module).toFixed(3)} ${BAR_HEIGHT.toFixed(2)} re f\n`;
+        `${(run * module).toFixed(3)} ${g.barHeight.toFixed(2)} re f\n`;
       index += run;
     } else {
       index++;
     }
   }
 
-  let baseline = barsBottom - GAP - CODE_FONT;
-  content += centredText(label.code, CODE_FONT, baseline);
+  let baseline = barsBottom - GAP - g.codeFont;
+  content += centredText(label.code, g.codeFont, baseline, g.labelW);
   for (const line of label.lines) {
-    baseline -= GAP + DETAIL_FONT;
-    if (baseline < BOTTOM_MARGIN) break;
-    content += centredText(line, DETAIL_FONT, baseline);
+    baseline -= GAP + g.detailFont;
+    if (baseline < g.bottomMargin) break;
+    content += centredText(line, g.detailFont, baseline, g.labelW);
   }
   return content;
 }
 
 /**
- * Every label as one PDF, a page each.
+ * Every label as one PDF, a page each, sized to the physical sticker in `widthMm` x
+ * `heightMm` — the page IS the label: a thermal printer feeds one sticker per page.
  *
  * Still hand-rolled rather than pulling in a PDF library: the whole document is rectangles
  * and one built-in font, which is a few hundred bytes of syntax. A library would be ~300kB
  * in the bundle to write the same thing.
  */
-export function buildLabelPdf(labels: PdfLabel[]): Blob {
+export function buildLabelPdf(labels: PdfLabel[], widthMm: number, heightMm: number): Blob {
+  const geometry = computeGeometry(widthMm, heightMm);
   const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
   let offset = 0;
@@ -191,12 +211,12 @@ export function buildLabelPdf(labels: PdfLabel[]): Blob {
   labels.forEach((label, index) => {
     const id = pageId(index);
     const contentsId = id + 1;
-    const content = labelContent(label);
+    const content = labelContent(label, geometry);
     const bytes = encoder.encode(content);
 
     writeObject(
       id,
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${LABEL_W.toFixed(2)} ${LABEL_H.toFixed(2)}] ` +
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${geometry.labelW.toFixed(2)} ${geometry.labelH.toFixed(2)}] ` +
         `/Resources << /Font << /F1 3 0 R >> >> /Contents ${contentsId} 0 R >>`,
     );
     writeObject(contentsId, `<< /Length ${bytes.length} >>`, bytes);

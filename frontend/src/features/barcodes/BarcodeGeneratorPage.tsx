@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Eye, Printer, X } from "lucide-react";
+import { Download, Eye, Printer, Send, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
@@ -8,6 +8,7 @@ import Label, { barPattern, type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
 import { buildZpl } from "./zpl";
+import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
 
@@ -15,6 +16,76 @@ const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
 // true to bring back the search, the "Select page" button and the roll table.
 const ROLL_PICKER_ENABLED = false;
+
+/** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
+ *  twice on the roll, back to back, rather than once. The PDF and ZPL downloads always use
+ *  this; direct printing lets the operator choose instead (see PrinterSettings below). */
+const COPIES_PER_LABEL = 2;
+
+function duplicateForPrint(labels: LabelItem[], copies: number = COPIES_PER_LABEL): LabelItem[] {
+  return labels.flatMap((label) => Array<LabelItem>(copies).fill(label));
+}
+
+interface PrinterSettings {
+  /** Exactly as QZ Tray reports it — this is a driver/queue name, not something to guess. */
+  name: string;
+  /** Dots per mm the selected printer actually is: 203dpi = 8, 300dpi = 12. Wrong here means
+   *  every measurement in the ZPL — label size, bars, margins, fonts — comes out scaled to
+   *  the wrong physical size on that printer. */
+  dpi: 203 | 300;
+  copies: "1" | "2";
+}
+
+const DEFAULT_PRINTER_SETTINGS: PrinterSettings = { name: "", dpi: 203, copies: "2" };
+const PRINTER_SETTINGS_STORAGE_KEY = "barcode-printer-settings";
+
+/** Remembered per browser, same reasoning as the sticker size: one computer, one printer. */
+function loadPrinterSettings(): PrinterSettings {
+  try {
+    const raw = localStorage.getItem(PRINTER_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_PRINTER_SETTINGS;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed.name === "string" &&
+      (parsed.dpi === 203 || parsed.dpi === 300) &&
+      (parsed.copies === "1" || parsed.copies === "2")
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Corrupt or blocked storage — fall back to the default rather than fail the page.
+  }
+  return DEFAULT_PRINTER_SETTINGS;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+interface LabelSizeMm {
+  width: string;
+  height: string;
+}
+
+/** The 100 x 50mm label this page always printed before custom sizing existed. */
+const DEFAULT_LABEL_SIZE: LabelSizeMm = { width: "100", height: "50" };
+const LABEL_SIZE_STORAGE_KEY = "barcode-label-size-mm";
+const MIN_LABEL_MM = 10;
+const MAX_LABEL_MM = 300;
+
+/** Remembered per browser, not per batch — a computer is wired to one printer loaded with
+ *  one roll, so the size is a setting of this screen, not a fact about any run of codes. */
+function loadLabelSize(): LabelSizeMm {
+  try {
+    const raw = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
+    if (!raw) return DEFAULT_LABEL_SIZE;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.width === "string" && typeof parsed.height === "string") return parsed;
+  } catch {
+    // Corrupt or blocked storage — fall back to the default rather than fail the page.
+  }
+  return DEFAULT_LABEL_SIZE;
+}
 
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
  *  apart on a rack. */
@@ -56,6 +127,80 @@ export default function BarcodeGeneratorPage() {
   // The run awaiting a "yes" before it is removed from the list.
   const [deleting, setDeleting] = useState<BarcodeBatch | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
+  // The physical sticker size — set once per computer/printer, not per run of codes.
+  const [labelSize, setLabelSize] = useState<LabelSizeMm>(loadLabelSize);
+  const labelWidthMm = Number(labelSize.width);
+  const labelHeightMm = Number(labelSize.height);
+  const validLabelSize =
+    Number.isFinite(labelWidthMm) &&
+    labelWidthMm >= MIN_LABEL_MM &&
+    labelWidthMm <= MAX_LABEL_MM &&
+    Number.isFinite(labelHeightMm) &&
+    labelHeightMm >= MIN_LABEL_MM &&
+    labelHeightMm <= MAX_LABEL_MM;
+
+  useEffect(() => {
+    // Only a size that will actually print is worth remembering — an in-progress edit
+    // (like a cleared field) shouldn't overwrite the last size that worked.
+    if (!validLabelSize) return;
+    try {
+      localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify(labelSize));
+    } catch {
+      // Best effort — printing still works even if the size isn't remembered next visit.
+    }
+  }, [labelSize, validLabelSize]);
+
+  // Direct printing via QZ Tray — see qzPrint.ts. Nothing here talks to the backend.
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(loadPrinterSettings);
+  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  const [detectingPrinters, setDetectingPrinters] = useState(false);
+  const [printerError, setPrinterError] = useState<string | null>(null);
+  // The run "Print directly" was clicked for — non-null opens the dialog. Detection and
+  // settings happen inside it rather than on a permanently-visible card, since they're only
+  // ever relevant at the moment you're about to print.
+  const [printDialogBatch, setPrintDialogBatch] = useState<BarcodeBatch | null>(null);
+  const [sendingPrint, setSendingPrint] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PRINTER_SETTINGS_STORAGE_KEY, JSON.stringify(printerSettings));
+    } catch {
+      // Best effort — printing still works even if the choice isn't remembered next visit.
+    }
+  }, [printerSettings]);
+
+  // The saved printer name from last time won't be in the list until detection runs again
+  // this session — keep it selectable anyway rather than silently blanking it.
+  const printerOptions =
+    printerSettings.name && !availablePrinters.includes(printerSettings.name)
+      ? [printerSettings.name, ...availablePrinters]
+      : availablePrinters;
+
+  const detectPrinters = async () => {
+    setDetectingPrinters(true);
+    setPrinterError(null);
+    try {
+      const found = await listPrinters();
+      setAvailablePrinters(found);
+      if (found.length === 0) {
+        setPrinterError("QZ Tray is running but sees no printers — check it's installed and turned on.");
+      } else if (!found.includes(printerSettings.name)) {
+        setPrinterSettings((prev) => ({ ...prev, name: found[0] }));
+      }
+    } catch (err) {
+      setPrinterError(`Couldn't reach QZ Tray — install it and make sure it's running. (${errorMessage(err)})`);
+    } finally {
+      setDetectingPrinters(false);
+    }
+  };
+
+  /** Opens the print dialog for this run and immediately starts looking for a printer, so
+   *  by the time the operator has read the dialog a printer is usually already selected. */
+  const openPrintDialog = (batch: BarcodeBatch) => {
+    setPrintDialogBatch(batch);
+    setPrinterError(null);
+    void detectPrinters();
+  };
 
   useEffect(() => {
     if (!ROLL_PICKER_ENABLED) {
@@ -292,15 +437,16 @@ export default function BarcodeGeneratorPage() {
   /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
    *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. */
   const downloadLabels = (labels: LabelItem[], name: string) => {
-    if (labels.length === 0) return;
-    // One 100x50mm page per label, drawn as vectors — the page IS the sticker, so a
-    // thermal printer feeds one per label with nothing to scale or cut.
-    const pages: PdfLabel[] = labels.map((label) => ({
+    if (labels.length === 0 || !validLabelSize) return;
+    // One page per label, drawn as vectors at the configured sticker size — the page IS
+    // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
+    // Each barcode is duplicated so the same code can be stuck on two different packages.
+    const pages: PdfLabel[] = duplicateForPrint(labels).map((label) => ({
       bars: barPattern(label.code),
       code: label.code,
       lines: label.lines,
     }));
-    const url = URL.createObjectURL(buildLabelPdf(pages));
+    const url = URL.createObjectURL(buildLabelPdf(pages, labelWidthMm, labelHeightMm));
     const link = document.createElement("a");
     link.href = url;
     link.download = `${name}.pdf`;
@@ -325,16 +471,56 @@ export default function BarcodeGeneratorPage() {
    * the two can never reach each other.
    */
   const downloadBatchZpl = (batch: BarcodeBatch) => {
+    if (!validLabelSize) return;
     const labels = labelsOf(batch);
     if (!labels) return;
-    const blob = new Blob([buildZpl(labels)], { type: "text/plain" });
+    // Duplicated for the same reason the PDF path is: two identical stickers per code, one
+    // for each package.
+    const printLabels = duplicateForPrint(labels);
+    const blob = new Blob([buildZpl(printLabels, labelWidthMm, labelHeightMm)], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `${batchName(batch)}.zpl`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${labels.length} barcode${labels.length === 1 ? "" : "s"} ready for the printer`);
+    notify(`${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} ready for the printer`);
+  };
+
+  /**
+   * The "Print" button inside the dialog opened by "Print directly".
+   *
+   * Detection already ran when the dialog opened (see openPrintDialog), so this just sends
+   * whatever printer/resolution/copies are currently set in the dialog. On failure the
+   * dialog stays open with the error shown in it, so a fixable problem (wrong printer
+   * picked, QZ Tray not started yet) can be corrected and retried without starting over.
+   *
+   * Resolves once QZ Tray accepts the job, not once the sticker is physically out of the
+   * printer — a jam or empty stock still reports success here, same caveat as any print
+   * dialog. The PDF/ZPL downloads stay available on this row as the fallback/reprint path.
+   */
+  const confirmPrint = async () => {
+    const batch = printDialogBatch;
+    if (!batch || !validLabelSize || !printerSettings.name) return;
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    setSendingPrint(true);
+    setPrinterError(null);
+    try {
+      const printLabels = duplicateForPrint(labels, Number(printerSettings.copies));
+      await printRaw(
+        printerSettings.name,
+        buildZpl(printLabels, labelWidthMm, labelHeightMm, printerSettings.dpi),
+      );
+      notify(
+        `${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} sent to ${printerSettings.name}`,
+      );
+      setPrintDialogBatch(null);
+    } catch (err) {
+      setPrinterError(`Couldn't print — is QZ Tray running and the printer on? (${errorMessage(err)})`);
+    } finally {
+      setSendingPrint(false);
+    }
   };
 
   return (
@@ -346,6 +532,43 @@ export default function BarcodeGeneratorPage() {
 
       <div className="barcode-layout">
       <div className="barcode-controls">
+        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+          <strong style={{ fontSize: 13 }}>Sticker size</strong>
+          <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
+            Match the roll loaded in your barcode printer — used for both the PDF and the
+            print file. Remembered on this computer.
+          </p>
+          <div className="barcode-fields">
+            <label className="barcode-field">
+              <span>Width (mm)</span>
+              <input
+                className="input"
+                type="number"
+                min={MIN_LABEL_MM}
+                max={MAX_LABEL_MM}
+                value={labelSize.width}
+                onChange={(e) => setLabelSize((prev) => ({ ...prev, width: e.target.value }))}
+              />
+            </label>
+            <label className="barcode-field">
+              <span>Height (mm)</span>
+              <input
+                className="input"
+                type="number"
+                min={MIN_LABEL_MM}
+                max={MAX_LABEL_MM}
+                value={labelSize.height}
+                onChange={(e) => setLabelSize((prev) => ({ ...prev, height: e.target.value }))}
+              />
+            </label>
+          </div>
+          {!validLabelSize && (
+            <p style={{ color: "var(--danger)", fontSize: 12, margin: "8px 0 0" }}>
+              Enter a width and height between {MIN_LABEL_MM} and {MAX_LABEL_MM}mm.
+            </p>
+          )}
+        </div>
+
         <div className="card" style={{ padding: 16, marginBottom: 14 }}>
           <strong style={{ fontSize: 14 }}>Make blank barcodes</strong>
           <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
@@ -431,30 +654,50 @@ export default function BarcodeGeneratorPage() {
                     </div>
                   </div>
                   <div className="spacer" />
-                  <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                    <Eye size={14} /> View barcodes
-                  </button>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => downloadBatchZpl(batch)}
-                    title="Send this run to the label printer"
-                  >
-                    <Printer size={14} /> Print file
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => downloadBatch(batch)}
-                    title="Download this run as a PDF"
-                  >
-                    <Download size={14} /> PDF
-                  </button>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    onClick={() => setDeleting(batch)}
-                    title="Remove this run from the list"
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="barcode-run-actions">
+                    <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
+                      <Eye size={14} /> View barcodes
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => downloadBatchZpl(batch)}
+                      disabled={!validLabelSize}
+                      title={
+                        validLabelSize
+                          ? "Send this run to the label printer"
+                          : "Enter a valid sticker size first"
+                      }
+                    >
+                      <Printer size={14} /> Print file
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => downloadBatch(batch)}
+                      disabled={!validLabelSize}
+                      title={validLabelSize ? "Download this run as a PDF" : "Enter a valid sticker size first"}
+                    >
+                      <Download size={14} /> PDF
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => openPrintDialog(batch)}
+                      disabled={!validLabelSize}
+                      title={
+                        validLabelSize
+                          ? "Send this run straight to the printer over QZ Tray, skipping the file/dialog"
+                          : "Enter a valid sticker size first"
+                      }
+                    >
+                      <Send size={14} /> Print directly
+                    </button>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setDeleting(batch)}
+                      title="Remove this run from the list"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -613,6 +856,95 @@ export default function BarcodeGeneratorPage() {
                 disabled={deletingNow}
               >
                 {deletingNow ? "Removing…" : "Remove barcodes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={printDialogBatch !== null}
+        onClose={() => setPrintDialogBatch(null)}
+        title={printDialogBatch ? `Print ${batchName(printDialogBatch)} directly` : "Print directly"}
+        size="medium"
+      >
+        {printDialogBatch && (
+          <div style={{ display: "grid", gap: 14, padding: 16 }}>
+            <p className="faint" style={{ fontSize: 12, margin: 0 }}>
+              {detectingPrinters
+                ? "Looking for a printer via QZ Tray…"
+                : printerSettings.name
+                  ? `Found "${printerSettings.name}". Change any of these if it's not what you want.`
+                  : "No printer picked yet — install and start QZ Tray on this computer, then detect again."}
+            </p>
+            <label className="barcode-field">
+              <span>Printer</span>
+              <select
+                className="input"
+                value={printerSettings.name}
+                onChange={(e) => setPrinterSettings((prev) => ({ ...prev, name: e.target.value }))}
+              >
+                <option value="">Select a printer…</option>
+                {printerOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="barcode-fields">
+              <label className="barcode-field">
+                <span>Printer resolution</span>
+                <select
+                  className="input"
+                  value={printerSettings.dpi}
+                  onChange={(e) =>
+                    setPrinterSettings((prev) => ({
+                      ...prev,
+                      dpi: Number(e.target.value) === 300 ? 300 : 203,
+                    }))
+                  }
+                >
+                  <option value={203}>203 dpi (TH240)</option>
+                  <option value={300}>300 dpi (TH340)</option>
+                </select>
+              </label>
+              <label className="barcode-field">
+                <span>Copies per barcode</span>
+                <select
+                  className="input"
+                  value={printerSettings.copies}
+                  onChange={(e) =>
+                    setPrinterSettings((prev) => ({
+                      ...prev,
+                      copies: e.target.value === "1" ? "1" : "2",
+                    }))
+                  }
+                >
+                  <option value="1">1 (one sticker each)</option>
+                  <option value="2">2 (for two packages)</option>
+                </select>
+              </label>
+            </div>
+            <div className="row gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn btn-sm" onClick={detectPrinters} disabled={detectingPrinters}>
+                {detectingPrinters ? "Looking…" : "Detect again"}
+              </button>
+              {printerError && (
+                <span style={{ color: "var(--danger)", fontSize: 12 }}>{printerError}</span>
+              )}
+            </div>
+            <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
+              <button type="button" className="btn" onClick={() => setPrintDialogBatch(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={confirmPrint}
+                disabled={sendingPrint || !printerSettings.name}
+              >
+                {sendingPrint ? "Sending…" : "Print"}
               </button>
             </div>
           </div>
