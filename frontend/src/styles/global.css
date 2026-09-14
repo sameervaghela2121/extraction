@@ -587,6 +587,14 @@ textarea {
   max-width: 100%;
   height: auto;
 }
+/* A QR reads as a grid, not left-to-right, so it doesn't need the full width of a wide grid
+   cell the way a barcode does — capped and centred so it stays a reasonable, square size
+   next to barcode labels in the same sheet. */
+.barcode-label--qr canvas {
+  max-width: 140px;
+  margin: 0 auto;
+  display: block;
+}
 .barcode-label-code {
   font-weight: 700;
   font-size: 13px;

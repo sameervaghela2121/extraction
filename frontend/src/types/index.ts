@@ -367,6 +367,9 @@ export interface BarcodeBatch {
   date: string;
   from_number: number;
   to_number: number;
+  /** Fixed at creation — a run always regenerates as whichever it was actually printed as,
+   *  regardless of what the generator's current code-type setting is. */
+  kind: "barcode" | "qr";
   count: number;
   createdBy: string;
   createdAt: string;

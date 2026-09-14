@@ -15,6 +15,7 @@ export const createBarcodeBatchSchema = z
       .default(""),
     from_number: z.number().int().min(0),
     to_number: z.number().int().min(0),
+    kind: z.enum(["barcode", "qr"]).optional().default("barcode"),
   })
   .superRefine((v, ctx) => {
     if (v.to_number < v.from_number) {

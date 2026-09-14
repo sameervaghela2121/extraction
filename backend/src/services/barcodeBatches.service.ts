@@ -11,6 +11,7 @@ type BatchInput = {
   date: string;
   from_number: number;
   to_number: number;
+  kind: "barcode" | "qr";
 };
 
 function toResponse(b: IBarcodeBatch & { createdBy?: unknown }) {
@@ -21,6 +22,9 @@ function toResponse(b: IBarcodeBatch & { createdBy?: unknown }) {
     date: b.date,
     from_number: b.from_number,
     to_number: b.to_number,
+    // Runs saved before this field existed have none in the database — they were all
+    // printed as barcodes, the only kind that existed then.
+    kind: b.kind ?? "barcode",
     count: b.to_number - b.from_number + 1,
     createdBy: creator && "name" in creator ? (creator.name ?? "—") : "—",
     createdAt: b.createdAt,
@@ -73,13 +77,21 @@ export const barcodeBatchesService = {
 
   async create(input: BatchInput, auth: AuthPayload) {
     // Normalise here, not just in the schema: the duplicate check is a query, and it has
-    // to compare against the same shape the unique index stores.
-    const values = { ...input, prefix: input.prefix.trim().toUpperCase(), date: input.date.trim() };
+    // to compare against the same shape the unique index stores. Kind is deliberately left
+    // out — the same number range must stay unique no matter which kind it's saved as, since
+    // it's the physical numbers already spent that matter, not how they were rendered.
+    const values = {
+      prefix: input.prefix.trim().toUpperCase(),
+      date: input.date.trim(),
+      from_number: input.from_number,
+      to_number: input.to_number,
+    };
     const duplicate = "That exact run has already been saved";
     if (await BarcodeBatch.exists(values)) throw ApiError.conflict(duplicate);
     try {
       const batch = await BarcodeBatch.create({
         ...values,
+        kind: input.kind,
         createdBy: new Types.ObjectId(auth.userId),
       });
       // Populate before responding: the list shows a name, and a freshly created row

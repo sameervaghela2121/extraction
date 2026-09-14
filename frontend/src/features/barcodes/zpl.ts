@@ -1,5 +1,7 @@
 import { barPattern, type LabelItem } from "./Label";
-import { clamp, computeLabelLayoutMm } from "./labelLayout";
+import { clamp, computeLabelLayoutMm, computeQrLabelLayoutMm } from "./labelLayout";
+import { qrModules } from "./qr";
+import type { LabelKind } from "./labelSizes";
 
 /**
  * ZPL — the language thermal label printers speak.
@@ -37,19 +39,14 @@ function zplText(value: string): string {
 }
 
 /**
- * One label, sized to the physical sticker in `widthMm` x `heightMm`, at the given printer
- * resolution.
+ * One barcode label, sized to the physical sticker in `widthMm` x `heightMm`, at the given
+ * printer resolution.
  *
  * The barcode is centred by measuring it first: ZPL places a barcode from its top-left and
  * has no notion of centring one, so the module count comes from the same encoder the
  * preview and the PDF use, and the origin is worked out from that.
  */
-export function labelZpl(
-  item: LabelItem,
-  widthMm: number,
-  heightMm: number,
-  dotsPerMm: number = DEFAULT_DOTS_PER_MM,
-): string {
+function barcodeLabelZpl(item: LabelItem, widthMm: number, heightMm: number, dotsPerMm: number): string {
   const mm = (value: number) => Math.round(value * dotsPerMm);
   const module = mm(MODULE_MM);
 
@@ -104,6 +101,78 @@ export function labelZpl(
   return lines.join("\n");
 }
 
+/**
+ * One QR label, mirroring barcodeLabelZpl above.
+ *
+ * Unlike the barcode path, the printer's own `^BQ` command draws the QR — we tell it the
+ * data and a magnification factor rather than drawing modules ourselves (that's what pdf.ts
+ * does instead, since a PDF has no such built-in command). The module count is known ahead
+ * of time via qrModules(), the same encoder the preview and PDF use, so the magnification
+ * can be chosen to hit the requested physical size rather than guessed. `^BQ`'s magnification
+ * only goes up to 10, so a QR requesting a very large module size on a low-resolution
+ * printer prints smaller than asked rather than distorted — the alternative, stretching it,
+ * would break the square modules a scanner depends on.
+ */
+function qrLabelZpl(item: LabelItem, widthMm: number, heightMm: number, dotsPerMm: number): string {
+  const mm = (value: number) => Math.round(value * dotsPerMm);
+
+  const layout = computeQrLabelLayoutMm(widthMm, heightMm);
+  const labelW = mm(widthMm);
+  const labelH = mm(heightMm);
+  const topMargin = mm(layout.topMarginMm);
+  const qrSide = mm(layout.qrSideMm);
+  const codeFont = Math.round(clamp(heightMm * 0.4, 10, 20) * (dotsPerMm / DEFAULT_DOTS_PER_MM));
+  const detailFont = Math.round(clamp(heightMm * 0.32, 8, 16) * (dotsPerMm / DEFAULT_DOTS_PER_MM));
+
+  const { size: moduleCount } = qrModules(item.code);
+  const magnification = clamp(Math.round(qrSide / moduleCount), 1, 10);
+  const actualSide = magnification * moduleCount;
+  const x = Math.max(0, Math.round((labelW - actualSide) / 2));
+
+  const lines = [
+    "^XA",
+    `^PW${labelW}`,
+    `^LL${labelH}`,
+    "^LH0,0",
+    "^CI28",
+    `^FO${x},${topMargin}`,
+    // Model 2 (the recommended, more capable model) at the computed magnification. Error
+    // correction M matches qr.ts's QR_ERROR_CORRECTION; "A" is automatic input mode, letting
+    // the printer's own encoder pick the most compact segment mode for the data.
+    "^BQN,2," + magnification,
+    `^FDMA,${zplText(item.code)}^FS`,
+  ];
+
+  let y = topMargin + actualSide + mm(2);
+  const codeLines = [item.code, ...item.lines];
+  for (const line of codeLines) {
+    if (y + detailFont > labelH) break;
+    const font = line === item.code ? codeFont : detailFont;
+    lines.push(
+      `^FO0,${y}`,
+      `^A0N,${font},${font}`,
+      `^FB${labelW},1,0,C`,
+      `^FD${zplText(line)}^FS`,
+    );
+    y += font + mm(1.5);
+  }
+
+  lines.push("^XZ");
+  return lines.join("\n");
+}
+
+export function labelZpl(
+  item: LabelItem,
+  widthMm: number,
+  heightMm: number,
+  dotsPerMm: number = DEFAULT_DOTS_PER_MM,
+  kind: LabelKind = "barcode",
+): string {
+  return kind === "qr"
+    ? qrLabelZpl(item, widthMm, heightMm, dotsPerMm)
+    : barcodeLabelZpl(item, widthMm, heightMm, dotsPerMm);
+}
+
 /** A whole run as one file. The printer reads them back to back and feeds one sticker per
  *  ^XA…^XZ block, so a 50-label run is 50 stickers with no further instruction. */
 export function buildZpl(
@@ -111,6 +180,7 @@ export function buildZpl(
   widthMm: number,
   heightMm: number,
   dotsPerMm: number = DEFAULT_DOTS_PER_MM,
+  kind: LabelKind = "barcode",
 ): string {
-  return items.map((item) => labelZpl(item, widthMm, heightMm, dotsPerMm)).join("\n");
+  return items.map((item) => labelZpl(item, widthMm, heightMm, dotsPerMm, kind)).join("\n");
 }
