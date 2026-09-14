@@ -164,6 +164,10 @@ textarea {
   background: var(--surface);
   color: var(--text);
   font-weight: 500;
+  /* A two-word label ("View barcodes") wrapping mid-button is what made a row of buttons
+     look uneven — some one line, some two. A button either fits or the row wraps around it
+     (see .barcode-run), but the label itself never breaks. */
+  white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, opacity 0.12s;
 }
 .btn:hover {
@@ -530,15 +534,24 @@ textarea {
 .barcode-run {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   /* The left border is transparent rather than absent, so the accent on a selected row
      does not shift the content across by 3px when it appears. */
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   transition: background 120ms ease, border-color 120ms ease;
+}
+/* The five action buttons wrap onto their own new line as a group when the row is too
+   narrow for all of them, rather than each button individually squeezing or breaking. */
+.barcode-run-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 /* Which run the preview is showing. The whole row carries it, not a badge inside it: the
    row is the thing being looked at, and a highlighted row is the same "you are here" the
@@ -573,6 +586,14 @@ textarea {
 .barcode-label canvas {
   max-width: 100%;
   height: auto;
+}
+/* A QR reads as a grid, not left-to-right, so it doesn't need the full width of a wide grid
+   cell the way a barcode does — capped and centred so it stays a reasonable, square size
+   next to barcode labels in the same sheet. */
+.barcode-label--qr canvas {
+  max-width: 140px;
+  margin: 0 auto;
+  display: block;
 }
 .barcode-label-code {
   font-weight: 700;

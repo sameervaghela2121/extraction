@@ -96,6 +96,37 @@ export const recordMovementSchema = movementFieldsSchema
       return;
     }
 
+    // Same shape as CONSUME: the roll already knows its material and its vendor, so
+    // there's nothing here for the operator to weigh, place, or pick — they just confirm
+    // the roll is going back.
+    if (v.transaction_type === "RETURN_TO_VENDOR") {
+      if (!v.roll_id) {
+        ctx.addIssue({ code: "custom", message: "RETURN_TO_VENDOR requires roll_id", path: ["roll_id"] });
+      }
+      for (const [field, label] of [
+        ["weight", "weight"],
+        ["new_weight", "new_weight"],
+        ["returned_weight", "returned_weight"],
+        ["location", "location"],
+      ] as const) {
+        if (v[field] !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `A roll going back to the vendor has nothing left to measure or place — drop ${label}`,
+            path: [field],
+          });
+        }
+      }
+      if (v.vendor_id !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "The roll's own vendor is used automatically — drop vendor_id",
+          path: ["vendor_id"],
+        });
+      }
+      return;
+    }
+
     if (!v.material_id) {
       ctx.addIssue({ code: "custom", message: "material_id is required", path: ["material_id"] });
     }

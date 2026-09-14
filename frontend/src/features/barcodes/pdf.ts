@@ -16,21 +16,16 @@
  * same file is sharp on a 203 DPI thermal printer and a 1200 DPI laser.
  */
 
+import { clamp, computeLabelLayoutMm, computeQrLabelLayoutMm } from "./labelLayout";
+import { barPattern } from "./Label";
+import { qrModules } from "./qr";
+import type { LabelKind } from "./labelSizes";
+
 /** PDF works in points; everything below is authored in mm and converted once. */
 const MM = 72 / 25.4;
 
-/** 100 x 50mm — the standard inventory/barcode label, and what the printer is loaded with.
- *  The page IS the label: a thermal printer feeds one sticker per page. */
-const LABEL_W = 100 * MM;
-const LABEL_H = 50 * MM;
-
-const SIDE_MARGIN = 4 * MM;
-const TOP_MARGIN = 4 * MM;
-const BOTTOM_MARGIN = 4 * MM;
-
 /** Tall bars give a handheld more scan lines to find, which is what makes an angled read
- *  off a curved roll work. */
-const BAR_HEIGHT = 24 * MM;
+ *  off a curved roll work — see labelLayout.ts for how this scales with label height. */
 
 /**
  * Narrow-bar width, and the number that decides whether any of this scans.
@@ -44,18 +39,16 @@ const TARGET_MODULE = 0.5 * MM;
  *  at all. The most commonly violated part of the spec, and it fails silently. */
 const QUIET_MODULES = 10;
 
-const CODE_FONT = 11;
-const DETAIL_FONT = 7;
 const GAP = 1.5 * MM;
 
 const encoder = new TextEncoder();
 
 export interface PdfLabel {
-  /** The module pattern, "1" = bar and "0" = space, straight from the CODE128 encoder. */
-  bars: string;
-  /** Printed under the bars, so a label is still usable when a scanner will not read it. */
+  /** What the code encodes. The bar/module pattern is computed here from this, per `kind`,
+   *  rather than passed in — one caller, one place that decides how a value becomes marks. */
   code: string;
-  /** Small print under that. Empty on a blank label — the roll does not exist yet. */
+  /** Printed under the code (or the QR), so a label is still usable when a scanner will not
+   *  read it. */
   lines: string[];
 }
 
@@ -93,64 +86,172 @@ function pdfString(text: string): string {
 }
 
 /** Centred single line of text as a content-stream fragment. */
-function centredText(text: string, size: number, baseline: number): string {
+function centredText(text: string, size: number, baseline: number, labelW: number): string {
   if (!text) return "";
-  const x = (LABEL_W - textWidth(text, size)) / 2;
+  const x = (labelW - textWidth(text, size)) / 2;
   return `BT /F1 ${size} Tf ${x.toFixed(2)} ${baseline.toFixed(2)} Td (${pdfString(text)}) Tj ET\n`;
 }
 
+/** Every measurement one label's drawing commands need, in points, for the requested
+ *  physical size — computed once per PDF rather than once per label. */
+interface Geometry {
+  labelW: number;
+  labelH: number;
+  sideMargin: number;
+  topMargin: number;
+  bottomMargin: number;
+  barHeight: number;
+  codeFont: number;
+  detailFont: number;
+}
+
+function computeGeometry(widthMm: number, heightMm: number): Geometry {
+  const layout = computeLabelLayoutMm(widthMm, heightMm);
+  return {
+    labelW: widthMm * MM,
+    labelH: heightMm * MM,
+    sideMargin: layout.sideMarginMm * MM,
+    topMargin: layout.topMarginMm * MM,
+    bottomMargin: layout.bottomMarginMm * MM,
+    barHeight: layout.barHeightMm * MM,
+    // Tuned to reproduce the original fixed 11pt/7pt at the original 100x50mm label.
+    codeFont: clamp(heightMm * 0.22, 7, 11),
+    detailFont: clamp(heightMm * 0.14, 5, 7),
+  };
+}
+
+/** Same role as Geometry above, for a QR label — barHeight becomes qrSide, a square rather
+ *  than a horizontal band. */
+interface QrGeometry {
+  labelW: number;
+  labelH: number;
+  sideMargin: number;
+  topMargin: number;
+  bottomMargin: number;
+  qrSide: number;
+  codeFont: number;
+  detailFont: number;
+}
+
+function computeQrGeometry(widthMm: number, heightMm: number): QrGeometry {
+  const layout = computeQrLabelLayoutMm(widthMm, heightMm);
+  return {
+    labelW: widthMm * MM,
+    labelH: heightMm * MM,
+    sideMargin: layout.sideMarginMm * MM,
+    topMargin: layout.topMarginMm * MM,
+    bottomMargin: layout.bottomMarginMm * MM,
+    qrSide: layout.qrSideMm * MM,
+    codeFont: clamp(heightMm * 0.13, 6, 10),
+    detailFont: clamp(heightMm * 0.09, 5, 7),
+  };
+}
+
 /**
- * One label's drawing commands.
+ * One barcode label's drawing commands.
  *
  * Runs of consecutive "1"s are emitted as a single rectangle rather than one per module —
  * a wide bar is one wide rect. That is not only smaller output: adjacent rectangles can
  * leave hairline seams where a renderer rounds their edges differently, and a seam inside
  * a bar is exactly what a scanner reads as a narrower bar.
  */
-function labelContent(label: PdfLabel): string {
-  const modules = label.bars.length;
-  const available = LABEL_W - SIDE_MARGIN * 2;
+function barcodeLabelContent(label: PdfLabel, g: Geometry): string {
+  const bars = barPattern(label.code);
+  const modules = bars.length;
+  const available = g.labelW - g.sideMargin * 2;
   // Shrink to fit a long code; never widen beyond the target.
   const module = Math.min(TARGET_MODULE, available / (modules + QUIET_MODULES * 2));
 
   const barsWidth = modules * module;
-  const startX = (LABEL_W - barsWidth) / 2;
-  const barsBottom = LABEL_H - TOP_MARGIN - BAR_HEIGHT;
+  const startX = (g.labelW - barsWidth) / 2;
+  const barsBottom = g.labelH - g.topMargin - g.barHeight;
 
   let content = "0 0 0 rg\n";
   let index = 0;
   while (index < modules) {
-    if (label.bars[index] === "1") {
+    if (bars[index] === "1") {
       let run = 1;
-      while (index + run < modules && label.bars[index + run] === "1") run++;
+      while (index + run < modules && bars[index + run] === "1") run++;
       const x = startX + index * module;
       content +=
         `${x.toFixed(3)} ${barsBottom.toFixed(2)} ` +
-        `${(run * module).toFixed(3)} ${BAR_HEIGHT.toFixed(2)} re f\n`;
+        `${(run * module).toFixed(3)} ${g.barHeight.toFixed(2)} re f\n`;
       index += run;
     } else {
       index++;
     }
   }
 
-  let baseline = barsBottom - GAP - CODE_FONT;
-  content += centredText(label.code, CODE_FONT, baseline);
+  let baseline = barsBottom - GAP - g.codeFont;
+  content += centredText(label.code, g.codeFont, baseline, g.labelW);
   for (const line of label.lines) {
-    baseline -= GAP + DETAIL_FONT;
-    if (baseline < BOTTOM_MARGIN) break;
-    content += centredText(line, DETAIL_FONT, baseline);
+    baseline -= GAP + g.detailFont;
+    if (baseline < g.bottomMargin) break;
+    content += centredText(line, g.detailFont, baseline, g.labelW);
   }
   return content;
 }
 
 /**
- * Every label as one PDF, a page each.
+ * One QR label's drawing commands.
+ *
+ * Same run-merging idea as the barcode path, but per row: a QR's dark cells are irregular
+ * rather than banded into a handful of wide bars, so each row still yields several runs
+ * rather than one, but far fewer rectangles than one per module.
+ */
+function qrLabelContent(label: PdfLabel, g: QrGeometry): string {
+  const { size, dark } = qrModules(label.code);
+  const module = g.qrSide / size;
+  const startX = (g.labelW - g.qrSide) / 2;
+  // PDF's y axis runs bottom-up, so the QR's top edge — row 0 of the matrix — sits at
+  // labelH minus the top margin, not at the top margin itself (that would put the whole
+  // QR down near the bottom of the label, which is the bug this replaced).
+  const qrTopY = g.labelH - g.topMargin;
+
+  let content = "0 0 0 rg\n";
+  for (let row = 0; row < size; row++) {
+    let col = 0;
+    while (col < size) {
+      if (dark[row * size + col]) {
+        let run = 1;
+        while (col + run < size && dark[row * size + col + run]) run++;
+        const x = startX + col * module;
+        const y = qrTopY - (row + 1) * module;
+        content += `${x.toFixed(3)} ${y.toFixed(3)} ${(run * module).toFixed(3)} ${module.toFixed(3)} re f\n`;
+        col += run;
+      } else {
+        col++;
+      }
+    }
+  }
+
+  let baseline = g.labelH - g.topMargin - g.qrSide - GAP - g.codeFont;
+  content += centredText(label.code, g.codeFont, baseline, g.labelW);
+  for (const line of label.lines) {
+    baseline -= GAP + g.detailFont;
+    if (baseline < g.bottomMargin) break;
+    content += centredText(line, g.detailFont, baseline, g.labelW);
+  }
+  return content;
+}
+
+/**
+ * Every label as one PDF, a page each, sized to the physical sticker in `widthMm` x
+ * `heightMm` — the page IS the label: a thermal printer feeds one sticker per page.
  *
  * Still hand-rolled rather than pulling in a PDF library: the whole document is rectangles
  * and one built-in font, which is a few hundred bytes of syntax. A library would be ~300kB
  * in the bundle to write the same thing.
  */
-export function buildLabelPdf(labels: PdfLabel[]): Blob {
+export function buildLabelPdf(
+  labels: PdfLabel[],
+  widthMm: number,
+  heightMm: number,
+  kind: LabelKind = "barcode",
+): Blob {
+  const barcodeGeometry = kind === "barcode" ? computeGeometry(widthMm, heightMm) : null;
+  const qrGeometry = kind === "qr" ? computeQrGeometry(widthMm, heightMm) : null;
+  const geometry = (barcodeGeometry ?? qrGeometry)!;
   const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
   let offset = 0;
@@ -191,12 +292,13 @@ export function buildLabelPdf(labels: PdfLabel[]): Blob {
   labels.forEach((label, index) => {
     const id = pageId(index);
     const contentsId = id + 1;
-    const content = labelContent(label);
+    const content =
+      kind === "qr" ? qrLabelContent(label, qrGeometry!) : barcodeLabelContent(label, barcodeGeometry!);
     const bytes = encoder.encode(content);
 
     writeObject(
       id,
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${LABEL_W.toFixed(2)} ${LABEL_H.toFixed(2)}] ` +
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${geometry.labelW.toFixed(2)} ${geometry.labelH.toFixed(2)}] ` +
         `/Resources << /Font << /F1 3 0 R >> >> /Contents ${contentsId} 0 R >>`,
     );
     writeObject(contentsId, `<< /Length ${bytes.length} >>`, bytes);

@@ -88,6 +88,10 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
       return `Returned ${t.weight} ${unit}${to} · ${t.used_weight ?? 0} ${unit} used`;
     case "CONSUME":
       return t.weight ? `Consumed — ${t.weight} ${unit} used up` : "Consumed";
+    case "RETURN_TO_VENDOR":
+      return t.weight
+        ? `Returned to vendor${to} — ${t.weight} ${unit}`
+        : `Returned to vendor${to}`;
     default:
       return `Corrected by ${t.weight} ${unit}`;
   }
@@ -150,6 +154,10 @@ type RollEffect = {
   weight: number;
   from_location?: string;
   to_location?: string;
+  /** RETURN_TO_VENDOR only: the roll's own vendor, read off it rather than retyped, so the
+   *  transaction row carries it without the caller having to resupply what's already on
+   *  the roll. */
+  vendor_id?: Types.ObjectId;
 };
 
 /**
@@ -233,12 +241,50 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     };
   }
 
-  if (input.transaction_type === "CONSUME") {
-    // Already closed — by a RETURN weighed at 0, or by an earlier consume. The flag only
-    // ever asserts "this roll is finished", which is already true, so it is accepted as a
-    // no-op instead of a 409: a phone that queued both a zero return and a consume for the
-    // same empty core must not have its whole flush halted by the second one.
+  if (input.transaction_type === "RETURN_TO_VENDOR") {
+    if (roll.status === "ISSUED") {
+      throw ApiError.conflict("This roll is already out — record its return first");
+    }
     if (roll.status === "CONSUMED") {
+      throw ApiError.conflict("This roll is already consumed — there is nothing left to return");
+    }
+    if (roll.status === "RETURNED_TO_VENDOR") {
+      throw ApiError.conflict("This roll has already been returned to the vendor");
+    }
+    if (!roll.vendor_id) {
+      throw ApiError.badRequest("This roll has no vendor on record to return it to");
+    }
+    const vendor = await Vendor.findById(roll.vendor_id).select("name").lean();
+    if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
+
+    const from = roll.location;
+    // Whatever is still on it goes back with it — there is no "used" figure here, the
+    // whole remaining weight leaves the store for good.
+    const used = roll.remaining_weight ?? 0;
+    roll.remaining_weight = 0;
+    // Its own status, not CONSUMED — "why did this roll stop" needs to read correctly on
+    // the roll itself (the app's status pill), not only in its transaction history.
+    roll.status = "RETURNED_TO_VENDOR";
+    // The roll's own record should say where it actually is now, not the rack it left —
+    // same reasoning as OUT updating roll.location.
+    roll.location = vendor.name;
+    await roll.save();
+    return {
+      delta: -used,
+      weight: used,
+      roll_weight_after: 0,
+      from_location: from,
+      to_location: vendor.name,
+      vendor_id: roll.vendor_id,
+    };
+  }
+
+  if (input.transaction_type === "CONSUME") {
+    // Already closed — by a RETURN weighed at 0, an earlier consume, or a return to the
+    // vendor. The flag only ever asserts "this roll is finished", which is already true,
+    // so it is accepted as a no-op instead of a 409 — and, for a returned roll, this also
+    // stops a stray CONSUME from silently overwriting RETURNED_TO_VENDOR back to CONSUMED.
+    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR") {
       return { delta: 0, weight: 0, used_weight: 0, roll_weight_after: 0, from_location: roll.location };
     }
     // Whatever was still on it is what the line used up. A roll that was never weighed
@@ -263,7 +309,10 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
       );
     }
     roll.remaining_weight = current + added;
-    if (roll.status === "CONSUMED") roll.status = "IN_STOCK";
+    // Reopens from either terminal state. Without this, weight added back onto a roll
+    // stuck on CONSUMED/RETURNED_TO_VENDOR would sit on remaining_weight but never count
+    // toward on-hand stock — refreshSummary only sums rolls whose status is IN_STOCK.
+    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR") roll.status = "IN_STOCK";
     await roll.save();
     return { delta: added, weight: added, roll_weight_after: roll.remaining_weight };
   }
@@ -359,7 +408,9 @@ export const stockService = {
         transaction_date: input.transaction_date ? new Date(input.transaction_date) : new Date(),
         material_id: materialId,
         roll_id: rollId,
-        vendor_id: input.vendor_id ? new Types.ObjectId(input.vendor_id) : undefined,
+        // RETURN_TO_VENDOR supplies its own — read off the roll in applyToRoll — since the
+        // caller never sends one for it; every other type still takes it from the request.
+        vendor_id: effect.vendor_id ?? (input.vendor_id ? new Types.ObjectId(input.vendor_id) : undefined),
         weight: effect.weight,
         used_weight: effect.used_weight,
         material_weight_after: summary.total_weight,

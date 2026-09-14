@@ -96,6 +96,10 @@ export const listRollsQuerySchema = z.object({
   vendor_id: objectId.optional(),
   status: z.enum(ROLL_STATUSES).optional(),
   location: z.string().trim().optional(),
+  // One code from the remark master — matches a roll whose remark_codes array contains it,
+  // same as filtering vendor_id or status matches an exact field. Not validated against the
+  // master here either, same convention as the code itself.
+  remark_code: z.string().trim().min(1).optional(),
   // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
   // to updatedAt ascending so the client can page through the backlog oldest-first and
   // save the last updatedAt it saw as the next checkpoint.

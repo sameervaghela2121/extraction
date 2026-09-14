@@ -6,6 +6,7 @@ export interface BarcodeBatchInput {
   date: string;
   from_number: number;
   to_number: number;
+  kind: "barcode" | "qr";
 }
 
 export const barcodeBatchesApi = {

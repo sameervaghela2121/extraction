@@ -271,6 +271,7 @@ export const materialRollsService = {
     vendor_id?: string;
     status?: RollStatus;
     location?: string;
+    remark_code?: string;
     updated_after?: Date;
     sort?: "roll_number" | "date";
     order?: "asc" | "desc";
@@ -286,6 +287,9 @@ export const materialRollsService = {
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.vendor_id) filter.vendor_id = new Types.ObjectId(query.vendor_id);
     if (query.location) filter.location = query.location;
+    // remark_codes is an array field — Mongo matches a scalar against it as "array contains
+    // this value" with no operator needed, same as every equality filter above.
+    if (query.remark_code) filter.remark_codes = query.remark_code.trim().toUpperCase();
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [

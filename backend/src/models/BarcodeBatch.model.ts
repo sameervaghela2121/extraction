@@ -15,6 +15,16 @@ export interface IBarcodeBatch {
   date: string;
   from_number: number;
   to_number: number;
+  /**
+   * How this run was printed: a barcode symbol or a QR code.
+   *
+   * Fixed at creation and never re-derived from a UI setting — an operator who later
+   * switches their printer's default to the other kind must not change what an *old* run
+   * regenerates as, since its physical labels are already stuck on rolls in whatever kind
+   * they were actually printed in. Records saved before this field existed have none in
+   * the database; the service defaults those to "barcode", the only kind that existed then.
+   */
+  kind: "barcode" | "qr";
   createdBy: Types.ObjectId;
   /**
    * When the run was removed from the list. Set rather than deleting the row, because the
@@ -33,6 +43,7 @@ const barcodeBatchSchema = new Schema<IBarcodeBatch>(
     date: { type: String, default: "", trim: true },
     from_number: { type: Number, required: true, min: 0 },
     to_number: { type: Number, required: true, min: 0 },
+    kind: { type: String, enum: ["barcode", "qr"], default: "barcode" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     deleted_at: { type: Date },
   },
