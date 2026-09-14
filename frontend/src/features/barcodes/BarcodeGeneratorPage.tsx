@@ -17,6 +17,12 @@ const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
 // true to bring back the search, the "Select page" button and the roll table.
 const ROLL_PICKER_ENABLED = false;
+// ponytail: QR code generation (qr.ts, and the QR paths in pdf.ts/zpl.ts/Label.tsx) is built
+// and working, just not wanted on screen yet — flip to true to bring back the "Code type"
+// dropdown so an operator can choose QR for a new run. Everything that already prints an
+// existing QR run keeps working regardless of this flag: a batch's own saved `kind` (see
+// barcodeBatchesService) decides how it re-renders, never this setting.
+const QR_CODE_ENABLED = false;
 
 /** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
  *  twice on the roll, back to back, rather than once. The PDF and ZPL downloads always use
@@ -76,8 +82,10 @@ const LABEL_KIND_STORAGE_KEY = "barcode-label-kind";
 const DEFAULT_LABEL_KIND: LabelKind = "barcode";
 
 /** Remembered per browser, same reasoning as sticker size below — a computer is wired to
- *  one printer, so which kind of code it prints is a setting of this screen. */
+ *  one printer, so which kind of code it prints is a setting of this screen. Forced to
+ *  "barcode" while QR_CODE_ENABLED is off, even if an earlier session left "qr" saved. */
 function loadLabelKind(): LabelKind {
+  if (!QR_CODE_ENABLED) return "barcode";
   const raw = localStorage.getItem(LABEL_KIND_STORAGE_KEY);
   return raw === "qr" ? "qr" : DEFAULT_LABEL_KIND;
 }
@@ -593,23 +601,25 @@ export default function BarcodeGeneratorPage() {
       <div className="barcode-layout">
       <div className="barcode-controls">
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-          <strong style={{ fontSize: 13 }}>Label type & size</strong>
+          <strong style={{ fontSize: 13 }}>{QR_CODE_ENABLED ? "Label type & size" : "Sticker size"}</strong>
           <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
             Match what's loaded in your printer — used for the PDF, the print file, and direct
             printing. Remembered on this computer.
           </p>
           <div className="barcode-fields">
-            <label className="barcode-field">
-              <span>Code type</span>
-              <select
-                className="input"
-                value={labelKind}
-                onChange={(e) => changeLabelKind(e.target.value === "qr" ? "qr" : "barcode")}
-              >
-                <option value="barcode">Barcode (CODE128)</option>
-                <option value="qr">QR code</option>
-              </select>
-            </label>
+            {QR_CODE_ENABLED && (
+              <label className="barcode-field">
+                <span>Code type</span>
+                <select
+                  className="input"
+                  value={labelKind}
+                  onChange={(e) => changeLabelKind(e.target.value === "qr" ? "qr" : "barcode")}
+                >
+                  <option value="barcode">Barcode (CODE128)</option>
+                  <option value="qr">QR code</option>
+                </select>
+              </label>
+            )}
             <label className="barcode-field">
               <span>Sticker size</span>
               <select
