@@ -474,6 +474,8 @@ export default function BarcodeGeneratorPage() {
         from_number: seriesInput.from,
         to_number: seriesInput.to,
         kind: labelKind,
+        widthMm: labelWidthMm,
+        heightMm: labelHeightMm,
       });
       setBatches((prev) => [saved, ...prev]);
     } catch (err) {
@@ -494,9 +496,16 @@ export default function BarcodeGeneratorPage() {
   };
 
   /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
-   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` is the
-   *  batch's own saved kind, not necessarily the generator's current code-type setting. */
-  const downloadLabels = (labels: LabelItem[], name: string, kind: LabelKind) => {
+   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` and
+   *  the size are the batch's own saved values, never the generator's current settings —
+   *  otherwise reprinting an old run would silently use whatever's selected right now. */
+  const downloadLabels = (
+    labels: LabelItem[],
+    name: string,
+    kind: LabelKind,
+    widthMm: number,
+    heightMm: number,
+  ) => {
     if (labels.length === 0) return;
     // One page per label, drawn as vectors at the configured sticker size — the page IS
     // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
@@ -505,7 +514,7 @@ export default function BarcodeGeneratorPage() {
       code: label.code,
       lines: label.lines,
     }));
-    const url = URL.createObjectURL(buildLabelPdf(pages, labelWidthMm, labelHeightMm, kind));
+    const url = URL.createObjectURL(buildLabelPdf(pages, widthMm, heightMm, kind));
     const link = document.createElement("a");
     link.href = url;
     link.download = `${name}.pdf`;
@@ -518,7 +527,7 @@ export default function BarcodeGeneratorPage() {
   const downloadBatch = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
-    downloadLabels(labels, batchName(batch), batch.kind);
+    downloadLabels(labels, batchName(batch), batch.kind, batch.widthMm, batch.heightMm);
   };
 
   /**
@@ -536,7 +545,7 @@ export default function BarcodeGeneratorPage() {
     // for each package.
     const printLabels = duplicateForPrint(labels);
     const blob = new Blob(
-      [buildZpl(printLabels, labelWidthMm, labelHeightMm, undefined, batch.kind)],
+      [buildZpl(printLabels, batch.widthMm, batch.heightMm, undefined, batch.kind)],
       { type: "text/plain" },
     );
     const url = URL.createObjectURL(blob);
@@ -578,7 +587,7 @@ export default function BarcodeGeneratorPage() {
       copies: printerSettings.copies,
       orientation: printerSettings.orientation,
       kind: batch.kind,
-      stickerSizeMm: `${labelWidthMm}x${labelHeightMm}`,
+      stickerSizeMm: `${batch.widthMm}x${batch.heightMm}`,
       uniqueBarcodes: labels.length,
     });
     setSendingPrint(true);
@@ -589,8 +598,8 @@ export default function BarcodeGeneratorPage() {
         printerSettings.name,
         buildZpl(
           printLabels,
-          labelWidthMm,
-          labelHeightMm,
+          batch.widthMm,
+          batch.heightMm,
           printerSettings.dpi,
           batch.kind,
           printerSettings.orientation,

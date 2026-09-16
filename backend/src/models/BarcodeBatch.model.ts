@@ -25,6 +25,21 @@ export interface IBarcodeBatch {
    * the database; the service defaults those to "barcode", the only kind that existed then.
    */
   kind: "barcode" | "qr";
+  /**
+   * The physical sticker size this run was printed at, in millimetres.
+   *
+   * Fixed at creation for the same reason `kind` is: the sticker size picker on the
+   * generator screen is a setting of "whatever's loaded in the printer right now," not a
+   * fact about any particular run. Without this, reprinting an old run used whatever size
+   * happened to be selected at that later moment — silently stretching a 70x30mm run's
+   * barcode onto a 100x50mm page, or worse, squeezing a QR meant to fill a square label
+   * into a thin corner of a wide one. Records saved before this field existed default to
+   * 100x50mm for barcode runs (the app's original, size wasn't configurable then) and
+   * 40x40mm for QR runs (the QR feature's own default) — a best-effort guess, since their
+   * true original size was never recorded.
+   */
+  widthMm: number;
+  heightMm: number;
   createdBy: Types.ObjectId;
   /**
    * When the run was removed from the list. Set rather than deleting the row, because the
@@ -44,6 +59,8 @@ const barcodeBatchSchema = new Schema<IBarcodeBatch>(
     from_number: { type: Number, required: true, min: 0 },
     to_number: { type: Number, required: true, min: 0 },
     kind: { type: String, enum: ["barcode", "qr"], default: "barcode" },
+    widthMm: { type: Number, default: 100, min: 1 },
+    heightMm: { type: Number, default: 50, min: 1 },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     deleted_at: { type: Date },
   },

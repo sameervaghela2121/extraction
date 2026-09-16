@@ -16,6 +16,11 @@ export const createBarcodeBatchSchema = z
     from_number: z.number().int().min(0),
     to_number: z.number().int().min(0),
     kind: z.enum(["barcode", "qr"]).optional().default("barcode"),
+    // The generator only ever offers a handful of standard sizes, but this stays a plain
+    // range rather than an enum of exactly those — a future size added to the picker
+    // shouldn't also require a backend redeploy just to be allowed through.
+    widthMm: z.number().positive().max(500).optional().default(100),
+    heightMm: z.number().positive().max(500).optional().default(50),
   })
   .superRefine((v, ctx) => {
     if (v.to_number < v.from_number) {
