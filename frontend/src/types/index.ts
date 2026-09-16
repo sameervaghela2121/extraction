@@ -370,6 +370,11 @@ export interface BarcodeBatch {
   /** Fixed at creation — a run always regenerates as whichever it was actually printed as,
    *  regardless of what the generator's current code-type setting is. */
   kind: "barcode" | "qr";
+  /** The physical sticker size this run was made at, in millimetres — fixed at creation for
+   *  the same reason `kind` is: reprinting shouldn't silently use whatever size the
+   *  generator's picker happens to show right now. */
+  widthMm: number;
+  heightMm: number;
   count: number;
   createdBy: string;
   createdAt: string;

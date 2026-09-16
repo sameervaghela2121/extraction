@@ -12,19 +12,27 @@ type BatchInput = {
   from_number: number;
   to_number: number;
   kind: "barcode" | "qr";
+  widthMm: number;
+  heightMm: number;
 };
 
 function toResponse(b: IBarcodeBatch & { createdBy?: unknown }) {
   const creator = b.createdBy as { name?: string } | Types.ObjectId | null;
+  // Runs saved before this field existed have none in the database — default each to that
+  // kind's own long-standing default rather than one fixed guess, so an old QR run doesn't
+  // come back thinking it was made on a wide barcode-shaped label.
+  const kind = b.kind ?? "barcode";
+  const defaultWidthMm = kind === "qr" ? 40 : 100;
+  const defaultHeightMm = kind === "qr" ? 40 : 50;
   return {
     id: b._id.toString(),
     prefix: b.prefix,
     date: b.date,
     from_number: b.from_number,
     to_number: b.to_number,
-    // Runs saved before this field existed have none in the database — they were all
-    // printed as barcodes, the only kind that existed then.
-    kind: b.kind ?? "barcode",
+    kind,
+    widthMm: b.widthMm ?? defaultWidthMm,
+    heightMm: b.heightMm ?? defaultHeightMm,
     count: b.to_number - b.from_number + 1,
     createdBy: creator && "name" in creator ? (creator.name ?? "—") : "—",
     createdAt: b.createdAt,
@@ -92,6 +100,8 @@ export const barcodeBatchesService = {
       const batch = await BarcodeBatch.create({
         ...values,
         kind: input.kind,
+        widthMm: input.widthMm,
+        heightMm: input.heightMm,
         createdBy: new Types.ObjectId(auth.userId),
       });
       // Populate before responding: the list shows a name, and a freshly created row
