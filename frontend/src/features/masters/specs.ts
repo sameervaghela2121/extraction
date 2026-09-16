@@ -97,16 +97,17 @@ export const MATERIAL_TYPE_SPEC: MasterSpec = {
   fields: [
     { name: "material_code", label: "Material code", type: "text", required: true, inList: true, sortable: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
-    // No inList: both stay on the form but are off the table. `unit` has to stay editable —
-    // createRawMaterialSchema requires it, so a create that omitted it would be a 400.
-    { name: "category", label: "Category", type: "text" },
-    { name: "unit", label: "Unit", type: "text", required: true },
     // Same as the locations master: the picker should follow how the godown thinks about
     // its materials, which is rarely alphabetical. Blank sorts last.
     { name: "sort_order", label: "Sort order", type: "number", inList: true },
-    // gsm, width_mm and reorder_level are off the form entirely. They are optional on the
-    // API, and the backend's PATCH skips fields a body omits, so existing values survive an
-    // edit here rather than being blanked. See the note in MasterSection.buildBody.
+    // category, unit, gsm, width_mm and reorder_level are all off the form. They are
+    // optional on the API, and the backend's PATCH skips fields a body omits, so the values
+    // already stored survive an edit here rather than being blanked. See the note in
+    // MasterSection.buildBody.
+    //
+    // `unit` was removed alongside the others once it stopped being required: a roll takes
+    // its unit from what the client sends at registration (defaulting to "kg"), never from
+    // the material type, so a blank one here changes nothing downstream.
   ],
 };
 
