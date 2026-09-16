@@ -6,9 +6,11 @@
  * need the same physical margins and bar height for any size — otherwise the same batch
  * would lay out differently depending which file you downloaded.
  *
- * The formulas below are tuned so that at exactly 100 x 50mm they reproduce the original
- * fixed values (4mm margins, 24mm bars), and scale down for a smaller roll rather than
- * running text or bars off the edge of it.
+ * Bar height is tuned so that at exactly 100 x 50mm it reproduces the original fixed value
+ * (24mm), rather than growing bars there too. Side margins were later trimmed further than
+ * the original 4mm, once measuring an actual printed label showed most of a small label's
+ * "missing" bar width was margin and quiet zone stacking on top of each other rather than
+ * either alone — see the reasoning inline below.
  */
 
 export function clamp(value: number, min: number, max: number): number {
@@ -23,7 +25,13 @@ export interface LabelLayoutMm {
 }
 
 export function computeLabelLayoutMm(widthMm: number, heightMm: number): LabelLayoutMm {
-  const sideMarginMm = clamp(widthMm * 0.04, 1.5, 4);
+  // Purely cosmetic breathing room, not the barcode's own quiet zone (that's a separate,
+  // larger reservation made in pdf.ts/zpl.ts — see QUIET_MODULES — because it's a scanning
+  // requirement, not a margin, and isn't safe to shrink). Floored at 1.5mm rather than let
+  // percentage growth eat further into bar width on a small label: most thermal printers
+  // have roughly that much unprintable edge anyway, so going narrower risks the outer bars
+  // getting clipped by the printer itself rather than actually gaining any usable width.
+  const sideMarginMm = clamp(widthMm * 0.02, 1.5, 3);
   const topMarginMm = clamp(heightMm * 0.08, 1.5, 4);
   const bottomMarginMm = clamp(heightMm * 0.08, 1.5, 4);
   // Bars get whatever height is left after margins and one line of code text below them —
