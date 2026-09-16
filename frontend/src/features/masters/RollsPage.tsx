@@ -30,18 +30,42 @@ import type {
 
 const PAGE_SIZE = 25;
 
+/**
+ * The tablet's short badge names (strings.xml, roll_status_*_short), so a supervisor reading
+ * this table and an operator reading the app use the same four words for a roll.
+ *
+ * ISSUED reads as OUT because that is what the tablet calls it: mapBackendStatus folds
+ * ISSUED, OUT, OPEN and PARTIAL into one OUT state.
+ */
 const STATUS_LABEL: Record<MaterialRoll["status"], string> = {
-  IN_STOCK: "In stock",
-  ISSUED: "Issued",
-  CONSUMED: "Consumed",
+  IN_STOCK: "IN",
+  ISSUED: "OUT",
+  CONSUMED: "CONSUMED",
+  RETURNED_TO_VENDOR: "RETURNED",
 };
 
-/** The tablet's three status colours: in stock is green, out is red, finished is grey. */
+/** The tablet's four status colours: in stock green, out red, used-up grey, sent-back amber. */
 const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
   IN_STOCK: "status-in",
   ISSUED: "status-out",
   CONSUMED: "status-consumed",
+  RETURNED_TO_VENDOR: "status-returned",
 };
+
+/**
+ * Never render a blank badge.
+ *
+ * `status` is typed from the API response, which is an assertion rather than something the
+ * compiler can check — the backend added RETURNED_TO_VENDOR and this table showed an empty
+ * cell for three rolls until someone noticed. Falling back to the raw value makes the next
+ * such addition visibly odd instead of invisible.
+ */
+function statusText(status: string): string {
+  return STATUS_LABEL[status as MaterialRoll["status"]] ?? status;
+}
+function statusClass(status: string): string {
+  return STATUS_CLASS[status as MaterialRoll["status"]] ?? "status-consumed";
+}
 
 interface FormState {
   material_id: string;
@@ -347,8 +371,8 @@ export default function RollsPage() {
                       {roll.remaining_weight ?? 0} {roll.unit}
                     </td>
                     <td>
-                      <span className={`status ${STATUS_CLASS[roll.status]}`}>
-                        {STATUS_LABEL[roll.status]}
+                      <span className={`status ${statusClass(roll.status)}`}>
+                        {statusText(roll.status)}
                       </span>
                     </td>
                     <td>

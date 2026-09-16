@@ -286,6 +286,9 @@ textarea {
   border-radius: var(--radius-badge);
   font-size: 12px;
   font-weight: 600;
+  /* The labels are short all-caps codes (IN, OUT, RETURNED); a little tracking stops them
+     reading as a cramped block, matching the tablet's own badge treatment. */
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 .status-in {
@@ -299,6 +302,13 @@ textarea {
 .status-consumed {
   background: var(--rt-consumed-container);
   color: var(--rt-on-consumed);
+}
+/* Sent back to the supplier. Amber rather than the grey of CONSUMED: both are terminal, but
+   one is a roll used up as intended and the other is a roll that was faulty. Values taken
+   from the tablet's RollStatusBanner. */
+.status-returned {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .pill-role-supervisor {

@@ -274,7 +274,10 @@ export interface Paginated<T> {
 
 /** Only the fields the barcode screen prints or filters on — a roll response carries
  *  photos, weights and refs the label has no use for. */
-export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED";
+/** Mirrors ROLL_STATUSES in the backend's MaterialRoll.model.ts. RETURNED_TO_VENDOR is
+ *  terminal like CONSUMED but kept separate: it means defective and shipped back, not
+ *  used up on site, and "why did this roll stop" should read correctly. */
+export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR";
 
 export interface MaterialRollListItem {
   id: string;
