@@ -7,7 +7,7 @@ export const createRawMaterialSchema = z.object({
   category: z.string().trim().optional(),
   gsm: z.number().nonnegative().optional(),
   width_mm: z.number().nonnegative().optional(),
-  unit: z.string().trim().min(1, "Unit is required"),
+  unit: z.string().trim().min(1).optional(),
   reorder_level: z.number().nonnegative().optional(),
   sort_order: z.number().int().optional(),
   status: z.enum(RAW_MATERIAL_STATUSES).optional(),
