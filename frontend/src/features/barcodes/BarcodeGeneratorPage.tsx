@@ -7,7 +7,7 @@ import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Label, { type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
-import { buildZpl, type ZplOrientation } from "./zpl";
+import { buildTspl, type TsplOrientation } from "./tspl";
 import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
@@ -33,21 +33,21 @@ function duplicateForPrint(labels: LabelItem[], copies: number = COPIES_PER_LABE
   return labels.flatMap((label) => Array<LabelItem>(copies).fill(label));
 }
 
-const ORIENTATIONS: ZplOrientation[] = ["N", "R", "I", "B"];
+const ORIENTATIONS: TsplOrientation[] = ["N", "R", "I", "B"];
 
 interface PrinterSettings {
   /** Exactly as QZ Tray reports it — this is a driver/queue name, not something to guess. */
   name: string;
   /** Dots per mm the selected printer actually is: 203dpi = 8, 300dpi = 12. Wrong here means
-   *  every measurement in the ZPL — label size, bars, margins, fonts — comes out scaled to
+   *  every measurement in the TSPL — label size, bars, margins, fonts — comes out scaled to
    *  the wrong physical size on that printer. */
   dpi: 203 | 300;
   copies: "1" | "2";
-  /** How the whole label is turned before printing — see zpl.ts's ZplOrientation for what
+  /** How the whole label is turned before printing — see tspl.ts's TsplOrientation for what
    *  each letter does. Needed because a roll can be mounted in the printer either way round,
    *  and the app has no way to detect that; the operator picks whichever way makes the
    *  physical sticker come out readable. */
-  orientation: ZplOrientation;
+  orientation: TsplOrientation;
 }
 
 const DEFAULT_PRINTER_SETTINGS: PrinterSettings = { name: "", dpi: 203, copies: "2", orientation: "N" };
@@ -474,6 +474,8 @@ export default function BarcodeGeneratorPage() {
         from_number: seriesInput.from,
         to_number: seriesInput.to,
         kind: labelKind,
+        widthMm: labelWidthMm,
+        heightMm: labelHeightMm,
       });
       setBatches((prev) => [saved, ...prev]);
     } catch (err) {
@@ -494,9 +496,16 @@ export default function BarcodeGeneratorPage() {
   };
 
   /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
-   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` is the
-   *  batch's own saved kind, not necessarily the generator's current code-type setting. */
-  const downloadLabels = (labels: LabelItem[], name: string, kind: LabelKind) => {
+   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` and
+   *  the size are the batch's own saved values, never the generator's current settings —
+   *  otherwise reprinting an old run would silently use whatever's selected right now. */
+  const downloadLabels = (
+    labels: LabelItem[],
+    name: string,
+    kind: LabelKind,
+    widthMm: number,
+    heightMm: number,
+  ) => {
     if (labels.length === 0) return;
     // One page per label, drawn as vectors at the configured sticker size — the page IS
     // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
@@ -505,7 +514,7 @@ export default function BarcodeGeneratorPage() {
       code: label.code,
       lines: label.lines,
     }));
-    const url = URL.createObjectURL(buildLabelPdf(pages, labelWidthMm, labelHeightMm, kind));
+    const url = URL.createObjectURL(buildLabelPdf(pages, widthMm, heightMm, kind));
     const link = document.createElement("a");
     link.href = url;
     link.download = `${name}.pdf`;
@@ -518,7 +527,7 @@ export default function BarcodeGeneratorPage() {
   const downloadBatch = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
-    downloadLabels(labels, batchName(batch), batch.kind);
+    downloadLabels(labels, batchName(batch), batch.kind, batch.widthMm, batch.heightMm);
   };
 
   /**
@@ -529,20 +538,20 @@ export default function BarcodeGeneratorPage() {
    * than the server: the printer sits on their LAN and the backend runs in Cloud Run, so
    * the two can never reach each other.
    */
-  const downloadBatchZpl = (batch: BarcodeBatch) => {
+  const downloadBatchTspl = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
     // Duplicated for the same reason the PDF path is: two identical stickers per code, one
     // for each package.
     const printLabels = duplicateForPrint(labels);
     const blob = new Blob(
-      [buildZpl(printLabels, labelWidthMm, labelHeightMm, undefined, batch.kind)],
+      [buildTspl(printLabels, batch.widthMm, batch.heightMm, undefined, batch.kind)],
       { type: "text/plain" },
     );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${batchName(batch)}.zpl`;
+    link.download = `${batchName(batch)}.tspl`;
     link.click();
     URL.revokeObjectURL(url);
     notify(`${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} ready for the printer`);
@@ -578,7 +587,7 @@ export default function BarcodeGeneratorPage() {
       copies: printerSettings.copies,
       orientation: printerSettings.orientation,
       kind: batch.kind,
-      stickerSizeMm: `${labelWidthMm}x${labelHeightMm}`,
+      stickerSizeMm: `${batch.widthMm}x${batch.heightMm}`,
       uniqueBarcodes: labels.length,
     });
     setSendingPrint(true);
@@ -587,10 +596,10 @@ export default function BarcodeGeneratorPage() {
       const printLabels = duplicateForPrint(labels, Number(printerSettings.copies));
       await printRaw(
         printerSettings.name,
-        buildZpl(
+        buildTspl(
           printLabels,
-          labelWidthMm,
-          labelHeightMm,
+          batch.widthMm,
+          batch.heightMm,
           printerSettings.dpi,
           batch.kind,
           printerSettings.orientation,
@@ -755,7 +764,7 @@ export default function BarcodeGeneratorPage() {
                     </button>
                     <button
                       className="btn btn-sm btn-primary"
-                      onClick={() => downloadBatchZpl(batch)}
+                      onClick={() => downloadBatchTspl(batch)}
                       title="Send this run to the label printer"
                     >
                       <Printer size={14} /> Print file
@@ -1013,8 +1022,8 @@ export default function BarcodeGeneratorPage() {
                   onChange={(e) =>
                     setPrinterSettings((prev) => ({
                       ...prev,
-                      orientation: ORIENTATIONS.includes(e.target.value as ZplOrientation)
-                        ? (e.target.value as ZplOrientation)
+                      orientation: ORIENTATIONS.includes(e.target.value as TsplOrientation)
+                        ? (e.target.value as TsplOrientation)
                         : "N",
                     }))
                   }

@@ -274,7 +274,10 @@ export interface Paginated<T> {
 
 /** Only the fields the barcode screen prints or filters on — a roll response carries
  *  photos, weights and refs the label has no use for. */
-export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED";
+/** Mirrors ROLL_STATUSES in the backend's MaterialRoll.model.ts. RETURNED_TO_VENDOR is
+ *  terminal like CONSUMED but kept separate: it means defective and shipped back, not
+ *  used up on site, and "why did this roll stop" should read correctly. */
+export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR";
 
 export interface MaterialRollListItem {
   id: string;
@@ -370,6 +373,11 @@ export interface BarcodeBatch {
   /** Fixed at creation — a run always regenerates as whichever it was actually printed as,
    *  regardless of what the generator's current code-type setting is. */
   kind: "barcode" | "qr";
+  /** The physical sticker size this run was made at, in millimetres — fixed at creation for
+   *  the same reason `kind` is: reprinting shouldn't silently use whatever size the
+   *  generator's picker happens to show right now. */
+  widthMm: number;
+  heightMm: number;
   count: number;
   createdBy: string;
   createdAt: string;
