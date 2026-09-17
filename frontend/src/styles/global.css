@@ -48,6 +48,9 @@
   --rt-card-border: #e2e8f0;
   --rt-headline: #0f172a;
 
+  /* Returned to vendor — terminal like consumed, but faulty rather than used up. */
+  --rt-returned: #b45309;
+
   /* Consumed / neutral status */
   --rt-consumed: #6b7280;
   --rt-consumed-container: #e5e7eb;
@@ -291,24 +294,27 @@ textarea {
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+/* Solid fills with white text, matching the tablet's RollStatusBadge — the compact pill it
+   uses in lists and history. The soft/tinted versions of these colours are its RollStatusBanner,
+   which is the full-width block on a roll's own detail screen, not a table cell. Same palette,
+   different weight: picking the banner treatment for a table made the two surfaces disagree. */
 .status-in {
-  background: var(--rt-secondary-container);
-  color: var(--rt-secondary);
+  background: var(--rt-secondary);
+  color: #ffffff;
 }
 .status-out {
-  background: var(--rt-error-container);
-  color: var(--rt-on-error-container);
+  background: var(--rt-error);
+  color: #ffffff;
 }
 .status-consumed {
-  background: var(--rt-consumed-container);
-  color: var(--rt-on-consumed);
+  background: var(--rt-consumed);
+  color: #ffffff;
 }
 /* Sent back to the supplier. Amber rather than the grey of CONSUMED: both are terminal, but
-   one is a roll used up as intended and the other is a roll that was faulty. Values taken
-   from the tablet's RollStatusBanner. */
+   one is a roll used up as intended and the other is a roll that was faulty. */
 .status-returned {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--rt-returned);
+  color: #ffffff;
 }
 
 .pill-role-supervisor {
