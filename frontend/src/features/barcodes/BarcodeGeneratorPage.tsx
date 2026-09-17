@@ -8,6 +8,7 @@ import Label, { type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
 import { buildLabelPdf, type PdfLabel } from "./pdf";
 import { buildTspl, type TsplOrientation } from "./tspl";
+import { buildPrintHtml } from "./printHtml";
 import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
@@ -23,6 +24,12 @@ const ROLL_PICKER_ENABLED = false;
 // existing QR run keeps working regardless of this flag: a batch's own saved `kind` (see
 // barcodeBatchesService) decides how it re-renders, never this setting.
 const QR_CODE_ENABLED = false;
+// ponytail: QZ Tray direct-to-printer (qzPrint.ts, the printer/resolution/copies/orientation
+// dialog below) is built and working, just not wanted on screen yet — flip to true to bring
+// the "Print directly" button back. "Print" (printBatch, printHtml.ts) replaces it as the
+// on-screen entry point: it hands the run to the browser's own print dialog instead, so
+// there's no QZ Tray/printer-driver setup required on the machine doing the printing.
+const DIRECT_PRINT_ENABLED = false;
 
 /** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
  *  twice on the roll, back to back, rather than once. Only "Print directly" applies this —
@@ -562,6 +569,49 @@ export default function BarcodeGeneratorPage() {
   };
 
   /**
+   * Hand the run to the browser's own print dialog instead of a downloaded file.
+   *
+   * Rendered as plain HTML sized with `@page` (see printHtml.ts), not the PDF this page
+   * already generates — a PDF's page size gets reinterpreted by whichever PDF viewer prints
+   * it, and Chromium's built-in one has a habit of auto-rotating a label-sized page no matter
+   * what the print dialog's own orientation is set to. Printed via a hidden iframe rather
+   * than a new tab: no popup blocker to fight, and it removes itself once the print dialog
+   * closes instead of leaving an extra tab behind.
+   */
+  const printBatch = async (batch: BarcodeBatch) => {
+    const labels = labelsOf(batch);
+    if (!labels) return;
+    const html = await buildPrintHtml(labels, batch.widthMm, batch.heightMm, batch.kind);
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(iframe);
+
+    const cleanup = () => {
+      if (iframe.parentNode) document.body.removeChild(iframe);
+    };
+    const win = iframe.contentWindow;
+    if (!win) {
+      cleanup();
+      notify("Couldn't open the print dialog", "error");
+      return;
+    }
+    // afterprint fires whether the operator prints or cancels — either way the dialog is
+    // done with this iframe, so it's the right moment to remove it.
+    win.addEventListener("afterprint", cleanup);
+    iframe.onload = () => {
+      win.focus();
+      win.print();
+    };
+    // srcdoc rather than document.write: it's the modern way to load a full HTML string into
+    // an iframe, and content is already HTML-escaped in printHtml.ts either way.
+    iframe.srcdoc = html;
+  };
+
+  /**
    * The "Print" button inside the dialog opened by "Print directly".
    *
    * Detection already ran when the dialog opened (see openPrintDialog), so this just sends
@@ -778,11 +828,20 @@ export default function BarcodeGeneratorPage() {
                     </button>
                     <button
                       className="btn btn-sm"
-                      onClick={() => openPrintDialog(batch)}
-                      title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
+                      onClick={() => printBatch(batch)}
+                      title="Print this run through your browser's own print dialog"
                     >
-                      <Send size={14} /> Print directly
+                      <Send size={14} /> Print
                     </button>
+                    {DIRECT_PRINT_ENABLED && (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => openPrintDialog(batch)}
+                        title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
+                      >
+                        <Send size={14} /> Print directly
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm btn-ghost"
                       onClick={() => setDeleting(batch)}
