@@ -21,4 +21,8 @@ export const remarksController = {
   async remove(req: Request, res: Response) {
     res.json(await remarksService.remove(req.params.id));
   },
+
+  async reorder(req: Request, res: Response) {
+    res.json(await remarksService.reorder(req.body.ids));
+  },
 };
