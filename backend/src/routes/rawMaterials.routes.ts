@@ -8,6 +8,7 @@ import {
   createRawMaterialSchema,
   updateRawMaterialSchema,
   listRawMaterialsQuerySchema,
+  reorderRawMaterialsSchema,
 } from "../validators/rawMaterials.validators";
 
 const router = Router();
@@ -37,5 +38,11 @@ router.patch(
   asyncHandler(rawMaterialsController.update),
 );
 router.delete("/:id", canWrite, asyncHandler(rawMaterialsController.remove));
+router.post(
+  "/reorder",
+  canWrite,
+  validate({ body: reorderRawMaterialsSchema }),
+  asyncHandler(rawMaterialsController.reorder),
+);
 
 export default router;

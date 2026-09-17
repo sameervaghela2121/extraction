@@ -20,3 +20,8 @@ export const listLocationsQuerySchema = z.object({
   godown: z.string().trim().optional(),
   status: z.enum(LOCATION_STATUSES).optional(),
 });
+
+/** Every location's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */
+export const reorderLocationsSchema = z.object({
+  ids: z.array(z.string()).min(1, "Provide at least one location id"),
+});

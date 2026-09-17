@@ -16,3 +16,8 @@ export const listRemarksQuerySchema = z.object({
   q: z.string().trim().optional(),
   status: z.enum(REMARK_STATUSES).optional(),
 });
+
+/** Every remark's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */
+export const reorderRemarksSchema = z.object({
+  ids: z.array(z.string()).min(1, "Provide at least one remark id"),
+});

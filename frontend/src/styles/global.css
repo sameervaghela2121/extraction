@@ -421,6 +421,16 @@ textarea {
 .table tbody tr:hover {
   background: var(--surface-2);
 }
+/* The one draggable element in a reorderable master's row — a plain icon otherwise reads
+   as decoration, not something you can pick up. */
+.drag-handle {
+  display: inline-flex;
+  cursor: grab;
+  color: var(--text-muted);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
 /* Wrap a <table> in this on narrow screens so it scrolls horizontally within its own
    card instead of squeezing every column unreadably thin or getting silently clipped
    by a parent's overflow:hidden. */

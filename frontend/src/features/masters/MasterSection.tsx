@@ -1,11 +1,75 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { Plus, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager, { pageOf } from "./Pager";
 import { compareCells, nextSort, SortHeader, type Sort } from "./sorting";
 import type { MasterRow, MasterSpec } from "./specs";
+
+/**
+ * One `<tr>` that can be picked up by its handle.
+ *
+ * Pointer-based (dnd-kit), not the browser's native HTML5 drag-and-drop: native drag events
+ * turned out flaky in practice — a tiny handle is easy to miss, and dragover doesn't bubble
+ * consistently enough across browsers to reorder reliably. dnd-kit tracks the pointer
+ * directly instead, which is what makes the row follow the cursor smoothly and drop where
+ * you'd expect every time.
+ *
+ * `disabled` still mounts the sortable (so `SortableContext`'s id list stays stable whether
+ * or not dragging is currently allowed) but renders no handle to grab, which is simpler than
+ * switching between two different row implementations depending on `canDrag`.
+ */
+function SortableRow({
+  id,
+  disabled,
+  children,
+}: {
+  id: string;
+  disabled: boolean;
+  children: (handle: ReactNode) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+    background: isDragging ? "var(--surface-2)" : undefined,
+  };
+  const handle = disabled ? null : (
+    <span
+      ref={setActivatorNodeRef}
+      {...listeners}
+      {...attributes}
+      className="drag-handle"
+      title="Drag to reorder"
+    >
+      <GripVertical size={15} />
+    </span>
+  );
+  return (
+    <tr ref={setNodeRef} style={style}>
+      {children(handle)}
+    </tr>
+  );
+}
 
 // Papers used to ride along here as a second editor inside the vendor form. They have their
 // own screen now (RawMaterialPage), so this is back to being one flat row of fields.
@@ -41,11 +105,25 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
    *
    * Lazy initialiser, not a plain value: it reads the spec, and MasterDataPage remounts
    * this component per section, so it re-runs for each master rather than going stale.
+   *
+   * A reorderable master starts on sort_order ascending rather than its code column — that
+   * is the order dragging acts on, and it is also what the API already returns rows in, so
+   * this stops the previous default (re-sorting by code client-side) from immediately
+   * undoing the server's own ordering the moment the page loads.
    */
   const [sort, setSort] = useState<Sort>(() => {
+    if (spec.reorderable) return { key: "sort_order", dir: "asc" };
     const first = spec.fields.find((f) => f.inList && f.sortable);
     return first ? { key: first.name, dir: "asc" } : null;
   });
+  // Dragging only makes sense against the one complete, stable sequence it edits — search
+  // hides rows out of that sequence, and any other sort shows a different one entirely.
+  // Switching either back on brings the handles right back rather than needing a reset.
+  const canDrag = Boolean(spec.reorderable) && !search.trim() && sort?.key === "sort_order" && sort.dir === "asc";
+  const [reordering, setReordering] = useState(false);
+  // A few pixels of slop before a drag starts, so clicking the handle (or a button
+  // elsewhere in the row) never gets mistaken for the beginning of a drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const load = async () => {
     setLoading(true);
@@ -99,7 +177,54 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
     setPage(1);
   }, [sort]);
 
-  const pageRows = pageOf(ordered, page);
+  // All rows on one "page" while dragging is live: reordering across a page boundary isn't
+  // supported, and these masters are small enough (a handful to a few hundred rows) that
+  // showing them all costs nothing.
+  const pageRows = canDrag ? ordered : pageOf(ordered, page);
+
+  /** Move the dropped row within the currently-displayed order, then persist the whole new
+   *  sequence — see reorder() in masters.api.ts. Applied optimistically so the row doesn't
+   *  snap back while the request is in flight; a failure reloads from the server rather than
+   *  leaving the screen showing an order that didn't actually save.
+   *
+   * The optimistic update is wrapped in flushSync rather than a plain setRows: dnd-kit plays
+   * its own "settle into place" animation synchronously, inside this same handler, based on
+   * whatever order SortableContext's `items` currently holds. A plain setRows doesn't apply
+   * until React's next render, which lands after that animation already ran — so the row
+   * visibly snaps back to its old spot for a frame before jumping to the new one. flushSync
+   * forces the reorder to commit (and SortableContext's `items` to update) before dnd-kit
+   * gets to animate anything, so it settles into the right place on the first try. */
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = ordered.findIndex((r) => r.id === active.id);
+    const newIndex = ordered.findIndex((r) => r.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    // Valid to replace the whole `rows` state with just this reordered set: canDrag already
+    // guarantees no search filter is narrowing it, so `ordered` and `rows` cover the same
+    // rows, just possibly in a different sequence.
+    //
+    // Renumbering `sort_order` here, not just moving array positions, matters: `ordered` is
+    // re-derived by sorting on that field on every render, so a row moved to index 0 but
+    // still carrying its old sort_order (say, 4) gets sorted straight back to position 4 on
+    // the very next render — visible as the row snapping back until the server's response
+    // (with real renumbered values) arrives and moves it again. Assigning 1..N locally,
+    // matching exactly what the server is about to compute, makes that re-sort a no-op.
+    const next = arrayMove(ordered, oldIndex, newIndex).map((row, index) => ({
+      ...row,
+      sort_order: index + 1,
+    }));
+    flushSync(() => setRows(next));
+    setReordering(true);
+    try {
+      setRows(await spec.api.reorder(next.map((r) => r.id)));
+    } catch (err) {
+      notify(apiErrorMessage(err), "error");
+      await load();
+    } finally {
+      setReordering(false);
+    }
+  };
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -190,6 +315,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
             <table className="table">
               <thead>
                 <tr>
+                  {canDrag && <th style={{ width: 32 }}></th>}
                   {columns.map((c) =>
                     c.sortable ? (
                       <SortHeader
@@ -207,39 +333,62 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                   <th style={{ width: 150 }}></th>
                 </tr>
               </thead>
-              <tbody>
-                {pageRows.map((row) => (
-                  <tr key={row.id}>
-                    {columns.map((c) => (
-                      <td key={c.name}>{String(row[c.name] ?? "—")}</td>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext
+                  items={pageRows.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <tbody style={reordering ? { opacity: 0.6 } : undefined}>
+                    {pageRows.map((row) => (
+                      <SortableRow key={row.id} id={row.id} disabled={!canDrag}>
+                        {(handle) => (
+                          <>
+                            {canDrag && <td>{handle}</td>}
+                            {columns.map((c) => (
+                              <td key={c.name}>{String(row[c.name] ?? "—")}</td>
+                            ))}
+                            <td style={{ textTransform: "capitalize" }}>{row.status}</td>
+                            <td>
+                              <div className="row gap-8">
+                                <button className="btn btn-sm" onClick={() => openEdit(row)}>
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-ghost"
+                                  onClick={() => toggleStatus(row)}
+                                >
+                                  {row.status === "active" ? "Deactivate" : "Activate"}
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </SortableRow>
                     ))}
-                    <td style={{ textTransform: "capitalize" }}>{row.status}</td>
-                    <td>
-                      <div className="row gap-8">
-                        <button className="btn btn-sm" onClick={() => openEdit(row)}>
-                          Edit
-                        </button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => toggleStatus(row)}>
-                          {row.status === "active" ? "Deactivate" : "Activate"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {pageRows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={columns.length + 2}
-                      className="faint"
-                      style={{ textAlign: "center", padding: 20 }}
-                    >
-                      {search ? "Nothing matches that search." : "Nothing here yet."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
+                    {pageRows.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={columns.length + 2 + (canDrag ? 1 : 0)}
+                          className="faint"
+                          style={{ textAlign: "center", padding: 20 }}
+                        >
+                          {search ? "Nothing matches that search." : "Nothing here yet."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </SortableContext>
+              </DndContext>
             </table>
-            <Pager page={page} total={visible.length} onChange={setPage} label={spec.plural} />
+            {canDrag ? (
+              <div className="row" style={{ padding: "10px 12px" }}>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  {visible.length} {spec.plural} · drag the handle to reorder
+                </span>
+              </div>
+            ) : (
+              <Pager page={page} total={visible.length} onChange={setPage} label={spec.plural} />
+            )}
           </div>
         )}
       </div>
@@ -252,7 +401,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
       >
         <form onSubmit={submit} style={{ display: "grid", gap: 12, padding: 16 }}>
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
-            {spec.fields.map((f) => (
+            {spec.fields.filter((f) => !f.readOnly).map((f) => (
               <label key={f.name} style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <span className="faint">
                   {f.label}

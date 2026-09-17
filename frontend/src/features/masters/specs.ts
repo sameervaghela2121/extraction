@@ -15,6 +15,7 @@ export interface MasterApi {
   create: (body: Partial<MasterRow>) => Promise<MasterRow>;
   update: (id: string, body: Partial<MasterRow>) => Promise<MasterRow>;
   remove: (id: string) => Promise<unknown>;
+  reorder: (ids: string[]) => Promise<MasterRow[]>;
 }
 
 export interface MasterField {
@@ -29,6 +30,9 @@ export interface MasterField {
    *  by default: a row of arrows across every header is noise when only one column is
    *  worth reordering by. Only meaningful alongside `inList`. */
   sortable?: boolean;
+  /** Shown as a column but never as an input in the Add/Edit form — for a value the backend
+   *  owns (sort_order: assigned on create, changed only by dragging a row). */
+  readOnly?: boolean;
 }
 
 export interface MasterSpec {
@@ -46,6 +50,10 @@ export interface MasterSpec {
   plural: string;
   api: MasterApi;
   fields: MasterField[];
+  /** Drag rows to set `sort_order` directly, instead of typing a number. Only on for masters
+   *  whose picker order is meant to follow something other than the alphabet (a physical
+   *  walk through the godown, the common remarks first) — vendors has no such need. */
+  reorderable?: boolean;
 }
 
 // The typed clients are cast once here: the concrete row types (Vendor, GodownLocation,
@@ -75,12 +83,15 @@ export const LOCATION_SPEC: MasterSpec = {
   noun: "location",
   plural: "locations",
   api: asMasterApi(locationsApi),
+  reorderable: true,
   fields: [
     { name: "location_code", label: "Location code", type: "text", required: true, inList: true, sortable: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
     // No inList: still edited on the form, just not a column.
     { name: "godown", label: "Godown", type: "text" },
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
+    // Assigned on create and changed only by dragging a row — see MasterSection's drag
+    // handling — so it's a column, never a form input.
+    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
   ],
 };
 
@@ -94,12 +105,14 @@ export const MATERIAL_TYPE_SPEC: MasterSpec = {
   noun: "material type",
   plural: "material types",
   api: asMasterApi(materialTypesApi),
+  reorderable: true,
   fields: [
     { name: "material_code", label: "Material code", type: "text", required: true, inList: true, sortable: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
     // Same as the locations master: the picker should follow how the godown thinks about
-    // its materials, which is rarely alphabetical. Blank sorts last.
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
+    // its materials, which is rarely alphabetical. Assigned on create and changed only by
+    // dragging a row, so it's a column, never a form input.
+    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
     // category, unit, gsm, width_mm and reorder_level are all off the form. They are
     // optional on the API, and the backend's PATCH skips fields a body omits, so the values
     // already stored survive an edit here rather than being blanked. See the note in
@@ -118,10 +131,13 @@ export const REMARK_SPEC: MasterSpec = {
   noun: "remark",
   plural: "remarks",
   api: asMasterApi(remarksApi),
+  reorderable: true,
   fields: [
     { name: "remark_code", label: "Remark code", type: "text", required: true, inList: true, sortable: true },
     { name: "label", label: "Label", type: "text", required: true, inList: true },
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
+    // Assigned on create and changed only by dragging a row, so it's a column, never a form
+    // input — the common remarks belong at the top, not typed in as a guessed number.
+    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
   ],
 };
 
