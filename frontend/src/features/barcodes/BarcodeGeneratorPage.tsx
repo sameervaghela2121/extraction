@@ -25,8 +25,11 @@ const ROLL_PICKER_ENABLED = false;
 const QR_CODE_ENABLED = false;
 
 /** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
- *  twice on the roll, back to back, rather than once. The PDF and ZPL downloads always use
- *  this; direct printing lets the operator choose instead (see PrinterSettings below). */
+ *  twice on the roll, back to back, rather than once. Only "Print directly" applies this —
+ *  it's the one path with nowhere else to ask "how many copies," since it skips any print
+ *  dialog and goes straight to the printer. The PDF/print-file downloads leave that choice
+ *  to whatever eventually prints them (a PDF viewer's own copies setting, the printer
+ *  utility's own repeat option), rather than baking a fixed copy count into the file. */
 const COPIES_PER_LABEL = 2;
 
 function duplicateForPrint(labels: LabelItem[], copies: number = COPIES_PER_LABEL): LabelItem[] {
@@ -509,8 +512,10 @@ export default function BarcodeGeneratorPage() {
     if (labels.length === 0) return;
     // One page per label, drawn as vectors at the configured sticker size — the page IS
     // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
-    // Each code is duplicated so the same value can be stuck on two different packages.
-    const pages: PdfLabel[] = duplicateForPrint(labels).map((label) => ({
+    // Not duplicated: a downloaded file isn't the place to bake in "how many copies" — a
+    // PDF viewer's own print dialog already has a copies setting for that. Only "Print
+    // directly" (which skips any such dialog) asks for a copy count itself.
+    const pages: PdfLabel[] = labels.map((label) => ({
       code: label.code,
       lines: label.lines,
     }));
@@ -541,11 +546,10 @@ export default function BarcodeGeneratorPage() {
   const downloadBatchTspl = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
-    // Duplicated for the same reason the PDF path is: two identical stickers per code, one
-    // for each package.
-    const printLabels = duplicateForPrint(labels);
+    // Not duplicated, same reasoning as the PDF path: a downloaded file shouldn't decide how
+    // many copies get printed — that's a print-time choice, not a content choice.
     const blob = new Blob(
-      [buildTspl(printLabels, batch.widthMm, batch.heightMm, undefined, batch.kind)],
+      [buildTspl(labels, batch.widthMm, batch.heightMm, undefined, batch.kind)],
       { type: "text/plain" },
     );
     const url = URL.createObjectURL(blob);
@@ -554,7 +558,7 @@ export default function BarcodeGeneratorPage() {
     link.download = `${batchName(batch)}.tspl`;
     link.click();
     URL.revokeObjectURL(url);
-    notify(`${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} ready for the printer`);
+    notify(`${labels.length} barcode${labels.length === 1 ? "" : "s"} ready for the printer`);
   };
 
   /**
