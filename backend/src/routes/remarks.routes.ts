@@ -8,6 +8,7 @@ import {
   createRemarkSchema,
   updateRemarkSchema,
   listRemarksQuerySchema,
+  reorderRemarksSchema,
 } from "../validators/remarks.validators";
 
 const router = Router();
@@ -33,5 +34,11 @@ router.patch(
   asyncHandler(remarksController.update),
 );
 router.delete("/:id", canWrite, asyncHandler(remarksController.remove));
+router.post(
+  "/reorder",
+  canWrite,
+  validate({ body: reorderRemarksSchema }),
+  asyncHandler(remarksController.reorder),
+);
 
 export default router;

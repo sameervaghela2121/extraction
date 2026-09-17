@@ -1,6 +1,13 @@
 import { type FilterQuery } from "mongoose";
 import { Location, type ILocation, type LocationStatus } from "../models/Location.model";
-import { escapeRegex, findOr404, ensureCodeFree, applyUpdates } from "../utils/crud";
+import {
+  escapeRegex,
+  findOr404,
+  ensureCodeFree,
+  applyUpdates,
+  nextSortOrder,
+  reorderDocs,
+} from "../utils/crud";
 
 type LocationInput = {
   location_code: string;
@@ -52,7 +59,10 @@ export const locationsService = {
   async create(input: LocationInput) {
     const code = input.location_code.toUpperCase();
     await ensureCodeFree(Location, "location_code", code, CODE_TAKEN);
-    const location = await Location.create({ ...input, location_code: code });
+    // Auto-assigned unless the caller already sent one (a seed script restoring known
+    // positions, say) — the picker has no manual "type a number" field any more.
+    const sort_order = input.sort_order ?? (await nextSortOrder(Location));
+    const location = await Location.create({ ...input, location_code: code, sort_order });
     return toResponse(location);
   },
 
@@ -77,5 +87,12 @@ export const locationsService = {
     location.status = "inactive";
     await location.save();
     return { id: location._id.toString(), status: location.status };
+  },
+
+  // Drag-and-drop's other half: the frontend sends every row's id in its new top-to-bottom
+  // order, this stamps 1..N onto them, and the caller re-reads the list to render it.
+  async reorder(ids: string[]) {
+    await reorderDocs(Location, "location", ids);
+    return locationsService.list({});
   },
 };

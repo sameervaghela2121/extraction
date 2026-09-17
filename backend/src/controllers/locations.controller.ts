@@ -21,4 +21,8 @@ export const locationsController = {
   async remove(req: Request, res: Response) {
     res.json(await locationsService.remove(req.params.id));
   },
+
+  async reorder(req: Request, res: Response) {
+    res.json(await locationsService.reorder(req.body.ids));
+  },
 };

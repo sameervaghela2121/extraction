@@ -22,3 +22,8 @@ export const listRawMaterialsQuerySchema = z.object({
   category: z.string().trim().optional(),
   status: z.enum(RAW_MATERIAL_STATUSES).optional(),
 });
+
+/** Every material's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */
+export const reorderRawMaterialsSchema = z.object({
+  ids: z.array(z.string()).min(1, "Provide at least one material id"),
+});

@@ -21,4 +21,8 @@ export const rawMaterialsController = {
   async remove(req: Request, res: Response) {
     res.json(await rawMaterialsService.remove(req.params.id));
   },
+
+  async reorder(req: Request, res: Response) {
+    res.json(await rawMaterialsService.reorder(req.body.ids));
+  },
 };
