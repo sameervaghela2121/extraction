@@ -30,8 +30,9 @@ export interface MasterField {
    *  by default: a row of arrows across every header is noise when only one column is
    *  worth reordering by. Only meaningful alongside `inList`. */
   sortable?: boolean;
-  /** Shown as a column but never as an input in the Add/Edit form — for a value the backend
-   *  owns (sort_order: assigned on create, changed only by dragging a row). */
+  /** Never an input in the Add/Edit form — for a value the backend owns (sort_order:
+   *  assigned on create, changed only by dragging a row). Pair with `inList` to still show
+   *  it as a read-only column; without it the field is declared but never rendered. */
   readOnly?: boolean;
 }
 
@@ -89,9 +90,10 @@ export const LOCATION_SPEC: MasterSpec = {
     { name: "name", label: "Name", type: "text", required: true, inList: true },
     // No inList: still edited on the form, just not a column.
     { name: "godown", label: "Godown", type: "text" },
-    // Assigned on create and changed only by dragging a row — see MasterSection's drag
-    // handling — so it's a column, never a form input.
-    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
+    // Declared but never rendered: no column (the drag handle is the affordance) and no form
+    // input (it is assigned on create and changed only by dragging). It stays in `fields` so
+    // the sort comparator can still see type: "number" — see MasterSection's sort lookup.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
   ],
 };
 
@@ -111,8 +113,8 @@ export const MATERIAL_TYPE_SPEC: MasterSpec = {
     { name: "name", label: "Name", type: "text", required: true, inList: true },
     // Same as the locations master: the picker should follow how the godown thinks about
     // its materials, which is rarely alphabetical. Assigned on create and changed only by
-    // dragging a row, so it's a column, never a form input.
-    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
+    // dragging a row. Declared but never rendered — see the note on the locations master.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
     // category, unit, gsm, width_mm and reorder_level are all off the form. They are
     // optional on the API, and the backend's PATCH skips fields a body omits, so the values
     // already stored survive an edit here rather than being blanked. See the note in
@@ -135,9 +137,9 @@ export const REMARK_SPEC: MasterSpec = {
   fields: [
     { name: "remark_code", label: "Remark code", type: "text", required: true, inList: true, sortable: true },
     { name: "label", label: "Label", type: "text", required: true, inList: true },
-    // Assigned on create and changed only by dragging a row, so it's a column, never a form
-    // input — the common remarks belong at the top, not typed in as a guessed number.
-    { name: "sort_order", label: "Sort order", type: "number", inList: true, readOnly: true },
+    // Assigned on create and changed only by dragging a row — the common remarks belong at
+    // the top, not typed in as a guessed number. Declared but never rendered.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
   ],
 };
 
