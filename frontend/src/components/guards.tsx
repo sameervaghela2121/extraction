@@ -5,7 +5,7 @@ import { Spinner } from "./ui";
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner label="Loading DocFlow…" />;
+  if (loading) return <Spinner label="Loading Royal Touche" />;
   if (!user) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
@@ -62,7 +62,7 @@ export function RoleRoute({ deny, allow }: { deny?: UserRole[]; allow?: UserRole
  *  a page RoleRoute would immediately kick them back out of. */
 export function RoleHome() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner label="Loading DocFlow…" />;
+  if (loading) return <Spinner label="Loading Royal Touche" />;
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={homeForRole(user.role)} replace />;
 }
