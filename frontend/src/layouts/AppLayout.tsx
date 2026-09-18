@@ -157,9 +157,9 @@ export default function AppLayout() {
               fontWeight: 800,
             }}
           >
-            D
+            R
           </span>
-          <strong style={{ fontSize: 16 }}>DocFlow</strong>
+          <strong style={{ fontSize: 16 }}>Royal Touche</strong>
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>
