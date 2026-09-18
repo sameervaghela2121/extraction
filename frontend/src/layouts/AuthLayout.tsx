@@ -17,9 +17,9 @@ export default function AuthLayout({ title, subtitle, children }: { title: strin
               fontWeight: 800,
             }}
           >
-            D
+            R
           </span>
-          <strong style={{ fontSize: 18 }}>DocFlow</strong>
+          <strong style={{ fontSize: 18 }}>Royal Touche</strong>
         </div>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h1>
         {subtitle && <p className="muted" style={{ marginTop: 6 }}>{subtitle}</p>}
