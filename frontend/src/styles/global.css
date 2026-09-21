@@ -559,12 +559,12 @@ textarea {
 }
 .barcode-run {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
   /* The left border is transparent rather than absent, so the accent on a selected row
      does not shift the content across by 3px when it appears. */
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-left: 3px solid transparent;
   border-radius: var(--radius-sm);

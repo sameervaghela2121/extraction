@@ -805,37 +805,32 @@ export default function BarcodeGeneratorPage() {
                   key={batch.id}
                   className={`barcode-run${isOnSheet(batch) ? " selected" : ""}`}
                 >
-                  <div className="row" style={{ alignItems: "center" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                        {seriesCode(
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                      {seriesCode(
+                        { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
+                        batch.from_number,
+                      )}
+                      {batch.count > 1 && " – "}
+                      {batch.count > 1 &&
+                        seriesCode(
                           { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
-                          batch.from_number,
+                          batch.to_number,
                         )}
-                        {batch.count > 1 && " – "}
-                        {batch.count > 1 &&
-                          seriesCode(
-                            { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
-                            batch.to_number,
-                          )}
-                        <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
-                          ({batch.widthMm} x {batch.heightMm} mm)
-                        </span>
-                      </div>
-                      <div className="faint" style={{ fontSize: 12 }}>
-                        {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
-                        {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
-                        {new Date(batch.createdAt).toLocaleDateString()}
-                      </div>
+                      <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
+                        ({batch.widthMm} x {batch.heightMm} mm)
+                      </span>
                     </div>
-                    <div className="spacer" />
-                    <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
-                      {batch.kind === "qr" ? "QR" : "Barcode"}
-                    </span>
+                    <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
+                      {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
+                      {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
+                      {new Date(batch.createdAt).toLocaleDateString()}
+                    </div>
                   </div>
-                  {/* Its own row, left-aligned under the text — not floated beside it — so
-                      it reads as "here's what you can do with this run", not a third column
-                      squeezed into the header line. */}
+                  <div className="spacer" />
+                  <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
+                    {batch.kind === "qr" ? "QR" : "Barcode"}
+                  </span>
                   <div className="barcode-run-actions">
                     <button className="btn btn-sm btn-primary" onClick={() => viewBatch(batch)}>
                       <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
