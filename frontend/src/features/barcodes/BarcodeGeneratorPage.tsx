@@ -30,6 +30,10 @@ const QR_CODE_ENABLED = false;
 // on-screen entry point: it hands the run to the browser's own print dialog instead, so
 // there's no QZ Tray/printer-driver setup required on the machine doing the printing.
 const DIRECT_PRINT_ENABLED = false;
+// ponytail: the PDF and TSPL "Print file" downloads (downloadBatch/downloadBatchTspl below)
+// are built and working, just not wanted on screen yet — flip to true to bring the "Print
+// file" and "PDF" buttons back on a run's row.
+const FILE_DOWNLOADS_ENABLED = false;
 
 /** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
  *  twice on the roll, back to back, rather than once. Only "Print directly" applies this —
@@ -813,31 +817,35 @@ export default function BarcodeGeneratorPage() {
                           { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
                           batch.to_number,
                         )}
+                      <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
+                        ({batch.widthMm} x {batch.heightMm} mm)
+                      </span>
                     </div>
-                    <div className="faint" style={{ fontSize: 12 }}>
+                    <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
                       {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
                       {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
                       {new Date(batch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div className="spacer" />
-                  <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
-                    {batch.kind === "qr" ? "QR" : "Barcode"}
-                  </span>
                   <div className="barcode-run-actions">
                     <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
                       <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
                     </button>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => downloadBatchTspl(batch)}
-                      title="Send this run to the label printer"
-                    >
-                      <Printer size={14} /> Print file
-                    </button>
-                    <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
-                      <Download size={14} /> PDF
-                    </button>
+                    {FILE_DOWNLOADS_ENABLED && (
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => downloadBatchTspl(batch)}
+                        title="Send this run to the label printer"
+                      >
+                        <Printer size={14} /> Print file
+                      </button>
+                    )}
+                    {FILE_DOWNLOADS_ENABLED && (
+                      <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
+                        <Download size={14} /> PDF
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm"
                       onClick={() => printBatch(batch)}
