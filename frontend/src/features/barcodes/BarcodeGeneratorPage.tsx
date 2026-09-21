@@ -805,78 +805,78 @@ export default function BarcodeGeneratorPage() {
                   key={batch.id}
                   className={`barcode-run${isOnSheet(batch) ? " selected" : ""}`}
                 >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      {seriesCode(
-                        { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
-                        batch.from_number,
-                      )}
-                      {batch.count > 1 && " – "}
-                      {batch.count > 1 &&
-                        seriesCode(
+                  <div className="row" style={{ alignItems: "center" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        {seriesCode(
                           { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
-                          batch.to_number,
+                          batch.from_number,
                         )}
-                      <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
-                        ({batch.widthMm} x {batch.heightMm} mm)
-                      </span>
+                        {batch.count > 1 && " – "}
+                        {batch.count > 1 &&
+                          seriesCode(
+                            { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
+                            batch.to_number,
+                          )}
+                        <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
+                          ({batch.widthMm} x {batch.heightMm} mm)
+                        </span>
+                      </div>
+                      <div className="faint" style={{ fontSize: 12 }}>
+                        {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
+                        {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
+                        {new Date(batch.createdAt).toLocaleDateString()}
+                      </div>
                     </div>
-                    <div className="faint" style={{ fontSize: 12 }}>
-                      {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
-                      {batch.count === 1 ? "" : "s"} · {batch.createdBy} ·{" "}
-                      {new Date(batch.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="spacer" />
-                  {/* Stacked so the pill sits at the code-range line's height and the
-                      buttons sit at the "10 barcodes · createdBy · date" line's height,
-                      rather than one flex row centering both against the text block. */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <div className="spacer" />
                     <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
                       {batch.kind === "qr" ? "QR" : "Barcode"}
                     </span>
-                    <div className="barcode-run-actions">
-                      <button className="btn btn-sm btn-primary" onClick={() => viewBatch(batch)}>
-                        <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
-                      </button>
-                      {FILE_DOWNLOADS_ENABLED && (
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => downloadBatchTspl(batch)}
-                          title="Send this run to the label printer"
-                        >
-                          <Printer size={14} /> Print file
-                        </button>
-                      )}
-                      {FILE_DOWNLOADS_ENABLED && (
-                        <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
-                          <Download size={14} /> PDF
-                        </button>
-                      )}
+                  </div>
+                  {/* Its own row, left-aligned under the text — not floated beside it — so
+                      it reads as "here's what you can do with this run", not a third column
+                      squeezed into the header line. */}
+                  <div className="barcode-run-actions">
+                    <button className="btn btn-sm btn-primary" onClick={() => viewBatch(batch)}>
+                      <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
+                    </button>
+                    {FILE_DOWNLOADS_ENABLED && (
                       <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => printBatch(batch)}
-                        title="Print this run through your browser's own print dialog"
+                        className="btn btn-sm"
+                        onClick={() => downloadBatchTspl(batch)}
+                        title="Send this run to the label printer"
                       >
-                        <Send size={14} /> Print
+                        <Printer size={14} /> Print file
                       </button>
-                      {DIRECT_PRINT_ENABLED && (
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => openPrintDialog(batch)}
-                          title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
-                        >
-                          <Send size={14} /> Print directly
-                        </button>
-                      )}
+                    )}
+                    {FILE_DOWNLOADS_ENABLED && (
+                      <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
+                        <Download size={14} /> PDF
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => printBatch(batch)}
+                      title="Print this run through your browser's own print dialog"
+                    >
+                      <Send size={14} /> Print
+                    </button>
+                    {DIRECT_PRINT_ENABLED && (
                       <button
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setDeleting(batch)}
-                        title="Remove this run from the list"
+                        className="btn btn-sm"
+                        onClick={() => openPrintDialog(batch)}
+                        title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
                       >
-                        <X size={14} />
+                        <Send size={14} /> Print directly
                       </button>
-                    </div>
+                    )}
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setDeleting(batch)}
+                      title="Remove this run from the list"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
               ))}

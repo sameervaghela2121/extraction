@@ -559,9 +559,9 @@ textarea {
 }
 .barcode-run {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   /* The left border is transparent rather than absent, so the accent on a selected row
      does not shift the content across by 3px when it appears. */
   padding: 10px 12px;
