@@ -12,7 +12,7 @@ import { buildPrintHtml } from "./printHtml";
 import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
-import { defaultSizeFor, findSize, sizesFor, type LabelKind } from "./labelSizes";
+import { BARCODE_SIZES, defaultSizeFor, findSize, sizesFor, type LabelKind } from "./labelSizes";
 
 const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
@@ -116,6 +116,9 @@ function loadLabelKind(): LabelKind {
 const LABEL_SIZE_STORAGE_KEY = "barcode-label-size-by-kind";
 
 function loadLabelSize(kind: LabelKind): LabelSizeMm {
+  // Barcode has one sticker size, fixed — no picker, nothing to remember. QR keeps its own
+  // remembered-per-browser size below, for whenever QR_CODE_ENABLED comes back on.
+  if (kind === "barcode") return BARCODE_SIZES[0];
   try {
     const raw = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
     if (raw) {
@@ -701,25 +704,34 @@ export default function BarcodeGeneratorPage() {
                 </select>
               </label>
             )}
-            <label className="barcode-field">
-              <span>Sticker size</span>
-              <select
-                className="input"
-                value={`${labelSize.widthMm}x${labelSize.heightMm}`}
-                onChange={(e) => {
-                  const option = sizesFor(labelKind).find(
-                    (s) => `${s.widthMm}x${s.heightMm}` === e.target.value,
-                  );
-                  if (option) changeLabelSize({ widthMm: option.widthMm, heightMm: option.heightMm });
-                }}
-              >
-                {sizesFor(labelKind).map((s) => (
-                  <option key={s.label} value={`${s.widthMm}x${s.heightMm}`}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {labelKind === "qr" ? (
+              <label className="barcode-field">
+                <span>Sticker size</span>
+                <select
+                  className="input"
+                  value={`${labelSize.widthMm}x${labelSize.heightMm}`}
+                  onChange={(e) => {
+                    const option = sizesFor(labelKind).find(
+                      (s) => `${s.widthMm}x${s.heightMm}` === e.target.value,
+                    );
+                    if (option) changeLabelSize({ widthMm: option.widthMm, heightMm: option.heightMm });
+                  }}
+                >
+                  {sizesFor(labelKind).map((s) => (
+                    <option key={s.label} value={`${s.widthMm}x${s.heightMm}`}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              // Only one barcode sticker size exists — nothing to pick, so this shows the
+              // fixed size as a fact rather than a dropdown with one immovable option.
+              <div className="barcode-field">
+                <span>Sticker size</span>
+                <strong style={{ fontSize: 16 }}>{BARCODE_SIZES[0].label}</strong>
+              </div>
+            )}
           </div>
         </div>
 
