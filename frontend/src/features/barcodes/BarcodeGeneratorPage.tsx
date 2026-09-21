@@ -832,12 +832,12 @@ export default function BarcodeGeneratorPage() {
                     {batch.kind === "qr" ? "QR" : "Barcode"}
                   </span>
                   <div className="barcode-run-actions">
-                    <button className="btn btn-sm btn-primary" onClick={() => viewBatch(batch)}>
+                    <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
                       <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
                     </button>
                     {FILE_DOWNLOADS_ENABLED && (
                       <button
-                        className="btn btn-sm"
+                        className="btn btn-sm btn-primary"
                         onClick={() => downloadBatchTspl(batch)}
                         title="Send this run to the label printer"
                       >
@@ -850,7 +850,7 @@ export default function BarcodeGeneratorPage() {
                       </button>
                     )}
                     <button
-                      className="btn btn-sm btn-primary"
+                      className="btn btn-sm"
                       onClick={() => printBatch(batch)}
                       title="Print this run through your browser's own print dialog"
                     >
