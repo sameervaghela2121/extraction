@@ -828,9 +828,6 @@ export default function BarcodeGeneratorPage() {
                     </div>
                   </div>
                   <div className="spacer" />
-                  <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
-                    {batch.kind === "qr" ? "QR" : "Barcode"}
-                  </span>
                   <div className="barcode-run-actions">
                     <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
                       <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
