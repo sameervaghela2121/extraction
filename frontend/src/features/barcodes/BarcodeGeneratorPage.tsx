@@ -30,6 +30,10 @@ const QR_CODE_ENABLED = false;
 // on-screen entry point: it hands the run to the browser's own print dialog instead, so
 // there's no QZ Tray/printer-driver setup required on the machine doing the printing.
 const DIRECT_PRINT_ENABLED = false;
+// ponytail: the PDF and TSPL "Print file" downloads (downloadBatch/downloadBatchTspl below)
+// are built and working, just not wanted on screen yet — flip to true to bring the "Print
+// file" and "PDF" buttons back on a run's row.
+const FILE_DOWNLOADS_ENABLED = false;
 
 /** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
  *  twice on the roll, back to back, rather than once. Only "Print directly" applies this —
@@ -813,6 +817,9 @@ export default function BarcodeGeneratorPage() {
                           { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
                           batch.to_number,
                         )}
+                      <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
+                        ({batch.widthMm} x {batch.heightMm} mm)
+                      </span>
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
                       {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
@@ -821,46 +828,55 @@ export default function BarcodeGeneratorPage() {
                     </div>
                   </div>
                   <div className="spacer" />
-                  <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
-                    {batch.kind === "qr" ? "QR" : "Barcode"}
-                  </span>
-                  <div className="barcode-run-actions">
-                    <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                      <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
-                    </button>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => downloadBatchTspl(batch)}
-                      title="Send this run to the label printer"
-                    >
-                      <Printer size={14} /> Print file
-                    </button>
-                    <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
-                      <Download size={14} /> PDF
-                    </button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => printBatch(batch)}
-                      title="Print this run through your browser's own print dialog"
-                    >
-                      <Send size={14} /> Print
-                    </button>
-                    {DIRECT_PRINT_ENABLED && (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => openPrintDialog(batch)}
-                        title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
-                      >
-                        <Send size={14} /> Print directly
+                  {/* Stacked so the pill sits at the code-range line's height and the
+                      buttons sit at the "10 barcodes · createdBy · date" line's height,
+                      rather than one flex row centering both against the text block. */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span className={`pill ${batch.kind === "qr" ? "pill-verified" : "pill-unknown"}`}>
+                      {batch.kind === "qr" ? "QR" : "Barcode"}
+                    </span>
+                    <div className="barcode-run-actions">
+                      <button className="btn btn-sm btn-primary" onClick={() => viewBatch(batch)}>
+                        <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
                       </button>
-                    )}
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => setDeleting(batch)}
-                      title="Remove this run from the list"
-                    >
-                      <X size={14} />
-                    </button>
+                      {FILE_DOWNLOADS_ENABLED && (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => downloadBatchTspl(batch)}
+                          title="Send this run to the label printer"
+                        >
+                          <Printer size={14} /> Print file
+                        </button>
+                      )}
+                      {FILE_DOWNLOADS_ENABLED && (
+                        <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
+                          <Download size={14} /> PDF
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => printBatch(batch)}
+                        title="Print this run through your browser's own print dialog"
+                      >
+                        <Send size={14} /> Print
+                      </button>
+                      {DIRECT_PRINT_ENABLED && (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => openPrintDialog(batch)}
+                          title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
+                        >
+                          <Send size={14} /> Print directly
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setDeleting(batch)}
+                        title="Remove this run from the list"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
