@@ -8,6 +8,7 @@ import {
   createLocationSchema,
   updateLocationSchema,
   listLocationsQuerySchema,
+  reorderLocationsSchema,
 } from "../validators/locations.validators";
 
 const router = Router();
@@ -37,5 +38,11 @@ router.patch(
   asyncHandler(locationsController.update),
 );
 router.delete("/:id", canWrite, asyncHandler(locationsController.remove));
+router.post(
+  "/reorder",
+  canWrite,
+  validate({ body: reorderLocationsSchema }),
+  asyncHandler(locationsController.reorder),
+);
 
 export default router;

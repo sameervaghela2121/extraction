@@ -15,6 +15,7 @@ export interface MasterApi {
   create: (body: Partial<MasterRow>) => Promise<MasterRow>;
   update: (id: string, body: Partial<MasterRow>) => Promise<MasterRow>;
   remove: (id: string) => Promise<unknown>;
+  reorder: (ids: string[]) => Promise<MasterRow[]>;
 }
 
 export interface MasterField {
@@ -29,6 +30,10 @@ export interface MasterField {
    *  by default: a row of arrows across every header is noise when only one column is
    *  worth reordering by. Only meaningful alongside `inList`. */
   sortable?: boolean;
+  /** Never an input in the Add/Edit form — for a value the backend owns (sort_order:
+   *  assigned on create, changed only by dragging a row). Pair with `inList` to still show
+   *  it as a read-only column; without it the field is declared but never rendered. */
+  readOnly?: boolean;
 }
 
 export interface MasterSpec {
@@ -46,6 +51,10 @@ export interface MasterSpec {
   plural: string;
   api: MasterApi;
   fields: MasterField[];
+  /** Drag rows to set `sort_order` directly, instead of typing a number. Only on for masters
+   *  whose picker order is meant to follow something other than the alphabet (a physical
+   *  walk through the godown, the common remarks first) — vendors has no such need. */
+  reorderable?: boolean;
 }
 
 // The typed clients are cast once here: the concrete row types (Vendor, GodownLocation,
@@ -75,12 +84,16 @@ export const LOCATION_SPEC: MasterSpec = {
   noun: "location",
   plural: "locations",
   api: asMasterApi(locationsApi),
+  reorderable: true,
   fields: [
     { name: "location_code", label: "Location code", type: "text", required: true, inList: true, sortable: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
     // No inList: still edited on the form, just not a column.
     { name: "godown", label: "Godown", type: "text" },
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
+    // Declared but never rendered: no column (the drag handle is the affordance) and no form
+    // input (it is assigned on create and changed only by dragging). It stays in `fields` so
+    // the sort comparator can still see type: "number" — see MasterSection's sort lookup.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
   ],
 };
 
@@ -94,19 +107,22 @@ export const MATERIAL_TYPE_SPEC: MasterSpec = {
   noun: "material type",
   plural: "material types",
   api: asMasterApi(materialTypesApi),
+  reorderable: true,
   fields: [
     { name: "material_code", label: "Material code", type: "text", required: true, inList: true, sortable: true },
     { name: "name", label: "Name", type: "text", required: true, inList: true },
-    // No inList: both stay on the form but are off the table. `unit` has to stay editable —
-    // createRawMaterialSchema requires it, so a create that omitted it would be a 400.
-    { name: "category", label: "Category", type: "text" },
-    { name: "unit", label: "Unit", type: "text", required: true },
     // Same as the locations master: the picker should follow how the godown thinks about
-    // its materials, which is rarely alphabetical. Blank sorts last.
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
-    // gsm, width_mm and reorder_level are off the form entirely. They are optional on the
-    // API, and the backend's PATCH skips fields a body omits, so existing values survive an
-    // edit here rather than being blanked. See the note in MasterSection.buildBody.
+    // its materials, which is rarely alphabetical. Assigned on create and changed only by
+    // dragging a row. Declared but never rendered — see the note on the locations master.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
+    // category, unit, gsm, width_mm and reorder_level are all off the form. They are
+    // optional on the API, and the backend's PATCH skips fields a body omits, so the values
+    // already stored survive an edit here rather than being blanked. See the note in
+    // MasterSection.buildBody.
+    //
+    // `unit` was removed alongside the others once it stopped being required: a roll takes
+    // its unit from what the client sends at registration (defaulting to "kg"), never from
+    // the material type, so a blank one here changes nothing downstream.
   ],
 };
 
@@ -117,10 +133,13 @@ export const REMARK_SPEC: MasterSpec = {
   noun: "remark",
   plural: "remarks",
   api: asMasterApi(remarksApi),
+  reorderable: true,
   fields: [
     { name: "remark_code", label: "Remark code", type: "text", required: true, inList: true, sortable: true },
     { name: "label", label: "Label", type: "text", required: true, inList: true },
-    { name: "sort_order", label: "Sort order", type: "number", inList: true },
+    // Assigned on create and changed only by dragging a row — the common remarks belong at
+    // the top, not typed in as a guessed number. Declared but never rendered.
+    { name: "sort_order", label: "Sort order", type: "number", readOnly: true },
   ],
 };
 

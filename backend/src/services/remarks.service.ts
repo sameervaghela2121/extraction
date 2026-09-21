@@ -1,6 +1,13 @@
 import { type FilterQuery } from "mongoose";
 import { Remark, type IRemark, type RemarkStatus } from "../models/Remark.model";
-import { escapeRegex, findOr404, ensureCodeFree, applyUpdates } from "../utils/crud";
+import {
+  escapeRegex,
+  findOr404,
+  ensureCodeFree,
+  applyUpdates,
+  nextSortOrder,
+  reorderDocs,
+} from "../utils/crud";
 
 type RemarkInput = {
   remark_code: string;
@@ -46,7 +53,8 @@ export const remarksService = {
   async create(input: RemarkInput) {
     const code = input.remark_code.toUpperCase();
     await ensureCodeFree(Remark, "remark_code", code, CODE_TAKEN);
-    return toResponse(await Remark.create({ ...input, remark_code: code }));
+    const sort_order = input.sort_order ?? (await nextSortOrder(Remark));
+    return toResponse(await Remark.create({ ...input, remark_code: code, sort_order }));
   },
 
   async update(id: string, updates: Partial<RemarkInput>) {
@@ -70,5 +78,10 @@ export const remarksService = {
     remark.status = "inactive";
     await remark.save();
     return { id: remark._id.toString(), status: remark.status };
+  },
+
+  async reorder(ids: string[]) {
+    await reorderDocs(Remark, "remark", ids);
+    return remarksService.list({});
   },
 };

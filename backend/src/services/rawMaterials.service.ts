@@ -4,7 +4,14 @@ import {
   type IRawMaterial,
   type RawMaterialStatus,
 } from "../models/RawMaterial.model";
-import { escapeRegex, findOr404, ensureCodeFree, applyUpdates } from "../utils/crud";
+import {
+  escapeRegex,
+  findOr404,
+  ensureCodeFree,
+  applyUpdates,
+  nextSortOrder,
+  reorderDocs,
+} from "../utils/crud";
 
 type RawMaterialInput = {
   material_code: string;
@@ -84,7 +91,8 @@ export const rawMaterialsService = {
   async create(input: RawMaterialInput) {
     const code = input.material_code.toUpperCase();
     await ensureCodeFree(RawMaterial, "material_code", code, CODE_TAKEN);
-    const material = await RawMaterial.create({ ...input, material_code: code });
+    const sort_order = input.sort_order ?? (await nextSortOrder(RawMaterial));
+    const material = await RawMaterial.create({ ...input, material_code: code, sort_order });
     return toResponse(material);
   },
 
@@ -108,5 +116,10 @@ export const rawMaterialsService = {
     material.status = "inactive";
     await material.save();
     return { id: material._id.toString(), status: material.status };
+  },
+
+  async reorder(ids: string[]) {
+    await reorderDocs(RawMaterial, "material", ids);
+    return rawMaterialsService.list({});
   },
 };

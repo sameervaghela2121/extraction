@@ -10,6 +10,9 @@ function crud<T extends { id: string }>(path: string) {
     update: (id: string, body: Partial<T>) =>
       api.patch<T>(`${path}/${id}`, body).then((r) => r.data),
     remove: (id: string) => api.delete(`${path}/${id}`).then((r) => r.data),
+    // Drag-and-drop's other half: every row's id, in its new top-to-bottom order. Only the
+    // reorderable masters (locations, material types, remarks) actually call this.
+    reorder: (ids: string[]) => api.post<T[]>(`${path}/reorder`, { ids }).then((r) => r.data),
   };
 }
 
