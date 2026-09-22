@@ -50,11 +50,19 @@ const rollItem = z.object({
   // one of the two must be present, which the service checks once it has resolved the
   // client_id — a refine here would reject a roll whose vendor is being created in this
   // same batch, which is the main thing a batch is for.
-  body: createRollSchema.partial({ vendor_id: true }),
+  //
+  // vendor_client_id is accepted here too, inside body — not just as the item's own
+  // sibling field below — because a client that mirrors supplier_code's shape (where
+  // vendor_client_id lives in body) sends it there instead. Zod silently drops unknown
+  // body keys otherwise, which is exactly what turned a present-but-misplaced
+  // vendor_client_id into "Send either vendor_id or vendor_client_id on the roll".
+  body: createRollSchema.partial({ vendor_id: true }).extend({
+    vendor_client_id: z.string().uuid().optional(),
+  }),
   /**
    * The client_id of a vendor added in this same batch, for a roll received from a
    * supplier that has no server id yet. Resolved server-side before the roll is created.
-   * Ignored when body.vendor_id is already set.
+   * Ignored when body.vendor_id (or body.vendor_client_id) is already set.
    */
   vendor_client_id: z.string().uuid().optional(),
 });
