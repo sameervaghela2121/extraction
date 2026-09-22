@@ -173,14 +173,17 @@ async function runItem(item: Item, actingUserId: string, ids: BatchIds): Promise
   }
 
   if (item.type === "roll") {
-    const vendorId =
-      item.body.vendor_id ??
-      (item.vendor_client_id ? await resolveVendorId(item.vendor_client_id, ids) : undefined);
+    // Accepted from either spot — the item's own sibling field (the documented shape) or
+    // inside body (what a client mirroring supplier_code's shape sends instead). See the
+    // comment on rollItem in sync.validators.ts.
+    const { vendor_client_id: bodyVendorClientId, ...body } = item.body;
+    const vendorClientId = item.vendor_client_id ?? bodyVendorClientId;
+    const vendorId = body.vendor_id ?? (vendorClientId ? await resolveVendorId(vendorClientId, ids) : undefined);
     if (!vendorId) {
       throw ApiError.badRequest("Send either vendor_id or vendor_client_id on the roll");
     }
     const roll = await materialRollsService.create(
-      { ...item.body, vendor_id: vendorId, client_id: item.client_id },
+      { ...body, vendor_id: vendorId, client_id: item.client_id },
       actingUserId,
     );
     // Remembered so a movement later in this same batch can point at a roll that had no
