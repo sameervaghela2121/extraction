@@ -61,7 +61,7 @@ const NAV: NavItem[] = [
   // { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
   // { to: "/export", label: "Export", icon: Download },
   // { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
-  { to: "/users", label: "User management", icon: Users, adminOnly: true },
+  { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
   // The Royal Touche masters, grouped: four entries that are always maintained together
   // read as one section, not as four peers of Barcode generator.
   {
@@ -77,7 +77,7 @@ const NAV: NavItem[] = [
       { to: "/masters/rolls", label: "Rolls" },
     ],
   },
-  { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
+  { to: "/users", label: "User management", icon: Users, adminOnly: true },
 ];
 
 /** Every leaf a nav item points at. A group contributes its children; anything else is
@@ -87,6 +87,18 @@ function leaves(item: NavItem): Array<{ to: string; label: string; icon: LucideI
   if (item.children) return item.children.map((c) => ({ ...c, icon: item.icon }));
   return [{ to: item.to!, label: item.label, icon: item.icon, end: item.end }];
 }
+
+/** Table/list screens that want the full window instead of the 1200px reading width —
+ *  every masters section, user management, and the barcode generator. Detail views
+ *  (a document, a GRN, a voucher) are left at the narrower default. */
+const FULL_WIDTH_PATHS = /^\/(users|barcodes|masters)(\/|$)/;
+
+/** Table screens whose list scrolls inside its own card rather than growing the whole
+ *  page — a table like this reads oddly if the browser's own scrollbar is what you reach
+ *  for to see more rows, and every one of these already paginates or has its own
+ *  table-scroll wrapper to receive that height. Every other page still just grows with
+ *  its content and lets the page scroll, same as before. */
+const FIXED_HEIGHT_PATHS = /^\/(barcodes|masters)(\/|$)/;
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -230,10 +242,21 @@ export default function AppLayout() {
         </button>
       </header>
 
-      {/* Main content */}
+      {/* Main content. Capped at 1200px by default — a reading width that suits a document
+          or GRN detail view — but the table-heavy list screens (masters, users, barcodes)
+          want the full window instead, since a table just gets a wasted margin otherwise. */}
       <main
-        className="app-main"
-        style={{ marginLeft: "var(--sidebar-w)", flex: 1, padding: "28px 32px 80px", maxWidth: 1200, minWidth: 0 }}
+        className={`app-main${FIXED_HEIGHT_PATHS.test(pathname) ? " app-main--fixed-height" : ""}`}
+        style={{
+          marginLeft: "var(--sidebar-w)",
+          flex: 1,
+          // The 80px bottom pad is breathing room for a page that scrolls past its last
+          // item — dead space with nothing below it on a page pinned to the viewport, so
+          // the fixed-height barcode screen gets the same 28px every other edge has.
+          padding: FIXED_HEIGHT_PATHS.test(pathname) ? "28px 32px" : "28px 32px 80px",
+          maxWidth: FULL_WIDTH_PATHS.test(pathname) ? undefined : 1200,
+          minWidth: 0,
+        }}
       >
         <Outlet />
       </main>
@@ -287,9 +310,35 @@ export default function AppLayout() {
         .app-sidebar { display: flex; flex-direction: column; }
         .app-bottomnav { display: none; }
         .app-mobilebar { display: none; }
+        /* Shared by every FIXED_HEIGHT_PATHS screen: the barcode generator's two-panel
+           history, and every masters table (MasterSection, RawMaterialPage, RollsPage).
+           Each one's list/table scrolls inside its own card instead of growing the whole
+           page. Desktop only: on a phone the layout already changes shape below, and a
+           second nested scroll region on top of the fixed top/bottom bars isn't worth the
+           complexity for these screens. */
+        .app-main--fixed-height { height: 100vh; overflow: hidden; }
+        .list-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+        /* height:fit-content, not flex-basis:auto alone — barcode's card is a two-column
+           CSS grid, and a grid's "auto" row can end up sized by more than just the shorter
+           column's visible content once overflow/min-height are in the mix. fit-content
+           says outright: be exactly as tall as your content, up to the space available.
+           flex-shrink:1 (from flex:0 1 auto — the shorthand's own flex:1 uses a 0% basis,
+           which is what was stretching this) still lets the list scroll internally once it
+           actually needs more room than the page has. */
+        .list-page > .list-page-scroll { flex: 0 1 auto; height: fit-content; max-height: 100%; min-height: 0; }
+        .list-page > *:not(.list-page-scroll) { flex-shrink: 0; }
+        /* A masters card wraps one scrollable .table-scroll block, not barcode's own
+           two-column grid — this is what actually turns that block into the thing that
+           grows to fill the card and scrolls, rather than just the card's own outer size
+           being capped with nothing inside able to use the extra room. */
+        .list-page-scroll.list-page-table-card { display: flex; flex-direction: column; }
+        .list-page-table-card > .table-scroll { flex: 1; min-height: 0; overflow-y: auto; }
         @media (max-width: 900px) {
           .app-sidebar { display: none; }
           .app-main { margin-left: 0 !important; padding: 20px 16px 84px !important; }
+          .app-main--fixed-height { height: auto; overflow: visible; }
+          .list-page { height: auto; }
+          .list-page > .list-page-scroll { flex: none; }
           .app-mobilebar {
             display: flex; align-items: center; justify-content: space-between;
             position: fixed; top: 0; left: 0; right: 0; z-index: 50;

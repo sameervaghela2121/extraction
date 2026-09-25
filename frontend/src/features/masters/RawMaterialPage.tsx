@@ -330,7 +330,7 @@ export default function RawMaterialPage() {
   };
 
   return (
-    <div>
+    <div className="list-page">
       <PageHeader
         title="Raw materials"
         subtitle="The Royal Touche paper codes, and the supplier each one comes from."
@@ -349,7 +349,7 @@ export default function RawMaterialPage() {
         </button>
       </div>
 
-      <div className="card" style={{ overflow: "hidden" }}>
+      <div className="card list-page-scroll list-page-table-card" style={{ overflow: "hidden" }}>
         {loading ? (
           <Spinner />
         ) : (
