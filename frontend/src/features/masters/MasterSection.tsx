@@ -291,7 +291,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
   const columns = spec.fields.filter((f) => f.inList);
 
   return (
-    <div>
+    <div className="list-page">
       <PageHeader title={spec.label} subtitle={spec.subtitle} />
 
       <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
@@ -307,7 +307,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
         </button>
       </div>
 
-      <div className="card" style={{ overflow: "hidden" }}>
+      <div className="card list-page-scroll list-page-table-card" style={{ overflow: "hidden" }}>
         {loading ? (
           <Spinner />
         ) : (

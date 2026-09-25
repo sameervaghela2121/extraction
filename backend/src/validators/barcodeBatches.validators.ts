@@ -46,6 +46,11 @@ export const listBarcodeBatchesQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
 
+/** One code, roll number, or Royal Touche paper code — see barcodeBatchesService.search. */
+export const searchBarcodeBatchesQuerySchema = z.object({
+  q: z.string().trim().min(1, "Enter something to search for"),
+});
+
 /** Same shape the create schema accepts, so the number this hands out is for the run the
  *  caller is about to save. */
 export const nextNumberQuerySchema = z.object({

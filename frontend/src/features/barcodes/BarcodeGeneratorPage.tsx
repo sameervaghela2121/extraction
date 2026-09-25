@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, Eye, Printer, Send, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, Printer, Search, Send, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
@@ -10,9 +10,9 @@ import { buildLabelPdf, type PdfLabel } from "./pdf";
 import { buildTspl, type TsplOrientation } from "./tspl";
 import { buildPrintHtml } from "./printHtml";
 import { listPrinters, printRaw } from "./qzPrint";
-import { barcodeBatchesApi } from "../../api/barcodeBatches.api";
+import { barcodeBatchesApi, type BarcodeSearchResult } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
-import { BARCODE_SIZES, defaultSizeFor, findSize, sizesFor, type LabelKind } from "./labelSizes";
+import { BARCODE_SIZES, defaultSizeFor, findSize, type LabelKind } from "./labelSizes";
 
 const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
@@ -138,16 +138,6 @@ function loadLabelSize(kind: LabelKind): LabelSizeMm {
   return defaultSizeFor(kind);
 }
 
-function saveLabelSize(kind: LabelKind, size: LabelSizeMm): void {
-  try {
-    const raw = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify({ ...parsed, [kind]: size }));
-  } catch {
-    // Best effort — printing still works even if the size isn't remembered next visit.
-  }
-}
-
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
  *  apart on a rack. */
 function rollLabel(roll: MaterialRollListItem): LabelItem {
@@ -179,6 +169,19 @@ export default function BarcodeGeneratorPage() {
   // a new run is generated. Never the live code-type setting directly: switching that
   // setting must not repaint an already-viewed run in the other kind.
   const [sheetKind, setSheetKind] = useState<LabelKind>("barcode");
+  // The run whose widthMm/heightMm/kind apply to whatever's currently in `sheet` — needed
+  // for "Print all" and each barcode's own Print button, since neither a freshly generated
+  // series nor a saved run's labels carry that with them once expanded into LabelItems.
+  const [activeBatch, setActiveBatch] = useState<BarcodeBatch | null>(null);
+  // Which row on the left is lit up: a whole run ("batch:<id>") or one code out of a
+  // global-search hit ("code:<code>") — kept as one key rather than two booleans so at
+  // most one row is ever highlighted regardless of which list produced it.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  // The global search box above the list — a code, a roll number, or a Royal Touche paper
+  // code. Empty means "show every saved run," same as before this existed.
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<BarcodeSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
   // Saved runs, newest first — what was printed before, so a series can be reprinted or
   // the next start number picked without guessing.
   const [batches, setBatches] = useState<BarcodeBatch[]>([]);
@@ -195,26 +198,16 @@ export default function BarcodeGeneratorPage() {
   const [deletingNow, setDeletingNow] = useState(false);
   // Barcode or QR — set once per computer/printer, not per run of codes. Drives which
   // standard sizes are offered below, and how every download/print renders the code.
-  const [labelKind, setLabelKind] = useState<LabelKind>(loadLabelKind);
+  const [labelKind] = useState<LabelKind>(loadLabelKind);
   // One size remembered per kind (see loadLabelSize) — switching kind swaps in that kind's
   // own last pick rather than carrying over a size that belongs to the other one.
-  const [labelSize, setLabelSize] = useState<LabelSizeMm>(() => loadLabelSize(loadLabelKind()));
+  const [labelSize] = useState<LabelSizeMm>(() => loadLabelSize(loadLabelKind()));
   const labelWidthMm = labelSize.widthMm;
   const labelHeightMm = labelSize.heightMm;
 
   useEffect(() => {
     localStorage.setItem(LABEL_KIND_STORAGE_KEY, labelKind);
   }, [labelKind]);
-
-  const changeLabelKind = (kind: LabelKind) => {
-    setLabelKind(kind);
-    setLabelSize(loadLabelSize(kind));
-  };
-
-  const changeLabelSize = (size: LabelSizeMm) => {
-    setLabelSize(size);
-    saveLabelSize(labelKind, size);
-  };
 
   // Direct printing via QZ Tray — see qzPrint.ts. Nothing here talks to the backend.
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(loadPrinterSettings);
@@ -321,6 +314,44 @@ export default function BarcodeGeneratorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Debounced the same way nextNumber below is — the search box fires this on every
+  // keystroke. An empty query clears the results rather than searching for "": the list
+  // then falls back to `batches`, exactly like before this box existed.
+  useEffect(() => {
+    const query = globalQuery.trim();
+    if (!query) {
+      setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+    // Right side clears the moment a search starts, not once results come back — whatever
+    // was open belonged to the plain list, and the list underneath it just changed to
+    // search hits, so it shouldn't keep pointing at something no longer in view.
+    setSeriesLabels([]);
+    setActiveBatch(null);
+    setActiveKey(null);
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const items = await barcodeBatchesApi.search(query);
+        if (!cancelled) setSearchResults(items);
+      } catch (err) {
+        if (!cancelled) {
+          setSearchResults([]);
+          notify(apiErrorMessage(err), "error");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalQuery]);
+
   const toggle = (roll: MaterialRollListItem) =>
     setSelected((prev) => {
       if (prev[roll.id]) {
@@ -396,28 +427,6 @@ export default function BarcodeGeneratorPage() {
           : `${count} barcode${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
             (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
 
-  /**
-   * Which saved runs are already on the sheet.
-   *
-   * Checked by first and last code rather than by expanding every run: 50 runs of up to 500
-   * labels is 25,000 strings to rebuild on each render, and a run only ever goes on as a
-   * whole — addBatch merges the entire range at once — so its two ends answer the question.
-   */
-  const sheetKeys = useMemo(() => new Set(seriesLabels.map((l) => l.key)), [seriesLabels]);
-
-  const isOnSheet = (batch: BarcodeBatch) => {
-    const input = {
-      prefix: batch.prefix,
-      date: batch.date,
-      from: batch.from_number,
-      to: batch.to_number,
-    };
-    return (
-      sheetKeys.has(`series:${seriesCode(input, batch.from_number)}`) &&
-      sheetKeys.has(`series:${seriesCode(input, batch.to_number)}`)
-    );
-  };
-
   /** "RT260910001-RT260910050" — the run's range, for the row heading and the filename. */
   const batchName = (batch: BarcodeBatch) => {
     const input = {
@@ -445,12 +454,25 @@ export default function BarcodeGeneratorPage() {
     return result.labels;
   };
 
-  /** Show just this run: replaces the sheet, so what's on screen is what downloads. */
+  /** Show a whole run's barcodes on the right: replaces the sheet, so what's on screen is
+   *  what "Print all" prints. */
   const viewBatch = (batch: BarcodeBatch) => {
     const labels = labelsOf(batch);
     if (!labels) return;
     setSeriesLabels(labels);
     setSheetKind(batch.kind);
+    setActiveBatch(batch);
+    setActiveKey(`batch:${batch.id}`);
+    setSelected({});
+  };
+
+  /** Show just one code on the right — a global-search hit, never the whole run it came
+   *  from. `batch` still supplies the widthMm/heightMm/kind this one code prints at. */
+  const viewSingleCode = (batch: BarcodeBatch, code: string) => {
+    setSeriesLabels([{ key: `search:${code}`, code, lines: [] }]);
+    setSheetKind(batch.kind);
+    setActiveBatch(batch);
+    setActiveKey(`code:${code}`);
     setSelected({});
   };
 
@@ -460,9 +482,13 @@ export default function BarcodeGeneratorPage() {
     try {
       await barcodeBatchesApi.remove(deleting.id);
       setBatches((prev) => prev.filter((b) => b.id !== deleting.id));
-      // The preview may be showing the run that just went; leaving it up invites a
-      // download of something no longer in the list.
-      if (isOnSheet(deleting)) setSeriesLabels([]);
+      // The panel on the right may be showing the run that just went; leaving it up
+      // invites printing something no longer in the list.
+      if (activeBatch?.id === deleting.id) {
+        setSeriesLabels([]);
+        setActiveBatch(null);
+        setActiveKey(null);
+      }
       setDeleting(null);
       notify("Barcodes removed from the list");
     } catch (err) {
@@ -484,8 +510,9 @@ export default function BarcodeGeneratorPage() {
     }
     // Saved first: if the write fails the labels don't silently exist only on this screen.
     setSaving(true);
+    let saved: BarcodeBatch;
     try {
-      const saved = await barcodeBatchesApi.create({
+      saved = await barcodeBatchesApi.create({
         prefix,
         date,
         from_number: seriesInput.from,
@@ -506,6 +533,8 @@ export default function BarcodeGeneratorPage() {
     // range twice puts the same code on two rolls, which is unrecoverable in the godown.
     setSeriesLabels(result.labels);
     setSheetKind(labelKind);
+    setActiveBatch(saved);
+    setActiveKey(`batch:${saved.id}`);
     setSelected({});
     // Nothing to advance by hand any more: the saved run is now in `batches`, and nextStart
     // recomputes from it, so the next run already begins where this one ended.
@@ -576,7 +605,11 @@ export default function BarcodeGeneratorPage() {
   };
 
   /**
-   * Hand the run to the browser's own print dialog instead of a downloaded file.
+   * Hand a set of labels to the browser's own print dialog instead of a downloaded file.
+   *
+   * Takes the labels directly rather than a batch, so the same path covers "every code in
+   * this run" (Print all) and "just this one" (a single barcode's own Print button, or a
+   * global-search hit) without duplicating the iframe dance for each.
    *
    * Rendered as plain HTML sized with `@page` (see printHtml.ts), not the PDF this page
    * already generates — a PDF's page size gets reinterpreted by whichever PDF viewer prints
@@ -585,10 +618,9 @@ export default function BarcodeGeneratorPage() {
    * than a new tab: no popup blocker to fight, and it removes itself once the print dialog
    * closes instead of leaving an extra tab behind.
    */
-  const printBatch = async (batch: BarcodeBatch) => {
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    const html = await buildPrintHtml(labels, batch.widthMm, batch.heightMm, batch.kind);
+  const printLabels = async (labels: LabelItem[], widthMm: number, heightMm: number, kind: LabelKind) => {
+    if (labels.length === 0) return;
+    const html = await buildPrintHtml(labels, widthMm, heightMm, kind);
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.width = "0";
@@ -680,130 +712,119 @@ export default function BarcodeGeneratorPage() {
   };
 
   return (
-    <div>
+    <div className="list-page">
       <PageHeader
         title="Barcode generator"
         subtitle="Print barcodes for rolls that aren't in the system yet — stick them on first, scan them later."
       />
 
-      <div className="barcode-layout">
-      <div className="barcode-controls">
-        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-          <strong style={{ fontSize: 13 }}>{QR_CODE_ENABLED ? "Label type & size" : "Sticker size"}</strong>
-          <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
-            Match what's loaded in your printer — used for the PDF, the print file, and direct
-            printing. Remembered on this computer.
-          </p>
-          <div className="barcode-fields">
-            {QR_CODE_ENABLED && (
-              <label className="barcode-field">
-                <span>Code type</span>
-                <select
-                  className="input"
-                  value={labelKind}
-                  onChange={(e) => changeLabelKind(e.target.value === "qr" ? "qr" : "barcode")}
-                >
-                  <option value="barcode">Barcode (CODE128)</option>
-                  <option value="qr">QR code</option>
-                </select>
-              </label>
-            )}
-            {labelKind === "qr" ? (
-              <label className="barcode-field">
-                <span>Sticker size</span>
-                <select
-                  className="input"
-                  value={`${labelSize.widthMm}x${labelSize.heightMm}`}
-                  onChange={(e) => {
-                    const option = sizesFor(labelKind).find(
-                      (s) => `${s.widthMm}x${s.heightMm}` === e.target.value,
-                    );
-                    if (option) changeLabelSize({ widthMm: option.widthMm, heightMm: option.heightMm });
-                  }}
-                >
-                  {sizesFor(labelKind).map((s) => (
-                    <option key={s.label} value={`${s.widthMm}x${s.heightMm}`}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              // Only one barcode sticker size exists — nothing to pick, so this shows the
-              // fixed size as a fact rather than a dropdown with one immovable option.
-              <div className="barcode-field">
-                <span>Sticker size</span>
-                <strong style={{ fontSize: 16 }}>{BARCODE_SIZES[0].label}</strong>
-              </div>
-            )}
-          </div>
+      <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+
+        <div className="barcode-fields">
+          <label className="barcode-field">
+            <span>Letters at the start</span>
+            <input
+              className="input"
+              placeholder="RT"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+            />
+          </label>
+          <label className="barcode-field">
+            <span>Date</span>
+            <input
+              className="input"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </label>
+          <label className="barcode-field">
+            <span>Quantity</span>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={MAX_SERIES}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          </label>
         </div>
 
-        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
-          <strong style={{ fontSize: 14 }}>Make blank barcodes</strong>
-          <p className="faint" style={{ fontSize: 12, margin: "4px 0 12px" }}>
-            For rolls that don't exist in the system yet — stick these on first, scan them later.
-          </p>
-
-          <div className="barcode-fields">
-            <label className="barcode-field">
-              <span>Letters at the start</span>
-              <input
-                className="input"
-                placeholder="RT"
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
-              />
-            </label>
-            <label className="barcode-field">
-              <span>Date</span>
-              <input
-                className="input"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </label>
-            <label className="barcode-field">
-              <span>Quantity</span>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={MAX_SERIES}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-primary" onClick={addSeries} disabled={!canGenerate}>
-              {saving ? "Saving…" : labelKind === "qr" ? "Generate QR codes" : "Generate barcodes"}
-            </button>
-            <span className="faint" style={{ fontSize: 12 }}>
-              {preview}
-            </span>
-          </div>
+        <div className="row gap-8" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-primary" onClick={addSeries} disabled={!canGenerate}>
+            {saving ? "Saving…" : labelKind === "qr" ? "Generate QR codes" : "Generate barcodes"}
+          </button>
+          <span className="faint" style={{ fontSize: 12 }}>
+            {preview}
+          </span>
         </div>
+      </div>
 
-        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-          <div className="row gap-8" style={{ marginBottom: 10, alignItems: "baseline" }}>
+      {/* Searches a code directly, a roll number, or a Royal Touche paper code (which can
+          span several rolls) — see barcodeBatchesService.search on the backend. Empty
+          falls back to the plain list of saved runs below, exactly as before this existed. */}
+      <div className="global-search" style={{ marginBottom: 14 }}>
+        <Search size={16} className="global-search-icon" />
+        <input
+          className="global-search-input"
+          placeholder="Search by code, roll number or Royal Touche code"
+          value={globalQuery}
+          onChange={(e) => setGlobalQuery(e.target.value)}
+        />
+      </div>
+
+      <div className="card barcode-history list-page-scroll">
+        <div className="barcode-history-list">
+          <div style={{ padding: "14px 14px 8px" }}>
             <strong style={{ fontSize: 13 }}>Generated barcodes</strong>
-            <span className="faint" style={{ fontSize: 12 }}>
-              Everything made here before — open a run to print it again.
-            </span>
-          </div>
-          {batches.length === 0 ? (
-            <p className="faint" style={{ fontSize: 12, margin: 0 }}>
-              Nothing saved yet.
+            <p className="faint" style={{ fontSize: 12, margin: "4px 0 0" }}>
+              {searching
+                ? "Searching…"
+                : searchResults
+                  ? `${searchResults.length} match${searchResults.length === 1 ? "" : "es"}`
+                  : "Everything made here before — pick a run to print it again."}
             </p>
-          ) : (
-            <div className="stack" style={{ gap: 6, maxHeight: 260, overflowY: "auto" }}>
-              {batches.map((batch) => (
+          </div>
+          <div className="stack" style={{ gap: 4, padding: "0 10px 12px" }}>
+            {searchResults ? (
+              searchResults.length === 0 ? (
+                <p className="faint" style={{ fontSize: 12, padding: "4px 6px" }}>
+                  Nothing matches that.
+                </p>
+              ) : (
+                searchResults.map((hit) => (
+                  <div
+                    key={`${hit.batch.id}:${hit.code}`}
+                    className={`barcode-history-row${activeKey === `code:${hit.code}` ? " active" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => viewSingleCode(hit.batch, hit.code)}
+                    onKeyDown={(e) => e.key === "Enter" && viewSingleCode(hit.batch, hit.code)}
+                  >
+                    <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{hit.code}</div>
+                    <div className="faint" style={{ fontSize: 12 }}>
+                      {hit.roll
+                        ? `Roll ${hit.roll.roll_number}${hit.roll.royal_touche_code ? ` · RT ${hit.roll.royal_touche_code}` : ""}`
+                        : `${hit.batch.kind === "qr" ? "QR code" : "Barcode"} · ${hit.batch.widthMm} x ${hit.batch.heightMm} mm`}
+                    </div>
+                  </div>
+                ))
+              )
+            ) : batches.length === 0 ? (
+              <p className="faint" style={{ fontSize: 12, padding: "4px 6px" }}>
+                Nothing saved yet.
+              </p>
+            ) : (
+              batches.map((batch) => (
                 <div
                   key={batch.id}
-                  className={`barcode-run${isOnSheet(batch) ? " selected" : ""}`}
+                  className={`barcode-history-row${activeKey === `batch:${batch.id}` ? " active" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => viewBatch(batch)}
+                  onKeyDown={(e) => e.key === "Enter" && viewBatch(batch)}
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
@@ -817,9 +838,6 @@ export default function BarcodeGeneratorPage() {
                           { prefix: batch.prefix, date: batch.date, from: batch.from_number, to: batch.to_number },
                           batch.to_number,
                         )}
-                      <span className="faint" style={{ fontWeight: 400, marginLeft: 8 }}>
-                        ({batch.widthMm} x {batch.heightMm} mm)
-                      </span>
                     </div>
                     <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
                       {batch.count} {batch.kind === "qr" ? "QR code" : "barcode"}
@@ -827,55 +845,98 @@ export default function BarcodeGeneratorPage() {
                       {new Date(batch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  <div className="spacer" />
-                  <div className="barcode-run-actions">
-                    <button className="btn btn-sm" onClick={() => viewBatch(batch)}>
-                      <Eye size={14} /> {batch.kind === "qr" ? "View QR codes" : "View barcodes"}
-                    </button>
-                    {FILE_DOWNLOADS_ENABLED && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleting(batch);
+                    }}
+                    title="Remove this run from the list"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="barcode-history-panel">
+          <div className="row gap-8" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <span className="faint" style={{ fontSize: 12 }}>
+              {sheet.length === 0
+                ? "Nothing selected"
+                : `${sheet.length} ${sheetKind === "qr" ? "QR code" : "barcode"}${sheet.length === 1 ? "" : "s"}`}
+            </span>
+            {sheet.length > 0 && activeBatch && (
+              <div className="row gap-8">
+                {FILE_DOWNLOADS_ENABLED && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => downloadBatchTspl(activeBatch)}
+                    title="Send this run to the label printer"
+                  >
+                    <Printer size={14} /> Print file
+                  </button>
+                )}
+                {FILE_DOWNLOADS_ENABLED && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => downloadBatch(activeBatch)}
+                    title="Download this run as a PDF"
+                  >
+                    <Download size={14} /> PDF
+                  </button>
+                )}
+                {DIRECT_PRINT_ENABLED && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => openPrintDialog(activeBatch)}
+                    title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
+                  >
+                    <Send size={14} /> Print directly
+                  </button>
+                )}
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => printLabels(sheet, activeBatch.widthMm, activeBatch.heightMm, activeBatch.kind)}
+                  title="Print every barcode shown here through your browser's own print dialog"
+                >
+                  <Send size={14} /> Print all
+                </button>
+              </div>
+            )}
+          </div>
+          {sheet.length === 0 ? (
+            <p className="faint" style={{ fontSize: 12, margin: 0 }}>
+              Pick a run on the left, or search above, to see its barcodes here.
+            </p>
+          ) : (
+            <div className="barcode-sheet">
+              {sheet.map((item) => (
+                <div key={item.key} className="barcode-label-slot">
+                  <div className="barcode-card">
+                    <Label item={item} kind={sheetKind} />
+                    {activeBatch && (
                       <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => downloadBatchTspl(batch)}
-                        title="Send this run to the label printer"
+                        className="barcode-card-print"
+                        onClick={() =>
+                          printLabels([item], activeBatch.widthMm, activeBatch.heightMm, activeBatch.kind)
+                        }
+                        title="Print just this barcode"
                       >
-                        <Printer size={14} /> Print file
+                        <Send size={12} /> Print
                       </button>
                     )}
-                    {FILE_DOWNLOADS_ENABLED && (
-                      <button className="btn btn-sm" onClick={() => downloadBatch(batch)} title="Download this run as a PDF">
-                        <Download size={14} /> PDF
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => printBatch(batch)}
-                      title="Print this run through your browser's own print dialog"
-                    >
-                      <Send size={14} /> Print
-                    </button>
-                    {DIRECT_PRINT_ENABLED && (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => openPrintDialog(batch)}
-                        title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
-                      >
-                        <Send size={14} /> Print directly
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => setDeleting(batch)}
-                      title="Remove this run from the list"
-                    >
-                      <X size={14} />
-                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
 
+      <div className="barcode-controls">
         {ROLL_PICKER_ENABLED && (
           <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
             <input
@@ -968,26 +1029,6 @@ export default function BarcodeGeneratorPage() {
           )}
         </div>
         )}
-      </div>
-
-      <div className="barcode-sheet-wrap">
-        <h2 style={{ fontSize: 15, margin: "0 0 10px" }} className="barcode-controls">
-          Ready to print ({sheet.length})
-        </h2>
-        {sheet.length === 0 ? (
-          <p className="faint barcode-controls" style={{ fontSize: 12, margin: 0 }}>
-            Generate a run above, or open a saved one — the barcodes appear here.
-          </p>
-        ) : (
-          <div className="barcode-sheet">
-            {sheet.map((item) => (
-              <div key={item.key} className="barcode-label-slot">
-                <Label item={item} kind={sheetKind} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
       </div>
 
       <Modal
