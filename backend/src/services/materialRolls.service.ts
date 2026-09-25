@@ -3,6 +3,7 @@ import { MaterialRoll, type IMaterialRoll, type RollStatus } from "../models/Mat
 import { StockTransaction } from "../models/StockTransaction.model";
 import { RawMaterial } from "../models/RawMaterial.model";
 import { Vendor } from "../models/Vendor.model";
+import { Remark } from "../models/Remark.model";
 import { ApiError } from "../utils/ApiError";
 import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
@@ -80,11 +81,15 @@ function registrationPhotos(roll: Pick<IMaterialRoll, (typeof PHOTO_FIELDS)[numb
  *  where it is the Supplier Code Number the form shows. */
 type NamedRef = { _id: Types.ObjectId; name: string; vendor_code?: string };
 
+/** What .populate leaves behind in place of a remark_codes entry. */
+type RemarkRef = { _id: Types.ObjectId; remark_code: string; label: string; status: string };
+
 // Only the two ref paths, and only the fields the roll screens render — a roll list
 // shouldn't drag whole vendor and material documents across the wire.
 const REF_POPULATE = [
   { path: "material_id", select: "name" },
   { path: "vendor_id", select: "name vendor_code" },
+  { path: "remark_codes", select: "remark_code label status" },
 ];
 
 function refResponse(ref?: Types.ObjectId | NamedRef) {
@@ -98,9 +103,23 @@ function refResponse(ref?: Types.ObjectId | NamedRef) {
     : { id: ref._id.toString(), name: ref.name, vendor_code: ref.vendor_code };
 }
 
-type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id"> & {
+/** Same "id, never null, even unpopulated" rule as refResponse — a remark hard-deleted out
+ *  from under a roll (masters here are soft-deleted, so this shouldn't happen, but a ref
+ *  is still just an id with no guarantee behind it) leaves the id with nulls beside it
+ *  rather than silently dropping the entry. */
+function remarkRefResponse(refs?: Array<Types.ObjectId | RemarkRef>) {
+  if (!refs || refs.length === 0) return undefined;
+  return refs.map((ref) =>
+    ref instanceof Types.ObjectId
+      ? { id: ref.toString(), remark_code: null, label: null, status: null }
+      : { id: ref._id.toString(), remark_code: ref.remark_code, label: ref.label, status: ref.status },
+  );
+}
+
+type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_codes"> & {
   material_id: Types.ObjectId | NamedRef;
   vendor_id?: Types.ObjectId | NamedRef;
+  remark_codes?: Array<Types.ObjectId | RemarkRef>;
 };
 
 async function toResponse(r: PopulatedRoll) {
@@ -116,7 +135,7 @@ async function toResponse(r: PopulatedRoll) {
     barcode: r.barcode,
     remark_code: r.remark_code,
     remarks: r.remarks,
-    remark_codes: r.remark_codes,
+    remark_codes: remarkRefResponse(r.remark_codes),
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
     batch_no: r.batch_no,
@@ -271,7 +290,7 @@ export const materialRollsService = {
     vendor_id?: string;
     status?: RollStatus;
     location?: string;
-    remark_code?: string;
+    remark_id?: string;
     updated_after?: Date;
     sort?: "roll_number" | "date";
     order?: "asc" | "desc";
@@ -289,7 +308,7 @@ export const materialRollsService = {
     if (query.location) filter.location = query.location;
     // remark_codes is an array field — Mongo matches a scalar against it as "array contains
     // this value" with no operator needed, same as every equality filter above.
-    if (query.remark_code) filter.remark_codes = query.remark_code.trim().toUpperCase();
+    if (query.remark_id) filter.remark_codes = new Types.ObjectId(query.remark_id);
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [
@@ -475,15 +494,24 @@ export const materialRollsService = {
   /** Replaces the roll's remark_codes wholesale — the caller sends the complete set it
    *  wants, not a delta. Kept off the general update endpoint because this list gets
    *  revised long after registration, by whoever is looking at the roll that day, not by
-   *  the flow that filled in the rest of the form. */
-  async updateRemarkCodes(id: string, remarkCodes: string[]) {
+   *  the flow that filled in the rest of the form.
+   *
+   *  Ids, not codes — see updateRollRemarkCodesSchema. Existence is checked here rather
+   *  than left to the ref alone, so a typo'd or already-deleted id is rejected outright
+   *  instead of saving a reference to nothing. */
+  async updateRemarkCodes(id: string, remarkIds: string[]) {
     const roll = await findRoll(id);
-    // Uppercased and de-duplicated here rather than left to the schema cast, so two
-    // callers picking the same code differently ("color-var" / "COLOR-VAR") collapse to
-    // one entry instead of the array silently growing duplicates.
-    const codes = [...new Set(remarkCodes.map((c) => c.trim().toUpperCase()))];
+    // De-duplicated here rather than left to Mongo, so the same remark picked twice in one
+    // request collapses to one entry instead of the array growing duplicates.
+    const ids = [...new Set(remarkIds)];
+    if (ids.length) {
+      const found = await Remark.countDocuments({ _id: { $in: ids } });
+      if (found !== ids.length) {
+        throw ApiError.badRequest("One or more remarks don't exist");
+      }
+    }
     // Undefined rather than [], matching remark_codes' own "unset, not empty" convention.
-    roll.remark_codes = codes.length ? codes : undefined;
+    roll.remark_codes = ids.length ? ids.map((remarkId) => new Types.ObjectId(remarkId)) : undefined;
     await roll.save();
     await roll.populate(REF_POPULATE);
     return toResponse(roll as unknown as PopulatedRoll);
