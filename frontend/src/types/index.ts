@@ -324,6 +324,11 @@ export interface MaterialRoll {
   date: string;
   remark_code?: string;
   remarks?: string;
+  /** Real references to the Remark master now, not codes — set through its own endpoint
+   *  (see materialRolls.service.updateRemarkCodes on the backend), so it can be revised
+   *  after registration. `remark_code`/`label`/`status` come back null when a remark's id
+   *  no longer resolves to a document. */
+  remark_codes?: Array<{ id: string; remark_code: string | null; label: string | null; status: MasterStatus | null }>;
   tag_photo_url: string | null;
   stitched_barcode_photo_url: string | null;
   side1_photo_url: string | null;

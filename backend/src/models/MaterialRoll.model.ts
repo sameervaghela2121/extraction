@@ -52,12 +52,16 @@ export interface IMaterialRoll {
    *  remark_code rather than replacing it: the code is what reports group by, the text is
    *  what the next person actually reads. */
   remarks?: string;
-  /** Zero or more codes from the remark master, picked after the roll already exists —
-   *  unlike remark_code (set once, at registration), this can be revised over the roll's
-   *  life, so it is set through its own endpoint rather than the general update. Same
-   *  "store the code, not a live reference" convention: not validated against the master
-   *  here either. */
-  remark_codes?: string[];
+  /** Zero or more Remark documents, picked after the roll already exists — unlike
+   *  remark_code (set once, at registration, and still stored as the bare code — see its
+   *  own comment above), this can be revised over the roll's life, so it is set through
+   *  its own endpoint rather than the general update.
+   *
+   *  A real reference, not a copy of the code: unlike every other master in this codebase,
+   *  this field is deliberately allowed to go stale if its Remark is relabelled or
+   *  retired, because the picker it feeds needs the remark's *current* label and status,
+   *  not whatever it was called the day it was picked. */
+  remark_codes?: Types.ObjectId[];
   /** The date the roll was received. */
   date: Date;
   status: RollStatus;
@@ -113,7 +117,7 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     remarks: { type: String, trim: true },
     // Undefined rather than [] when empty, like photo_paths — so clearing it back to none
     // reads as "not set" rather than an empty list sitting in every roll document.
-    remark_codes: { type: [String], uppercase: true, trim: true, default: undefined },
+    remark_codes: { type: [{ type: Schema.Types.ObjectId, ref: "Remark" }], default: undefined },
     date: { type: Date, required: true },
     status: { type: String, enum: [...ROLL_STATUSES], default: "IN_STOCK", index: true },
     client_id: { type: String, trim: true },
