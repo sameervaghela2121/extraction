@@ -20,6 +20,7 @@ import GeneralVoucherDetailPage from "./features/generalVouchers/GeneralVoucherD
 import UserManagementPage from "./features/users/UserManagementPage";
 import MasterDataPage from "./features/masters/MasterDataPage";
 import BarcodeGeneratorPage from "./features/barcodes/BarcodeGeneratorPage";
+import DownloadAppPage from "./features/misc/DownloadAppPage";
 import NoAccessPage from "./features/misc/NoAccessPage";
 
 // Wrapped so reactRouterV6BrowserTracingIntegration can see the route definitions and
@@ -57,6 +58,7 @@ export const router = createRouter([
               { path: "/masters", element: <Navigate to="/masters/vendors" replace /> },
               { path: "/masters/:section", element: <MasterDataPage /> },
               { path: "/barcodes", element: <BarcodeGeneratorPage /> },
+              { path: "/download-app", element: <DownloadAppPage /> },
             ],
           },
           {
