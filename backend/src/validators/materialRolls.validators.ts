@@ -86,8 +86,12 @@ export const updateRollSchema = createRollSchema
 // or updateRollSchema, since this list is revised after registration rather than filled in
 // once with the rest of the form. An empty array is valid: it clears every code back off
 // the roll, same as sending no photos clears a photo slot.
+//
+// Ids, not codes: the caller (the app's cached remark list, or this admin panel) already
+// has each remark's own id from GET /remarks, and the service checks every one actually
+// names a Remark that exists before saving — a code string skipped that check entirely.
 export const updateRollRemarkCodesSchema = z.object({
-  remark_codes: z.array(z.string().trim().min(1)).max(20, "Too many remark codes"),
+  remark_codes: z.array(objectId).max(20, "Too many remark codes"),
 });
 
 export const listRollsQuerySchema = z.object({
@@ -96,10 +100,10 @@ export const listRollsQuerySchema = z.object({
   vendor_id: objectId.optional(),
   status: z.enum(ROLL_STATUSES).optional(),
   location: z.string().trim().optional(),
-  // One code from the remark master — matches a roll whose remark_codes array contains it,
-  // same as filtering vendor_id or status matches an exact field. Not validated against the
-  // master here either, same convention as the code itself.
-  remark_code: z.string().trim().min(1).optional(),
+  // A Remark's id — matches a roll whose remark_codes array contains it, same as filtering
+  // vendor_id or status matches an exact field. Renamed from the old remark_code (a code
+  // string) now that the field itself stores real references.
+  remark_id: objectId.optional(),
   // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
   // to updatedAt ascending so the client can page through the backlog oldest-first and
   // save the last updatedAt it saw as the next checkpoint.
