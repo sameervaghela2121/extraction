@@ -492,31 +492,87 @@ textarea {
 }
 
 /* ---- Barcode labels ---- */
-/* Picking and previewing sit side by side: the sheet used to live under the roll table,
-   so a label was a full page-scroll away from the checkbox that created it. */
-.barcode-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
-  align-items: start;
+/* The box above the history: a code, a roll number or a Royal Touche paper code, searched
+   across runs and rolls at once — see barcodeBatchesService.search on the backend. */
+.global-search {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
-.barcode-sheet-wrap {
-  position: sticky;
-  top: 18px;
-  max-height: calc(100vh - 36px);
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+.global-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.global-search-input {
+  width: 100%;
+  padding: 10px 14px 10px 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
   background: var(--surface);
-  padding: 14px;
+  color: var(--text);
+  outline: none;
 }
-@media (max-width: 1100px) {
-  .barcode-layout {
+.global-search-input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+/* Every saved run on the left, whichever one is open shown in full on the right — the
+   history used to be a plain list with a separate "Ready to print" sidebar below it;
+   this replaces both with one card so opening a run and printing it are the same place. */
+.barcode-history {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+}
+/* min-height:0 overrides grid items' default min-height:auto (fits content) — without it
+   the row, and so the whole card, would grow to fit every saved run instead of this panel
+   scrolling internally within whatever height the fixed-height page (see AppLayout.tsx)
+   actually gives it. */
+.barcode-history-list {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+}
+.barcode-history-list > .stack {
+  min-height: 0;
+}
+.barcode-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease;
+}
+.barcode-history-row:hover {
+  background: var(--surface-2);
+}
+/* Same "you are here" treatment the rest of the panel uses for the active nav link — the
+   row is the thing being looked at, not a badge stuck inside it. */
+.barcode-history-row.active {
+  background: var(--brand-soft);
+}
+.barcode-history-panel {
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .barcode-history {
     grid-template-columns: minmax(0, 1fr);
   }
-  .barcode-sheet-wrap {
-    position: static;
-    max-height: none;
+  .barcode-history-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    max-height: 260px;
   }
 }
 /* Every input carries its own label — the people using this screen don't read placeholders
@@ -557,54 +613,35 @@ textarea {
 .facts-grid strong {
   font-size: 13px;
 }
-.barcode-run {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  /* The left border is transparent rather than absent, so the accent on a selected row
-     does not shift the content across by 3px when it appears. */
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  transition: background 120ms ease, border-color 120ms ease;
-}
-/* The five action buttons wrap onto their own new line as a group when the row is too
-   narrow for all of them, rather than each button individually squeezing or breaking. */
-.barcode-run-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-/* Which run the preview is showing. The whole row carries it, not a badge inside it: the
-   row is the thing being looked at, and a highlighted row is the same "you are here" the
-   rest of the panel already uses for the active nav link. */
-.barcode-run.selected {
-  background: var(--brand-soft);
-  border-color: var(--brand-ring);
-  border-left-color: var(--brand);
-}
 .barcode-sheet {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
 }
 .barcode-label-slot {
   display: flex;
+}
+/* One bordered card per barcode — the image, its code, and its own Print action all
+   inside the same box, rather than the button floating below as a separate element with
+   no visual tie to what it prints. */
+.barcode-card {
+  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.barcode-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 .barcode-label {
-  border: 1px solid var(--border);
-  border-radius: 8px;
   background: #fff;
   color: #000;
-  padding: 10px;
-  width: 100%;
+  padding: 12px 10px 10px;
   text-align: center;
 }
 /* height:auto matters: the canvas is ~312x90 intrinsic, so constraining only the width
@@ -625,11 +662,33 @@ textarea {
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.06em;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .barcode-label-meta {
   font-size: 11px;
   color: #444;
+}
+/* The card's own footer action, not a button that happens to sit under it — full width,
+   flush against the barcode above via the divider, same treatment a menu item gets. */
+.barcode-card-print {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.barcode-card-print:hover {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
 }
 
 /* Printing puts labels on the page and nothing else: no sidebar, no buttons, no card
@@ -649,19 +708,22 @@ textarea {
     background: #fff;
   }
   /* The screen's side-panel framing has no place on paper. */
-  .barcode-layout {
+  .barcode-history {
     display: block;
   }
-  .barcode-sheet-wrap {
-    position: static;
+  .barcode-history-list {
+    display: none;
+  }
+  .barcode-history-panel {
     max-height: none;
     overflow: visible;
-    border: 0;
     padding: 0;
-    background: none;
   }
   .barcode-label-slot {
     break-inside: avoid;
+  }
+  .barcode-card-print {
+    display: none !important;
   }
   .barcode-sheet {
     grid-template-columns: repeat(3, 1fr);

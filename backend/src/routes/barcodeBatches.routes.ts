@@ -8,6 +8,7 @@ import {
   createBarcodeBatchSchema,
   listBarcodeBatchesQuerySchema,
   nextNumberQuerySchema,
+  searchBarcodeBatchesQuerySchema,
 } from "../validators/barcodeBatches.validators";
 
 const router = Router();
@@ -24,6 +25,12 @@ router.get(
   "/next-number",
   validate({ query: nextNumberQuerySchema }),
   asyncHandler(barcodeBatchesController.nextNumber),
+);
+// Also before "/:id" — literal, read-only.
+router.get(
+  "/search",
+  validate({ query: searchBarcodeBatchesQuerySchema }),
+  asyncHandler(barcodeBatchesController.search),
 );
 router.post(
   "/",

@@ -325,7 +325,7 @@ export default function RollsPage() {
   };
 
   return (
-    <div>
+    <div className="list-page">
       <PageHeader
         title="Rolls"
         subtitle="Rolls received into the godown. Registration happens on the app — this is for correcting it."
@@ -341,7 +341,7 @@ export default function RollsPage() {
         />
       </div>
 
-      <div className="card" style={{ overflow: "hidden" }}>
+      <div className="card list-page-scroll list-page-table-card" style={{ overflow: "hidden" }}>
         {loading ? (
           <Spinner />
         ) : (
