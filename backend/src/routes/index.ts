@@ -18,6 +18,7 @@ import stockRoutes from "./stock.routes";
 import syncRoutes from "./sync.routes";
 import ocrRoutes from "./ocr.routes";
 import mediaRoutes from "./media.routes";
+import appRoutes from "./app.routes";
 
 const router = Router();
 
@@ -47,5 +48,6 @@ router.use("/stock", stockRoutes);
 router.use("/sync", syncRoutes);
 router.use("/ocr", ocrRoutes);
 router.use("/media", mediaRoutes);
+router.use("/app", appRoutes);
 
 export default router;

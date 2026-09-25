@@ -12,6 +12,7 @@ import {
   Users,
   Database,
   ScanBarcode,
+  Smartphone,
   ChevronDown,
   LogOut,
   type LucideIcon,
@@ -78,6 +79,8 @@ const NAV: NavItem[] = [
     ],
   },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
+  { to: "/download-app", label: "Download app", icon: Smartphone, supervisorVisible: true },
+
 ];
 
 /** Every leaf a nav item points at. A group contributes its children; anything else is

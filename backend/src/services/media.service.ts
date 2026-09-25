@@ -15,6 +15,20 @@ const bucket = storage.bucket(env.gcsBucket);
  */
 const READ_URL_TTL_MS = 12 * 60 * 60 * 1000;
 
+/**
+ * Fixed path, not per-release: there is one "current build" at a time, and uploading a new
+ * one just overwrites this object — the download link never changes, so it never needs
+ * republishing anywhere it's shared (a QR code, a message to the godown).
+ *
+ * Uploaded manually today (gsutil or the GCP console) rather than through an admin-panel
+ * upload flow — see DownloadAppPage.tsx for the exact steps to place a new build here.
+ */
+const APK_OBJECT_PATH = "app/Royal-Touche.apk";
+
+/** Short-lived: minted fresh on every click rather than cached, so there is nothing to
+ *  invalidate when a new build overwrites the object above. */
+const APK_URL_TTL_MS = 5 * 60 * 1000;
+
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
@@ -129,5 +143,31 @@ export const mediaService = {
       logSigningFailure(objectPath, err);
       return null;
     }
+  },
+
+  /**
+   * A signed URL for the current Android build, forced to download rather than open —
+   * `responseDisposition` and `responseType` override whatever the object's own stored
+   * metadata says, so this works out of the box regardless of how the file was uploaded.
+   *
+   * Left strict, like signedReadUrl: a missing/unsignable object here means either nobody
+   * has uploaded a build yet or the storage setup is broken, and the download button should
+   * say so rather than silently doing nothing.
+   */
+  async signedApkDownloadUrl(): Promise<string> {
+    const file = bucket.file(APK_OBJECT_PATH);
+    // Signing succeeds even for an object that was never uploaded — checked explicitly so
+    // "nobody's placed a build yet" surfaces as a clear message from our own API instead
+    // of a raw 404 from storage.googleapis.com once the browser follows the link.
+    const [exists] = await file.exists();
+    if (!exists) throw new ApiError(404, "No app build has been uploaded yet");
+    const [url] = await file.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + APK_URL_TTL_MS,
+      responseDisposition: 'attachment; filename="Royal-Touche.apk"',
+      responseType: "application/vnd.android.package-archive",
+    });
+    return url;
   },
 };
