@@ -79,7 +79,7 @@ interface FormState {
 function toForm(roll: MaterialRoll): FormState {
   return {
     material_id: roll.material_id.id,
-    // Empty for a roll returned to its vendor — it is at no location.
+    // Empty for a roll that's finished — consumed, or returned to its vendor.
     location: roll.location?.id ?? "",
     gsm: String(roll.gsm),
     width: String(roll.width),

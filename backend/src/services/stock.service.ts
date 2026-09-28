@@ -243,11 +243,14 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     const home = lastOut?.from_location;
 
     const from = roll.location;
+    const isConsumed = returned === 0;
     // The scale reading is the roll's new weight. A roll that went out without ever being
     // weighed gets its first weight here.
     roll.remaining_weight = returned;
-    roll.status = returned === 0 ? "CONSUMED" : "IN_STOCK";
-    roll.location = home ?? roll.location;
+    roll.status = isConsumed ? "CONSUMED" : "IN_STOCK";
+    // A roll that comes back empty doesn't go "home" — it's finished, same as
+    // RETURN_TO_VENDOR. Clients show "-" for the empty location.
+    roll.location = isConsumed ? null : (home ?? roll.location);
     await roll.save();
     // The store gets back whatever is still on the roll; `consumed` is what the line used.
     const returnedToStore = roll.remaining_weight ?? 0;
@@ -257,7 +260,7 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
       used_weight: consumed,
       roll_weight_after: roll.remaining_weight,
       from_location: from,
-      to_location: home,
+      to_location: isConsumed ? null : home,
     };
   }
 
@@ -316,6 +319,8 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     const delta = roll.status === "ISSUED" ? 0 : -used;
     roll.remaining_weight = 0;
     roll.status = "CONSUMED";
+    // Finished, same as RETURN_TO_VENDOR — clients show "-" for the empty location.
+    roll.location = null;
     await roll.save();
     return { delta, weight: used, used_weight: used, roll_weight_after: 0, from_location: from };
   }
@@ -346,7 +351,11 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
   }
   const delta = target - (roll.remaining_weight ?? 0);
   roll.remaining_weight = target;
-  if (target === 0) roll.status = "CONSUMED";
+  if (target === 0) {
+    roll.status = "CONSUMED";
+    // Finished, same as RETURN_TO_VENDOR — clients show "-" for the empty location.
+    roll.location = null;
+  }
   await roll.save();
   return { delta, weight: Math.abs(delta), roll_weight_after: roll.remaining_weight };
 }
