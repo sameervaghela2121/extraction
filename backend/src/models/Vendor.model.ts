@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import { MASTER_STATUSES, type MasterStatus } from "./masterStatus";
 
 /**
  * One base paper this supplier makes, straight off the Royal Touche paper-codes sheet.
@@ -42,7 +43,7 @@ export interface IVendor {
   };
   address?: string;
   gst_number?: string;
-  is_active: boolean;
+  status: MasterStatus;
   /** Minted on the device when a vendor is added offline, so a flush that retries after a
    *  lost response gets this vendor back instead of creating a second one. Absent on
    *  vendors created from the web portal, which never queues. */
@@ -80,7 +81,7 @@ const vendorSchema = new Schema<IVendor>(
     },
     address: { type: String, trim: true },
     gst_number: { type: String, uppercase: true, trim: true },
-    is_active: { type: Boolean, default: true, index: true },
+    status: { type: String, enum: [...MASTER_STATUSES], default: "active", required: true, index: true },
     client_id: { type: String, trim: true },
   },
   { timestamps: true },

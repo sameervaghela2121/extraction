@@ -4,6 +4,7 @@ import { StockTransaction } from "../models/StockTransaction.model";
 import { RawMaterial } from "../models/RawMaterial.model";
 import { Vendor } from "../models/Vendor.model";
 import { Remark } from "../models/Remark.model";
+import type { MasterStatus } from "../models/masterStatus";
 import { ApiError } from "../utils/ApiError";
 import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
@@ -87,14 +88,14 @@ function registrationPhotos(roll: Pick<IMaterialRoll, (typeof PHOTO_FIELDS)[numb
 type NamedRef = { _id: Types.ObjectId; name: string; vendor_code?: string };
 
 /** What .populate leaves behind in place of a remark_codes entry. */
-type RemarkRef = { _id: Types.ObjectId; remark_code: string; label: string; is_active: boolean };
+type RemarkRef = { _id: Types.ObjectId; remark_code: string; label: string; status: MasterStatus };
 
 // Only the two ref paths, and only the fields the roll screens render — a roll list
 // shouldn't drag whole vendor and material documents across the wire.
 const REF_POPULATE = [
   { path: "material_id", select: "name" },
   { path: "vendor_id", select: "name vendor_code" },
-  { path: "remark_codes", select: "remark_code label is_active" },
+  { path: "remark_codes", select: "remark_code label status" },
   { path: "location", select: LOCATION_REF_SELECT },
 ];
 
@@ -117,8 +118,8 @@ function remarkRefResponse(refs?: Array<Types.ObjectId | RemarkRef>) {
   if (!refs || refs.length === 0) return undefined;
   return refs.map((ref) =>
     ref instanceof Types.ObjectId
-      ? { id: ref.toString(), remark_code: null, label: null, is_active: null }
-      : { id: ref._id.toString(), remark_code: ref.remark_code, label: ref.label, is_active: ref.is_active },
+      ? { id: ref.toString(), remark_code: null, label: null, status: null }
+      : { id: ref._id.toString(), remark_code: ref.remark_code, label: ref.label, status: ref.status },
   );
 }
 
@@ -206,9 +207,9 @@ type UsableRef = NamedRef | undefined;
 
 async function loadUsableMaterial(materialId?: string): Promise<UsableRef> {
   if (!materialId) return undefined;
-  const material = await RawMaterial.findById(materialId).select("is_active name").lean();
+  const material = await RawMaterial.findById(materialId).select("status name").lean();
   if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
-  if (!material.is_active) {
+  if (material.status !== "active") {
     throw ApiError.badRequest(`${material.name} is inactive — reactivate it before booking stock against it`);
   }
   return material;
@@ -219,9 +220,9 @@ async function loadUsableVendor(
   vendorId?: string,
 ): Promise<(NamedRef & { vendor_code: string }) | undefined> {
   if (!vendorId) return undefined;
-  const vendor = await Vendor.findById(vendorId).select("is_active name vendor_code").lean();
+  const vendor = await Vendor.findById(vendorId).select("status name vendor_code").lean();
   if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
-  if (!vendor.is_active) {
+  if (vendor.status !== "active") {
     throw ApiError.badRequest(`${vendor.name} is inactive — pick a different vendor`);
   }
   return vendor;

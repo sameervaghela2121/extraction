@@ -1,5 +1,5 @@
 /**
- * One-time migration: location strings -> Location ObjectIds, and Location.status -> is_active.
+ * One-time migration: location strings -> Location ObjectIds.
  *
  *   npx tsx src/utils/migrateLocationRefs.ts                         # dry run, changes nothing
  *   npx tsx src/utils/migrateLocationRefs.ts --apply                 # write
@@ -11,11 +11,10 @@
  *   string is matched to a Location by location_code, then by name (case-insensitive).
  *   A roll that went back to its vendor gets null, as does a RETURN_TO_VENDOR's
  *   to_location (it held the vendor's name, not a location).
- * - locations.status "active"/"inactive" becomes is_active true/false, status is removed.
  *
  * Any string that matches no Location is listed and --apply refuses to write, unless
  * --unmatched-to-null says to store null for those. Safe to re-run: only string values
- * and leftover status fields are touched.
+ * are touched.
  *
  * Raw collections, not the models: the models now declare ObjectIds, and would try to
  * cast the old strings on the way in.
@@ -42,16 +41,7 @@ async function main() {
   const rolls = MaterialRoll.collection;
   const transactions = StockTransaction.collection;
 
-  // --- locations: status -> is_active -----------------------------------------------
   const allLocations = (await locations.find({}).toArray()) as Doc[];
-  const locationOps: UpdateOp[] = allLocations
-    .filter((l) => l.status !== undefined || l.is_active === undefined)
-    .map((l) => ({
-      updateOne: {
-        filter: { _id: l._id },
-        update: { $set: { is_active: l.status !== "inactive" }, $unset: { status: "" } },
-      },
-    }));
 
   const byId = new Map(allLocations.map((l) => [l._id.toString(), l._id]));
   const byCode = new Map<string, Types.ObjectId>();
@@ -116,7 +106,6 @@ async function main() {
     txOps.push({ updateOne: { filter: { _id: t._id }, update: { $set: set } } });
   }
 
-  logger.info(`locations: ${locationOps.length} of ${allLocations.length} need status -> is_active`);
   logger.info(`rolls: ${stringRolls.length} with a string location, ${rollOps.length} ready to write`);
   logger.info(
     `movements: ${stringTxs.length} with a string location, ${txOps.length} ready to write, ${txSkipped} held back`,
@@ -137,11 +126,10 @@ async function main() {
     );
     process.exitCode = 1;
   } else {
-    if (locationOps.length) await locations.bulkWrite(locationOps, { ordered: false });
     if (rollOps.length) await rolls.bulkWrite(rollOps, { ordered: false });
     if (txOps.length) await transactions.bulkWrite(txOps, { ordered: false });
     logger.info(
-      `written: ${locationOps.length} locations, ${rollOps.length} rolls, ${txOps.length} movements`,
+      `written: ${rollOps.length} rolls, ${txOps.length} movements`,
     );
   }
 

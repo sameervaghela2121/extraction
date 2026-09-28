@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import { MASTER_STATUSES, type MasterStatus } from "./masterStatus";
 
 /**
  * A standard remark an operator picks instead of typing.
@@ -14,7 +15,7 @@ export interface IRemark {
   label: string;
   /** Picker order. The common ones belong at the top, not in alphabetical order. */
   sort_order?: number;
-  is_active: boolean;
+  status: MasterStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,7 +27,7 @@ const remarkSchema = new Schema<IRemark>(
     remark_code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     label: { type: String, required: true, trim: true },
     sort_order: { type: Number },
-    is_active: { type: Boolean, default: true, index: true },
+    status: { type: String, enum: [...MASTER_STATUSES], default: "active", required: true, index: true },
   },
   { timestamps: true },
 );

@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { GodownLocation, MasterStatus, MaterialType, Remark, Vendor } from "../types";
+import type { GodownLocation, MaterialType, Remark, Vendor } from "../types";
 
 /** The master collections are the same CRUD shape over different paths, so one factory
  *  covers all of them. None of them paginate — they are read whole into pickers. */
@@ -16,31 +16,9 @@ function crud<T extends { id: string }>(path: string) {
   };
 }
 
-/** The backend stores every master's state as `is_active`; the shared masters screen (and
- *  every MasterSpec) works in `status`, so this translates at the edge in both directions
- *  for whichever master is asking. */
-function crudWithStatus<T extends { id: string; status: MasterStatus }>(path: string) {
-  type Wire = Omit<T, "status"> & { is_active: boolean };
-  const inner = crud<Wire>(path);
-
-  const fromWire = ({ is_active, ...rest }: Wire): T =>
-    ({ ...rest, status: is_active ? "active" : "inactive" }) as unknown as T;
-
-  const toWire = ({ status, ...rest }: Partial<T>): Partial<Wire> =>
-    (status === undefined ? rest : { ...rest, is_active: status === "active" }) as Partial<Wire>;
-
-  return {
-    list: (q?: string) => inner.list(q).then((rows) => rows.map(fromWire)),
-    create: (body: Partial<T>) => inner.create(toWire(body)).then(fromWire),
-    update: (id: string, body: Partial<T>) => inner.update(id, toWire(body)).then(fromWire),
-    remove: (id: string) => inner.remove(id).then((r) => fromWire(r as Wire)),
-    reorder: (ids: string[]) => inner.reorder(ids).then((rows) => rows.map(fromWire)),
-  };
-}
-
-export const vendorsApi = crudWithStatus<Vendor>("/vendors");
-export const locationsApi = crudWithStatus<GodownLocation>("/locations");
+export const vendorsApi = crud<Vendor>("/vendors");
+export const locationsApi = crud<GodownLocation>("/locations");
 // Path stays "/raw-materials": the backend resource is unchanged, only what the screen
 // calls it. Renaming the endpoint would break the mobile app, which reads the same list.
-export const materialTypesApi = crudWithStatus<MaterialType>("/raw-materials");
-export const remarksApi = crudWithStatus<Remark>("/remarks");
+export const materialTypesApi = crud<MaterialType>("/raw-materials");
+export const remarksApi = crud<Remark>("/remarks");
