@@ -79,7 +79,8 @@ interface FormState {
 function toForm(roll: MaterialRoll): FormState {
   return {
     material_id: roll.material_id.id,
-    location: roll.location,
+    // Empty for a roll returned to its vendor — it is at no location.
+    location: roll.location?.id ?? "",
     gsm: String(roll.gsm),
     width: String(roll.width),
     weight: String(roll.weight),
@@ -243,6 +244,9 @@ export default function RollsPage() {
   const weightLocked = editing?.status === "CONSUMED";
   const lockReason = "This roll is consumed, so its weight can no longer be changed.";
 
+  // The backend refuses to move a roll to an inactive location.
+  const activeLocations = locations.filter((l) => l.status === "active");
+
   const setValue = (field: keyof FormState, value: string) =>
     setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
 
@@ -254,7 +258,7 @@ export default function RollsPage() {
 
     const patch: Record<string, unknown> = {};
     if (form.material_id !== editing.material_id.id) patch.material_id = form.material_id;
-    if (form.location !== editing.location) patch.location = form.location;
+    if (form.location && form.location !== (editing.location?.id ?? "")) patch.location = form.location;
     if (Number(form.gsm) !== editing.gsm) patch.gsm = Number(form.gsm);
     if (Number(form.width) !== editing.width) patch.width = Number(form.width);
 
@@ -550,18 +554,19 @@ export default function RollsPage() {
               </label>
 
               <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
-                <span className="faint">Location *</span>
+                <span className="faint">Location</span>
                 <select
                   className="input"
                   value={form.location}
                   onChange={(e) => setValue("location", e.target.value)}
-                  required
                 >
-                  {!locations.some((l) => l.name === form.location) && (
-                    <option value={form.location}>{form.location}</option>
+                  {!editing.location && <option value="">-</option>}
+                  {/* The roll's current location stays pickable even once it is deactivated. */}
+                  {editing.location && !activeLocations.some((l) => l.id === editing.location!.id) && (
+                    <option value={editing.location.id}>{editing.location.name ?? "-"}</option>
                   )}
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.name}>
+                  {activeLocations.map((l) => (
+                    <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
                   ))}

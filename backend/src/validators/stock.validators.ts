@@ -41,8 +41,8 @@ export const movementFieldsSchema = z
     // RETURN only: what the roll weighs coming back. Equal to what went out means nothing
     // was used; 0 means the whole roll was consumed.
     returned_weight: z.number().nonnegative().optional(),
-    // OUT only: where the roll is going. The only thing an OUT needs.
-    location: z.string().trim().min(1).optional(),
+    // OUT only: the id of the Location the roll is going to. The only thing an OUT needs.
+    location: objectId.optional(),
     issued_to: z.string().trim().optional(),
     remarks: z.string().trim().optional(),
     // A code from the remark master, alongside (not instead of) the free text.

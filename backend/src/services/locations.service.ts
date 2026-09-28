@@ -1,5 +1,6 @@
-import { type FilterQuery } from "mongoose";
-import { Location, type ILocation, type LocationStatus } from "../models/Location.model";
+import { Types, type FilterQuery } from "mongoose";
+import { Location, type ILocation } from "../models/Location.model";
+import { ApiError } from "../utils/ApiError";
 import {
   escapeRegex,
   findOr404,
@@ -14,10 +15,10 @@ type LocationInput = {
   name: string;
   godown?: string;
   sort_order?: number;
-  status?: LocationStatus;
+  is_active?: boolean;
 };
 
-const PATCHABLE = ["name", "godown", "sort_order", "status"] as const;
+const PATCHABLE = ["name", "godown", "sort_order", "is_active"] as const;
 const CODE_TAKEN = "A location with this code already exists";
 
 function toResponse(l: ILocation) {
@@ -27,18 +28,41 @@ function toResponse(l: ILocation) {
     name: l.name,
     godown: l.godown,
     sort_order: l.sort_order,
-    status: l.status,
+    is_active: l.is_active,
     createdAt: l.createdAt,
     updatedAt: l.updatedAt,
   };
 }
 
+/** The fields a roll or movement response shows for its location. */
+export const LOCATION_REF_SELECT = "location_code name";
+
+export type LocationRef = { _id: Types.ObjectId; location_code: string; name: string };
+
+/** Null when there is no location (a roll returned to its vendor). An unpopulated id (a
+ *  location that no longer resolves) still returns the id, with nulls beside it. */
+export function locationRefResponse(ref?: Types.ObjectId | LocationRef | null) {
+  if (!ref) return null;
+  if (ref instanceof Types.ObjectId) return { id: ref.toString(), location_code: null, name: null };
+  return { id: ref._id.toString(), location_code: ref.location_code, name: ref.name };
+}
+
+/** A roll can only be put at a location that exists and is still in use. */
+export async function loadUsableLocation(id: string): Promise<LocationRef> {
+  const location = await Location.findById(id).select(`${LOCATION_REF_SELECT} is_active`).lean();
+  if (!location) throw ApiError.badRequest("That location no longer exists — pick another");
+  if (!location.is_active) {
+    throw ApiError.badRequest(`${location.name} is inactive — pick a different location`);
+  }
+  return location;
+}
+
 export const locationsService = {
   // No pagination, same reasoning as vendors and materials: master data, read whole into
   // a picker. There will be a handful of bays, not thousands.
-  async list(query: { q?: string; godown?: string; status?: LocationStatus }) {
+  async list(query: { q?: string; godown?: string; is_active?: boolean }) {
     const filter: FilterQuery<ILocation> = {};
-    if (query.status) filter.status = query.status;
+    if (query.is_active !== undefined) filter.is_active = query.is_active;
     if (query.godown) filter.godown = query.godown;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
@@ -80,13 +104,13 @@ export const locationsService = {
     return toResponse(location);
   },
 
-  // Soft delete, same as materials and vendors: rolls and movements record the location
-  // they were at by name, and a bay that closes must not erase where stock used to sit.
+  // Soft delete, same as materials and vendors: rolls and movements reference the location,
+  // and a bay that closes must not erase where stock used to sit.
   async remove(id: string) {
     const location = await findOr404(Location, id, "location");
-    location.status = "inactive";
+    location.is_active = false;
     await location.save();
-    return { id: location._id.toString(), status: location.status };
+    return { id: location._id.toString(), is_active: location.is_active };
   },
 
   // Drag-and-drop's other half: the frontend sends every row's id in its new top-to-bottom

@@ -279,6 +279,15 @@ export interface Paginated<T> {
  *  used up on site, and "why did this roll stop" should read correctly. */
 export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR";
 
+/** A roll's or movement's location as the API returns it. The whole field is null when
+ *  there is none (a roll returned to its vendor); code/name are null when the id no longer
+ *  resolves to a Location. */
+export interface LocationRef {
+  id: string;
+  location_code: string | null;
+  name: string | null;
+}
+
 export interface MaterialRollListItem {
   id: string;
   roll_number: string;
@@ -287,7 +296,7 @@ export interface MaterialRollListItem {
   gsm: number;
   width: number;
   unit: string;
-  location: string;
+  location: LocationRef | null;
   status: RollStatus;
 }
 
@@ -319,7 +328,7 @@ export interface MaterialRoll {
   unit: string;
   gsm: number;
   width: number;
-  location: string;
+  location: LocationRef | null;
   status: RollStatus;
   date: string;
   remark_code?: string;
@@ -348,8 +357,8 @@ export interface StockMovement {
   weight: number;
   used_weight: number | null;
   description: string;
-  from_location?: string;
-  to_location?: string;
+  from_location: LocationRef | null;
+  to_location: LocationRef | null;
   /** The roll's weight after this row — the running balance a history reads down. */
   roll_weight_after: number | null;
   issued_to?: string;

@@ -13,6 +13,12 @@ import { paginated } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import { refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
+import {
+  LOCATION_REF_SELECT,
+  loadUsableLocation,
+  locationRefResponse,
+  type LocationRef,
+} from "./locations.service";
 
 type MovementInput = {
   transaction_type: TransactionType;
@@ -50,6 +56,8 @@ const REF_POPULATE = [
   { path: "vendor_id", select: "name" },
   { path: "roll_id", select: "roll_number" },
   { path: "created_by", select: "name" },
+  { path: "from_location", select: LOCATION_REF_SELECT },
+  { path: "to_location", select: LOCATION_REF_SELECT },
 ];
 
 function refResponse(ref: Types.ObjectId | NamedRef | undefined, labelKey: "name" | "roll_number") {
@@ -62,13 +70,21 @@ function refResponse(ref: Types.ObjectId | NamedRef | undefined, labelKey: "name
 
 type PopulatedTransaction = Omit<
   IStockTransaction,
-  "material_id" | "roll_id" | "vendor_id" | "created_by"
+  "material_id" | "roll_id" | "vendor_id" | "created_by" | "from_location" | "to_location"
 > & {
   material_id: Types.ObjectId | NamedRef;
   roll_id?: Types.ObjectId | NamedRef;
   vendor_id?: Types.ObjectId | NamedRef;
   created_by: Types.ObjectId | NamedRef;
+  from_location?: Types.ObjectId | LocationRef | null;
+  to_location?: Types.ObjectId | LocationRef | null;
 };
+
+/** The populated name of a ref, or undefined when it is absent or no longer resolves. */
+function refName(ref?: Types.ObjectId | { name?: string } | null): string | undefined {
+  if (!ref || ref instanceof Types.ObjectId) return undefined;
+  return ref.name;
+}
 
 /**
  * One line of plain English per movement.
@@ -78,7 +94,10 @@ type PopulatedTransaction = Omit<
  * leaving every client to work that out, the row says it.
  */
 function describe(t: PopulatedTransaction, unit = "kg"): string {
-  const to = t.to_location ? ` to ${t.to_location}` : "";
+  const toName = refName(t.to_location);
+  const to = toName ? ` to ${toName}` : "";
+  const vendorName = refName(t.vendor_id);
+  const toVendor = vendorName ? ` ${vendorName}` : "";
   switch (t.transaction_type) {
     case "IN":
       return `Received ${t.weight} ${unit}`;
@@ -90,8 +109,8 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
       return t.weight ? `Consumed — ${t.weight} ${unit} used up` : "Consumed";
     case "RETURN_TO_VENDOR":
       return t.weight
-        ? `Returned to vendor${to} — ${t.weight} ${unit}`
-        : `Returned to vendor${to}`;
+        ? `Returned to vendor${toVendor} — ${t.weight} ${unit}`
+        : `Returned to vendor${toVendor}`;
     default:
       return `Corrected by ${t.weight} ${unit}`;
   }
@@ -119,8 +138,8 @@ async function toResponse(t: PopulatedTransaction) {
     used_weight: t.used_weight ?? null,
     // Ready to render as-is — the app should not have to combine the two numbers.
     description: describe(t),
-    from_location: t.from_location,
-    to_location: t.to_location,
+    from_location: locationRefResponse(t.from_location),
+    to_location: locationRefResponse(t.to_location),
     // After this movement: what the roll weighs, and what the material has on hand.
     roll_weight_after: t.roll_weight_after ?? null,
     material_weight_after: t.material_weight_after,
@@ -152,8 +171,8 @@ type RollEffect = {
   delta: number;
   /** What the ledger records as this movement's weight — always a magnitude. */
   weight: number;
-  from_location?: string;
-  to_location?: string;
+  from_location?: Types.ObjectId | null;
+  to_location?: Types.ObjectId | null;
   /** RETURN_TO_VENDOR only: the roll's own vendor, read off it rather than retyped, so the
    *  transaction row carries it without the caller having to resupply what's already on
    *  the roll. */
@@ -184,10 +203,11 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
       throw ApiError.conflict("This roll is empty, there is nothing to take out");
     }
     const from = roll.location;
+    // Only when the movement names one: an OUT that does not say where it went must leave
+    // the roll where it was rather than blank it.
+    const to = input.location ? (await loadUsableLocation(input.location))._id : undefined;
     roll.status = "ISSUED";
-    // Only when the movement names one: location is required on a roll, so an OUT that
-    // does not say where it went must leave the roll where it was rather than blank it.
-    if (input.location !== undefined) roll.location = input.location;
+    if (to) roll.location = to;
     await roll.save();
     // The whole roll leaves the store, so that is what the row records and what drops out
     // of on-hand until it returns.
@@ -198,7 +218,7 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
       // Unchanged by an OUT: nothing has been used yet, the roll is just elsewhere.
       roll_weight_after: roll.remaining_weight,
       from_location: from,
-      to_location: input.location,
+      to_location: to,
     };
   }
 
@@ -265,16 +285,16 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     // Its own status, not CONSUMED — "why did this roll stop" needs to read correctly on
     // the roll itself (the app's status pill), not only in its transaction history.
     roll.status = "RETURNED_TO_VENDOR";
-    // The roll's own record should say where it actually is now, not the rack it left —
-    // same reasoning as OUT updating roll.location.
-    roll.location = vendor.name;
+    // At no location any more: the roll is with the vendor. The status and vendor_id say
+    // where it went; clients show "-" for the empty location.
+    roll.location = null;
     await roll.save();
     return {
       delta: -used,
       weight: used,
       roll_weight_after: 0,
       from_location: from,
-      to_location: vendor.name,
+      to_location: null,
       vendor_id: roll.vendor_id,
     };
   }
