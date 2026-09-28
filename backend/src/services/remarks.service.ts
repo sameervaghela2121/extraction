@@ -1,5 +1,6 @@
 import { type FilterQuery } from "mongoose";
 import { Remark, type IRemark } from "../models/Remark.model";
+import type { MasterStatus } from "../models/masterStatus";
 import {
   escapeRegex,
   findOr404,
@@ -13,10 +14,10 @@ type RemarkInput = {
   remark_code: string;
   label: string;
   sort_order?: number;
-  is_active?: boolean;
+  status?: MasterStatus;
 };
 
-const PATCHABLE = ["label", "sort_order", "is_active"] as const;
+const PATCHABLE = ["label", "sort_order", "status"] as const;
 const CODE_TAKEN = "A remark with this code already exists";
 
 function toResponse(r: IRemark) {
@@ -25,7 +26,7 @@ function toResponse(r: IRemark) {
     remark_code: r.remark_code,
     label: r.label,
     sort_order: r.sort_order,
-    is_active: r.is_active,
+    status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -33,9 +34,9 @@ function toResponse(r: IRemark) {
 
 export const remarksService = {
   // No pagination, same reasoning as the other masters: a picker reads the whole list.
-  async list(query: { q?: string; is_active?: boolean }) {
+  async list(query: { q?: string; status?: MasterStatus }) {
     const filter: FilterQuery<IRemark> = {};
-    if (query.is_active !== undefined) filter.is_active = query.is_active;
+    if (query.status) filter.status = query.status;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [{ label: rx }, { remark_code: rx }];
@@ -75,9 +76,9 @@ export const remarksService = {
   // given, so retiring a remark must not erase what was already noted with it.
   async remove(id: string) {
     const remark = await findOr404(Remark, id, "remark");
-    remark.is_active = false;
+    remark.status = "inactive";
     await remark.save();
-    return { id: remark._id.toString(), is_active: remark.is_active };
+    return { id: remark._id.toString(), status: remark.status };
   },
 
   async reorder(ids: string[]) {

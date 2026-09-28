@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db";
 import { Remark } from "../models/Remark.model";
+import type { MasterStatus } from "../models/masterStatus";
 import { logger } from "./logger";
 
 const DEFAULT_FILE = "../docs/remarks-seed.json";
@@ -22,11 +23,11 @@ type SeedRemark = {
   remark_code: string;
   label: string;
   sort_order?: number;
-  is_active?: boolean;
+  status?: MasterStatus;
 };
 type ParsedRemark = Required<Pick<SeedRemark, "remark_code" | "label">> & {
   sort_order?: number;
-  is_active: boolean;
+  status: MasterStatus;
 };
 
 function parse(path: string): ParsedRemark[] {
@@ -46,7 +47,7 @@ function parse(path: string): ParsedRemark[] {
       remark_code: code,
       label: v.label.trim(),
       sort_order: v.sort_order,
-      is_active: v.is_active ?? true,
+      status: v.status ?? "active",
     };
   });
 }
@@ -67,7 +68,7 @@ async function main() {
   const toUpdate = remarks.filter((r) => {
     const cur = existing.get(r.remark_code);
     return (
-      cur && (cur.label !== r.label || cur.sort_order !== r.sort_order || cur.is_active !== r.is_active)
+      cur && (cur.label !== r.label || cur.sort_order !== r.sort_order || cur.status !== r.status)
     );
   });
 
@@ -86,7 +87,7 @@ async function main() {
       remarks.map((r) => ({
         updateOne: {
           filter: { remark_code: r.remark_code },
-          update: { $set: { label: r.label, sort_order: r.sort_order, is_active: r.is_active } },
+          update: { $set: { label: r.label, sort_order: r.sort_order, status: r.status } },
           upsert: true,
         },
       })),

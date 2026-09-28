@@ -1,5 +1,6 @@
 import { type FilterQuery } from "mongoose";
 import { RawMaterial, type IRawMaterial } from "../models/RawMaterial.model";
+import type { MasterStatus } from "../models/masterStatus";
 import {
   escapeRegex,
   findOr404,
@@ -18,7 +19,7 @@ type RawMaterialInput = {
   unit: string;
   reorder_level?: number;
   sort_order?: number;
-  is_active?: boolean;
+  status?: MasterStatus;
 };
 
 const PATCHABLE = [
@@ -29,7 +30,7 @@ const PATCHABLE = [
   "unit",
   "reorder_level",
   "sort_order",
-  "is_active",
+  "status",
 ] as const;
 const CODE_TAKEN = "A material with this code already exists";
 
@@ -44,7 +45,7 @@ function toResponse(m: IRawMaterial) {
     unit: m.unit,
     reorder_level: m.reorder_level,
     sort_order: m.sort_order,
-    is_active: m.is_active,
+    status: m.status,
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
   };
@@ -52,9 +53,9 @@ function toResponse(m: IRawMaterial) {
 
 export const rawMaterialsService = {
   // No pagination, same reasoning as vendors: master data, read whole into pickers.
-  async list(query: { q?: string; is_active?: boolean; category?: string }) {
+  async list(query: { q?: string; status?: MasterStatus; category?: string }) {
     const filter: FilterQuery<IRawMaterial> = {};
-    if (query.is_active !== undefined) filter.is_active = query.is_active;
+    if (query.status) filter.status = query.status;
     if (query.category) filter.category = query.category;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
@@ -109,9 +110,9 @@ export const rawMaterialsService = {
   // Soft delete: stock and receipts keep pointing at the material, so the row stays.
   async remove(id: string) {
     const material = await findOr404(RawMaterial, id, "material");
-    material.is_active = false;
+    material.status = "inactive";
     await material.save();
-    return { id: material._id.toString(), is_active: material.is_active };
+    return { id: material._id.toString(), status: material.status };
   },
 
   async reorder(ids: string[]) {

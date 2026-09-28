@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import { MASTER_STATUSES, type MasterStatus } from "./masterStatus";
 
 export interface ILocation {
   _id: Types.ObjectId;
@@ -9,7 +10,7 @@ export interface ILocation {
   godown?: string;
   /** Where in the list this sits. Godowns are walked in a physical order, not alphabetical. */
   sort_order?: number;
-  is_active: boolean;
+  status: MasterStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,7 +22,7 @@ const locationSchema = new Schema<ILocation>(
     name: { type: String, required: true, trim: true },
     godown: { type: String, trim: true },
     sort_order: { type: Number },
-    is_active: { type: Boolean, default: true, index: true },
+    status: { type: String, enum: [...MASTER_STATUSES], default: "active", required: true, index: true },
   },
   { timestamps: true },
 );
