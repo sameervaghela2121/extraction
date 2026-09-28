@@ -1,8 +1,5 @@
 import { Schema, model, Types } from "mongoose";
 
-export const VENDOR_STATUSES = ["active", "inactive"] as const;
-export type VendorStatus = (typeof VENDOR_STATUSES)[number];
-
 /**
  * One base paper this supplier makes, straight off the Royal Touche paper-codes sheet.
  *
@@ -45,7 +42,7 @@ export interface IVendor {
   };
   address?: string;
   gst_number?: string;
-  status: VendorStatus;
+  is_active: boolean;
   /** Minted on the device when a vendor is added offline, so a flush that retries after a
    *  lost response gets this vendor back instead of creating a second one. Absent on
    *  vendors created from the web portal, which never queues. */
@@ -83,7 +80,7 @@ const vendorSchema = new Schema<IVendor>(
     },
     address: { type: String, trim: true },
     gst_number: { type: String, uppercase: true, trim: true },
-    status: { type: String, enum: [...VENDOR_STATUSES], default: "active" },
+    is_active: { type: Boolean, default: true, index: true },
     client_id: { type: String, trim: true },
   },
   { timestamps: true },

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { VENDOR_STATUSES } from "../models/Vendor.model";
 
 const contactSchema = z.object({
   person: z.string().trim().optional(),
@@ -31,7 +30,7 @@ export const createVendorSchema = z.object({
   contact: contactSchema.optional(),
   address: z.string().trim().optional(),
   gst_number: z.string().trim().optional(),
-  status: z.enum(VENDOR_STATUSES).optional(),
+  is_active: z.boolean().optional(),
 });
 
 export const updateVendorSchema = createVendorSchema
@@ -40,5 +39,9 @@ export const updateVendorSchema = createVendorSchema
 
 export const listVendorsQuerySchema = z.object({
   q: z.string().trim().optional(),
-  status: z.enum(VENDOR_STATUSES).optional(),
+  // Query strings are text, so "true"/"false" — z.coerce.boolean() would read "false" as true.
+  is_active: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
 });

@@ -1,8 +1,5 @@
 import { Schema, model, Types } from "mongoose";
 
-export const REMARK_STATUSES = ["active", "inactive"] as const;
-export type RemarkStatus = (typeof REMARK_STATUSES)[number];
-
 /**
  * A standard remark an operator picks instead of typing.
  *
@@ -17,7 +14,7 @@ export interface IRemark {
   label: string;
   /** Picker order. The common ones belong at the top, not in alphabetical order. */
   sort_order?: number;
-  status: RemarkStatus;
+  is_active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,7 +26,7 @@ const remarkSchema = new Schema<IRemark>(
     remark_code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     label: { type: String, required: true, trim: true },
     sort_order: { type: Number },
-    status: { type: String, enum: [...REMARK_STATUSES], default: "active", index: true },
+    is_active: { type: Boolean, default: true, index: true },
   },
   { timestamps: true },
 );

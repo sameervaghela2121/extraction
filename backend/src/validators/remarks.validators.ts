@@ -1,11 +1,10 @@
 import { z } from "zod";
-import { REMARK_STATUSES } from "../models/Remark.model";
 
 export const createRemarkSchema = z.object({
   remark_code: z.string().trim().min(1, "Remark code is required"),
   label: z.string().trim().min(1, "Label is required"),
   sort_order: z.number().int().optional(),
-  status: z.enum(REMARK_STATUSES).optional(),
+  is_active: z.boolean().optional(),
 });
 
 export const updateRemarkSchema = createRemarkSchema
@@ -14,7 +13,11 @@ export const updateRemarkSchema = createRemarkSchema
 
 export const listRemarksQuerySchema = z.object({
   q: z.string().trim().optional(),
-  status: z.enum(REMARK_STATUSES).optional(),
+  // Query strings are text, so "true"/"false" — z.coerce.boolean() would read "false" as true.
+  is_active: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 /** Every remark's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */

@@ -2,7 +2,6 @@
   {
     "vendor_code": "NI-KAMDAR",
     "name": "NI (KAMDAR)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "54",
@@ -1190,27 +1189,27 @@
       },
       {
         "delta_code": "788",
-        "supplier_code_number": "02 – 227 – 11 – 0 – 070 --",
+        "supplier_code_number": "02 \u2013 227 \u2013 11 \u2013 0 \u2013 070 --",
         "found_in": "Delta"
       },
       {
         "delta_code": "792",
-        "supplier_code_number": "R – 00103 A RICHARD TEAK",
+        "supplier_code_number": "R \u2013 00103 A RICHARD TEAK",
         "found_in": "Delta"
       },
       {
         "delta_code": "793",
-        "supplier_code_number": "R – 00103 C RICHARD TEAK",
+        "supplier_code_number": "R \u2013 00103 C RICHARD TEAK",
         "found_in": "Delta"
       },
       {
         "delta_code": "794",
-        "supplier_code_number": "R – 00103 F RICHARD TEAK",
+        "supplier_code_number": "R \u2013 00103 F RICHARD TEAK",
         "found_in": "Delta"
       },
       {
         "delta_code": "795",
-        "supplier_code_number": "R – 00103 G RICHARD TEAK",
+        "supplier_code_number": "R \u2013 00103 G RICHARD TEAK",
         "found_in": "Delta"
       },
       {
@@ -1220,12 +1219,12 @@
       },
       {
         "delta_code": "820 / 821",
-        "supplier_code_number": "022030 – 004 Boras Ash",
+        "supplier_code_number": "022030 \u2013 004 Boras Ash",
         "found_in": "Delta"
       },
       {
         "delta_code": "829 / 830",
-        "supplier_code_number": "094024 – 017",
+        "supplier_code_number": "094024 \u2013 017",
         "found_in": "Delta"
       },
       {
@@ -1298,7 +1297,6 @@
   {
     "vendor_code": "ARIHANT",
     "name": "ARIHANT",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "225",
@@ -2306,7 +2304,6 @@
   {
     "vendor_code": "SCHATT-DECOR",
     "name": "SCHATT DECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "31",
@@ -3176,17 +3173,17 @@
       },
       {
         "delta_code": "785",
-        "supplier_code_number": "14 – 20103 – 126 VIRGINIA WALNUT",
+        "supplier_code_number": "14 \u2013 20103 \u2013 126 VIRGINIA WALNUT",
         "found_in": "Delta"
       },
       {
         "delta_code": "786",
-        "supplier_code_number": "14 – 20103 – 122 VIRGINIA WALNUT",
+        "supplier_code_number": "14 \u2013 20103 \u2013 122 VIRGINIA WALNUT",
         "found_in": "Delta"
       },
       {
         "delta_code": "842",
-        "supplier_code_number": "14 – 20106 – 004 MONTREUX NUSSBAUM",
+        "supplier_code_number": "14 \u2013 20106 \u2013 004 MONTREUX NUSSBAUM",
         "found_in": "Delta"
       }
     ]
@@ -3194,7 +3191,6 @@
   {
     "vendor_code": "SURTECO",
     "name": "SURTECO",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "302",
@@ -3593,7 +3589,6 @@
   {
     "vendor_code": "TDPL",
     "name": "TDPL",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "22",
@@ -3948,7 +3943,6 @@
   {
     "vendor_code": "MUNKSJO-FRANCE",
     "name": "MUNKSJO FRANCE",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "125 / 1122N",
@@ -4004,7 +3998,7 @@
         "royal_touche_code": "168",
         "delta_code": "212",
         "is_common": true,
-        "supplier_code_number": "70154 – 090 ORANGE MOYEN",
+        "supplier_code_number": "70154 \u2013 090 ORANGE MOYEN",
         "found_in": "Delta"
       },
       {
@@ -4130,7 +4124,7 @@
         "royal_touche_code": "229",
         "delta_code": "221",
         "is_common": true,
-        "supplier_code_number": "31136 – 080 CRÈME MOYEN",
+        "supplier_code_number": "31136 \u2013 080 CR\u00c8ME MOYEN",
         "found_in": "Delta"
       },
       {
@@ -4144,7 +4138,7 @@
         "royal_touche_code": "230",
         "delta_code": "222",
         "is_common": true,
-        "supplier_code_number": "45677 – 080 BRUN MOYEN",
+        "supplier_code_number": "45677 \u2013 080 BRUN MOYEN",
         "found_in": "Delta"
       },
       {
@@ -4158,7 +4152,7 @@
         "royal_touche_code": "231",
         "delta_code": "223",
         "is_common": true,
-        "supplier_code_number": "02558 – 080 BRUN FENCE",
+        "supplier_code_number": "02558 \u2013 080 BRUN FENCE",
         "found_in": "Delta"
       },
       {
@@ -4283,7 +4277,6 @@
   {
     "vendor_code": "INTERPRINT",
     "name": "INTERPRINT",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "512N",
@@ -4555,7 +4548,6 @@
   {
     "vendor_code": "SHENGLONG",
     "name": "SHENGLONG",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "71A",
@@ -4807,7 +4799,6 @@
   {
     "vendor_code": "IMPRESS",
     "name": "IMPRESS",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "493N",
@@ -5058,7 +5049,6 @@
   {
     "vendor_code": "MUNKSJO-E2P",
     "name": "MUNKSJO-E2P",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "442N",
@@ -5270,7 +5260,6 @@
   {
     "vendor_code": "INFINIA",
     "name": "INFINIA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "570",
@@ -5472,7 +5461,6 @@
   {
     "vendor_code": "LAMIGRAF",
     "name": "LAMIGRAF",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "258N",
@@ -5668,7 +5656,6 @@
   {
     "vendor_code": "CHIYODA-NV-EUROPA",
     "name": "CHIYODA NV (EUROPA)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "472N",
@@ -5864,7 +5851,6 @@
   {
     "vendor_code": "MUNKSJO-SPAIN",
     "name": "MUNKSJO-SPAIN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "124",
@@ -6056,7 +6042,6 @@
   {
     "vendor_code": "MATCH-GRAPHICS",
     "name": "MATCH GRAPHICS",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "92",
@@ -6215,7 +6200,7 @@
       },
       {
         "delta_code": "NEPAL-S-277",
-        "supplier_code_number": "1128-01 NATURAL DÉCOR",
+        "supplier_code_number": "1128-01 NATURAL D\u00c9COR",
         "found_in": "Delta"
       },
       {
@@ -6233,7 +6218,6 @@
   {
     "vendor_code": "LOMA",
     "name": "LOMA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "466N",
@@ -6405,7 +6389,6 @@
   {
     "vendor_code": "HPL-IMPEX",
     "name": "HPL IMPEX",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "301A",
@@ -6568,7 +6551,6 @@
   {
     "vendor_code": "TOPPAN",
     "name": "TOPPAN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "408N",
@@ -6714,7 +6696,6 @@
   {
     "vendor_code": "THANSAU-DECOR",
     "name": "THANSAU DECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "22",
@@ -6813,7 +6794,6 @@
   {
     "vendor_code": "LAMIGRAF-SPAIN",
     "name": "LAMIGRAF-SPAIN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "258N",
@@ -6899,7 +6879,6 @@
   {
     "vendor_code": "POLYMER-INDIA-IMPRESS",
     "name": "POLYMER INDIA (IMPRESS)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "619",
@@ -6978,7 +6957,6 @@
   {
     "vendor_code": "TECHNOCELL",
     "name": "TECHNOCELL",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "053A / 1105",
@@ -7069,7 +7047,6 @@
   {
     "vendor_code": "SHINTO",
     "name": "SHINTO",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "630N",
@@ -7131,7 +7108,6 @@
   {
     "vendor_code": "LAMIGRAF-INNOVATIVE",
     "name": "LAMIGRAF (INNOVATIVE PAPERS)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1284 / 1285",
@@ -7193,7 +7169,6 @@
   {
     "vendor_code": "NI-IMPRESS",
     "name": "NI (IMPRESS)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "450N",
@@ -7250,7 +7225,6 @@
   {
     "vendor_code": "HANGZHOU-BEST-CHINA",
     "name": "HANGZHOU BEST-CHINA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "454N",
@@ -7302,7 +7276,6 @@
   {
     "vendor_code": "I-DECOR",
     "name": "I-DECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "623N",
@@ -7354,7 +7327,6 @@
   {
     "vendor_code": "HPL-IMPEX-CHINA",
     "name": "HPL IMPEX-CHINA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "923A",
@@ -7408,7 +7380,6 @@
   {
     "vendor_code": "HANGZHOU-ABLE-CHINA",
     "name": "HANGZHOU ABLE -CHINA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "254N",
@@ -7450,7 +7421,6 @@
   {
     "vendor_code": "NI",
     "name": "NI",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "812",
@@ -7466,7 +7436,7 @@
         "royal_touche_code": "838",
         "delta_code": "787",
         "is_common": true,
-        "supplier_code_number": "RT – 838 --",
+        "supplier_code_number": "RT \u2013 838 --",
         "found_in": "Delta"
       },
       {
@@ -7494,7 +7464,6 @@
   {
     "vendor_code": "CHIYODA-JAPAN",
     "name": "CHIYODA JAPAN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1388",
@@ -7536,7 +7505,6 @@
   {
     "vendor_code": "KING-DECOR",
     "name": "KING DECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "11",
@@ -7583,7 +7551,6 @@
   {
     "vendor_code": "PRINTECH-K-R",
     "name": "PRINTECH K R",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "509N",
@@ -7620,7 +7587,6 @@
   {
     "vendor_code": "NI-SURTECO",
     "name": "NI (SURTECO)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "868 / 1467",
@@ -7644,12 +7610,12 @@
       },
       {
         "delta_code": "823",
-        "supplier_code_number": "20 – 114 – 07 – 0 – 072",
+        "supplier_code_number": "20 \u2013 114 \u2013 07 \u2013 0 \u2013 072",
         "found_in": "Delta"
       },
       {
         "delta_code": "824",
-        "supplier_code_number": "20 – 114 – 06 – 0 – 070",
+        "supplier_code_number": "20 \u2013 114 \u2013 06 \u2013 0 \u2013 070",
         "found_in": "Delta"
       }
     ]
@@ -7657,7 +7623,6 @@
   {
     "vendor_code": "JKS-DECOR",
     "name": "JKS DECOR",
-    "status": "active",
     "papers": [
       {
         "delta_code": "440N",
@@ -7694,7 +7659,6 @@
   {
     "vendor_code": "POLYMER-INDIA-TOPPAN",
     "name": "POLYMER INDIA (INDO) TOPPAN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "621N",
@@ -7728,7 +7692,6 @@
   {
     "vendor_code": "DILONG-CHINA",
     "name": "DILONG-CHINA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "62",
@@ -7755,7 +7718,6 @@
   {
     "vendor_code": "SIDMARK",
     "name": "SIDMARK",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "64",
@@ -7776,7 +7738,7 @@
       },
       {
         "delta_code": "845",
-        "supplier_code_number": "898 – 6 – 70 – 1 – 3 WENGE",
+        "supplier_code_number": "898 \u2013 6 \u2013 70 \u2013 1 \u2013 3 WENGE",
         "found_in": "Delta"
       }
     ]
@@ -7784,7 +7746,6 @@
   {
     "vendor_code": "LAMIGRAF-SPAIN-INNOVATIVE",
     "name": "LAMIGRAF-SPAIN (INNOVATIVE PAPERS)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "564N",
@@ -7811,7 +7772,6 @@
   {
     "vendor_code": "SPLENDECOR",
     "name": "SPLENDECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "601N",
@@ -7838,7 +7798,6 @@
   {
     "vendor_code": "NI-INTERPRINT",
     "name": "NI (INTERPRINT)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "761",
@@ -7867,7 +7826,6 @@
   {
     "vendor_code": "NI-LOMA",
     "name": "NI (LOMA)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1394",
@@ -7894,7 +7852,6 @@
   {
     "vendor_code": "MBEE",
     "name": "MBEE",
-    "status": "active",
     "papers": [
       {
         "delta_code": "748N",
@@ -7921,7 +7878,6 @@
   {
     "vendor_code": "E2P",
     "name": "E2P",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "63 / 1563",
@@ -7949,7 +7905,6 @@
   {
     "vendor_code": "MAHADEV-PAPER",
     "name": "MAHADEV PAPER",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "131",
@@ -7975,7 +7930,6 @@
   {
     "vendor_code": "TRIBENI",
     "name": "TRIBENI",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "131",
@@ -7999,7 +7953,6 @@
   {
     "vendor_code": "FAKIRSONS",
     "name": "FAKIRSONS",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "212",
@@ -8021,7 +7974,6 @@
   {
     "vendor_code": "NI-LAMIGRAF-SPAIN",
     "name": "NI (LAMIGRAF-SPAIN)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "427N",
@@ -8043,7 +7995,6 @@
   {
     "vendor_code": "LIBRA",
     "name": "LIBRA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "488N",
@@ -8065,7 +8016,6 @@
   {
     "vendor_code": "AHLSTROM-E2P",
     "name": "AHLSTROM-E2P",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "638",
@@ -8087,7 +8037,6 @@
   {
     "vendor_code": "MUNKSJO",
     "name": "MUNKSJO",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1141",
@@ -8109,7 +8058,6 @@
   {
     "vendor_code": "NI-KAMDAR-INTERPRINT",
     "name": "NI (KAMDAR INTERPRINT)",
-    "status": "active",
     "papers": [
       {
         "delta_code": "141 / 195",
@@ -8131,7 +8079,6 @@
   {
     "vendor_code": "SIDMARK-TECHNOCELL",
     "name": "SIDMARK (TECHNOCELL)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "238N",
@@ -8148,7 +8095,6 @@
   {
     "vendor_code": "TDPL-KING-DECOR",
     "name": "TDPL (KING DECOR)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "250 / 1111",
@@ -8169,7 +8115,6 @@
   {
     "vendor_code": "DECOTEC",
     "name": "DECOTEC",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1581",
@@ -8190,7 +8135,6 @@
   {
     "vendor_code": "ARIHANT-HANGZHOU-VIVEL",
     "name": "ARIHANT (HANGZHOU VIVEL)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1649",
@@ -8207,7 +8151,6 @@
   {
     "vendor_code": "MGP",
     "name": "MGP",
-    "status": "active",
     "papers": [
       {
         "delta_code": "643N",
@@ -8224,7 +8167,6 @@
   {
     "vendor_code": "SURENDRANAGAR",
     "name": "SURENDRANAGAR",
-    "status": "active",
     "papers": [
       {
         "delta_code": "852",
@@ -8241,7 +8183,6 @@
   {
     "vendor_code": "K-MASA",
     "name": "K-MASA",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "27",
@@ -8255,7 +8196,6 @@
   {
     "vendor_code": "SCHATT-DECOR-CHINA",
     "name": "SCHATT DECOR (CHINA)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "45",
@@ -8269,7 +8209,6 @@
   {
     "vendor_code": "MATCHWELL",
     "name": "MATCHWELL",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "70",
@@ -8283,7 +8222,6 @@
   {
     "vendor_code": "SURTECO-CHINA",
     "name": "SURTECO (CHINA)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "555N",
@@ -8295,7 +8233,6 @@
   {
     "vendor_code": "NI-TOPPAN",
     "name": "NI (TOPPAN)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "829",
@@ -8307,7 +8244,6 @@
   {
     "vendor_code": "NI-SUDDEKOR",
     "name": "NI (SUDDEKOR)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "838",
@@ -8321,7 +8257,6 @@
   {
     "vendor_code": "BAUSCH-DECOR",
     "name": "BAUSCH DECOR",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "868",
@@ -8333,7 +8268,6 @@
   {
     "vendor_code": "CREATIVE-PAPER-PRINT",
     "name": "CREATIVE PAPER PRINT",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "912A",
@@ -8347,7 +8281,6 @@
   {
     "vendor_code": "I-DECOR-KEDIA",
     "name": "I-DECOR (KEDIA)",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "954",
@@ -8359,7 +8292,6 @@
   {
     "vendor_code": "CROWN",
     "name": "CROWN",
-    "status": "active",
     "papers": [
       {
         "royal_touche_code": "1287",
@@ -8371,7 +8303,6 @@
   {
     "vendor_code": "DEEPAK-BHAI",
     "name": "DEEPAK BHAI",
-    "status": "active",
     "papers": [
       {
         "delta_code": "244N",
@@ -8383,7 +8314,6 @@
   {
     "vendor_code": "I-DECOR-CHINA",
     "name": "I-DECOR (CHINA)",
-    "status": "active",
     "papers": [
       {
         "delta_code": "510N",
@@ -8395,7 +8325,6 @@
   {
     "vendor_code": "NATIONAL",
     "name": "NATIONAL",
-    "status": "active",
     "papers": [
       {
         "delta_code": "605",
@@ -8407,7 +8336,6 @@
   {
     "vendor_code": "MICROTEAK-PRINT",
     "name": "MICROTEAK PRINT",
-    "status": "active",
     "papers": [
       {
         "delta_code": "792AN / 793AN / 795A",
@@ -8419,11 +8347,10 @@
   {
     "vendor_code": "SUDDECOR",
     "name": "SUDDECOR",
-    "status": "active",
     "papers": [
       {
         "delta_code": "843",
-        "supplier_code_number": "01 – 518 – 01 – 0 – 070 EISCHE LANDINO",
+        "supplier_code_number": "01 \u2013 518 \u2013 01 \u2013 0 \u2013 070 EISCHE LANDINO",
         "found_in": "Delta"
       }
     ]
@@ -8431,7 +8358,6 @@
   {
     "vendor_code": "ZHEJIANG-DILONG",
     "name": "ZHEJIANG DILONG",
-    "status": "active",
     "papers": [
       {
         "delta_code": "S256",
