@@ -22,11 +22,11 @@ type SeedRemark = {
   remark_code: string;
   label: string;
   sort_order?: number;
-  status?: "active" | "inactive";
+  is_active?: boolean;
 };
 type ParsedRemark = Required<Pick<SeedRemark, "remark_code" | "label">> & {
   sort_order?: number;
-  status: "active" | "inactive";
+  is_active: boolean;
 };
 
 function parse(path: string): ParsedRemark[] {
@@ -46,7 +46,7 @@ function parse(path: string): ParsedRemark[] {
       remark_code: code,
       label: v.label.trim(),
       sort_order: v.sort_order,
-      status: v.status ?? "active",
+      is_active: v.is_active ?? true,
     };
   });
 }
@@ -67,7 +67,7 @@ async function main() {
   const toUpdate = remarks.filter((r) => {
     const cur = existing.get(r.remark_code);
     return (
-      cur && (cur.label !== r.label || cur.sort_order !== r.sort_order || cur.status !== r.status)
+      cur && (cur.label !== r.label || cur.sort_order !== r.sort_order || cur.is_active !== r.is_active)
     );
   });
 
@@ -86,7 +86,7 @@ async function main() {
       remarks.map((r) => ({
         updateOne: {
           filter: { remark_code: r.remark_code },
-          update: { $set: { label: r.label, sort_order: r.sort_order, status: r.status } },
+          update: { $set: { label: r.label, sort_order: r.sort_order, is_active: r.is_active } },
           upsert: true,
         },
       })),

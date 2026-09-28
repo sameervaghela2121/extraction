@@ -1,5 +1,5 @@
 import { type FilterQuery } from "mongoose";
-import { Vendor, type IVendor, type IBasePaper, type VendorStatus } from "../models/Vendor.model";
+import { Vendor, type IVendor, type IBasePaper } from "../models/Vendor.model";
 import { escapeRegex, findOr404, ensureCodeFree, applyUpdates } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 
@@ -14,10 +14,10 @@ type VendorInput = {
   contact?: { person?: string; phone?: string; email?: string };
   address?: string;
   gst_number?: string;
-  status?: VendorStatus;
+  is_active?: boolean;
 };
 
-const PATCHABLE = ["name", "papers", "address", "gst_number", "status"] as const;
+const PATCHABLE = ["name", "papers", "address", "gst_number", "is_active"] as const;
 const CODE_TAKEN = "A vendor with this code already exists";
 
 function toResponse(v: IVendor) {
@@ -33,7 +33,7 @@ function toResponse(v: IVendor) {
     contact: v.contact ?? {},
     address: v.address,
     gst_number: v.gst_number,
-    status: v.status,
+    is_active: v.is_active,
     createdAt: v.createdAt,
     updatedAt: v.updatedAt,
   };
@@ -48,9 +48,9 @@ function paperKey(paper: IBasePaper): string {
 export const vendorsService = {
   // No pagination: a vendor master is a few hundred rows at most, and every caller
   // (pickers, dropdowns) wants the whole list anyway.
-  async list(query: { q?: string; status?: VendorStatus }) {
+  async list(query: { q?: string; is_active?: boolean }) {
     const filter: FilterQuery<IVendor> = {};
-    if (query.status) filter.status = query.status;
+    if (query.is_active !== undefined) filter.is_active = query.is_active;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [{ name: rx }, { vendor_code: rx }, { gst_number: rx }];
@@ -129,8 +129,8 @@ export const vendorsService = {
   // so the row must survive — it just stops showing up as selectable.
   async remove(id: string) {
     const vendor = await findOr404(Vendor, id, "vendor");
-    vendor.status = "inactive";
+    vendor.is_active = false;
     await vendor.save();
-    return { id: vendor._id.toString(), status: vendor.status };
+    return { id: vendor._id.toString(), is_active: vendor.is_active };
   },
 };

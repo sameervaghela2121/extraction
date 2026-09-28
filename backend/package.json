@@ -14,6 +14,7 @@
     "seed:locations": "tsx src/utils/seedLocations.ts",
     "seed:remarks": "tsx src/utils/seedRemarks.ts",
     "migrate:location-refs": "tsx src/utils/migrateLocationRefs.ts",
+    "migrate:master-status": "tsx src/utils/migrateMasterStatusToIsActive.ts",
     "indexes": "tsx src/utils/syncIndexes.ts"
   },
   "dependencies": {

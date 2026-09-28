@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { RAW_MATERIAL_STATUSES } from "../models/RawMaterial.model";
 
 export const createRawMaterialSchema = z.object({
   material_code: z.string().trim().min(1, "Material code is required"),
@@ -10,7 +9,7 @@ export const createRawMaterialSchema = z.object({
   unit: z.string().trim().min(1).optional(),
   reorder_level: z.number().nonnegative().optional(),
   sort_order: z.number().int().optional(),
-  status: z.enum(RAW_MATERIAL_STATUSES).optional(),
+  is_active: z.boolean().optional(),
 });
 
 export const updateRawMaterialSchema = createRawMaterialSchema
@@ -20,7 +19,11 @@ export const updateRawMaterialSchema = createRawMaterialSchema
 export const listRawMaterialsQuerySchema = z.object({
   q: z.string().trim().optional(),
   category: z.string().trim().optional(),
-  status: z.enum(RAW_MATERIAL_STATUSES).optional(),
+  // Query strings are text, so "true"/"false" — z.coerce.boolean() would read "false" as true.
+  is_active: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 /** Every material's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */

@@ -382,7 +382,7 @@ export const stockService = {
       throw ApiError.badRequest("material_id is required — or send roll_id so it can be read off the roll");
     }
 
-    const material = await RawMaterial.findById(materialIdString).select("status name").lean();
+    const material = await RawMaterial.findById(materialIdString).select("is_active name").lean();
     if (!material) throw ApiError.badRequest("That material no longer exists — pick another");
 
     // Retired masters block stock coming IN, never stock going OUT: a material taken out
@@ -390,14 +390,14 @@ export const stockService = {
     // that stock with no way to draw it down. Adjustments stay open for the same reason —
     // a stocktake must be recordable whatever the master says.
     const isIncoming = input.transaction_type === "IN";
-    if (isIncoming && material.status !== "active") {
+    if (isIncoming && !material.is_active) {
       throw ApiError.badRequest(`${material.name} is inactive — reactivate it before adding stock`);
     }
 
     if (input.vendor_id) {
-      const vendor = await Vendor.findById(input.vendor_id).select("status name").lean();
+      const vendor = await Vendor.findById(input.vendor_id).select("is_active name").lean();
       if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
-      if (isIncoming && vendor.status !== "active") {
+      if (isIncoming && !vendor.is_active) {
         throw ApiError.badRequest(`${vendor.name} is inactive — pick a different vendor`);
       }
     }
@@ -520,7 +520,7 @@ export const stockService = {
       materials
         // Retired materials are hidden unless stock is still sitting against them —
         // deactivating a material must never make its remaining rolls disappear.
-        .filter((m) => m.status === "active" || (byMaterial.get(m._id.toString())?.total_weight ?? 0) > 0)
+        .filter((m) => m.is_active || (byMaterial.get(m._id.toString())?.total_weight ?? 0) > 0)
         .map((m) => {
           const s = byMaterial.get(m._id.toString());
           return {
