@@ -1,5 +1,6 @@
 import { Types, type FilterQuery } from "mongoose";
 import { Location, type ILocation } from "../models/Location.model";
+import type { MasterStatus } from "../models/masterStatus";
 import { ApiError } from "../utils/ApiError";
 import {
   escapeRegex,
@@ -15,10 +16,10 @@ type LocationInput = {
   name: string;
   godown?: string;
   sort_order?: number;
-  is_active?: boolean;
+  status?: MasterStatus;
 };
 
-const PATCHABLE = ["name", "godown", "sort_order", "is_active"] as const;
+const PATCHABLE = ["name", "godown", "sort_order", "status"] as const;
 const CODE_TAKEN = "A location with this code already exists";
 
 function toResponse(l: ILocation) {
@@ -28,7 +29,7 @@ function toResponse(l: ILocation) {
     name: l.name,
     godown: l.godown,
     sort_order: l.sort_order,
-    is_active: l.is_active,
+    status: l.status,
     createdAt: l.createdAt,
     updatedAt: l.updatedAt,
   };
@@ -49,9 +50,9 @@ export function locationRefResponse(ref?: Types.ObjectId | LocationRef | null) {
 
 /** A roll can only be put at a location that exists and is still in use. */
 export async function loadUsableLocation(id: string): Promise<LocationRef> {
-  const location = await Location.findById(id).select(`${LOCATION_REF_SELECT} is_active`).lean();
+  const location = await Location.findById(id).select(`${LOCATION_REF_SELECT} status`).lean();
   if (!location) throw ApiError.badRequest("That location no longer exists — pick another");
-  if (!location.is_active) {
+  if (location.status !== "active") {
     throw ApiError.badRequest(`${location.name} is inactive — pick a different location`);
   }
   return location;
@@ -60,9 +61,9 @@ export async function loadUsableLocation(id: string): Promise<LocationRef> {
 export const locationsService = {
   // No pagination, same reasoning as vendors and materials: master data, read whole into
   // a picker. There will be a handful of bays, not thousands.
-  async list(query: { q?: string; godown?: string; is_active?: boolean }) {
+  async list(query: { q?: string; godown?: string; status?: MasterStatus }) {
     const filter: FilterQuery<ILocation> = {};
-    if (query.is_active !== undefined) filter.is_active = query.is_active;
+    if (query.status) filter.status = query.status;
     if (query.godown) filter.godown = query.godown;
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
@@ -108,9 +109,9 @@ export const locationsService = {
   // and a bay that closes must not erase where stock used to sit.
   async remove(id: string) {
     const location = await findOr404(Location, id, "location");
-    location.is_active = false;
+    location.status = "inactive";
     await location.save();
-    return { id: location._id.toString(), is_active: location.is_active };
+    return { id: location._id.toString(), status: location.status };
   },
 
   // Drag-and-drop's other half: the frontend sends every row's id in its new top-to-bottom

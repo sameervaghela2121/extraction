@@ -17,6 +17,7 @@ import { resolve } from "node:path";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db";
 import { Vendor } from "../models/Vendor.model";
+import type { MasterStatus } from "../models/masterStatus";
 import { logger } from "./logger";
 
 const DEFAULT_FILE = "../docs/vendors-seed.json";
@@ -31,7 +32,7 @@ type SeedPaper = {
 type SeedVendor = {
   vendor_code: string;
   name: string;
-  is_active?: boolean;
+  status?: MasterStatus;
   papers?: SeedPaper[];
 };
 
@@ -39,7 +40,7 @@ type SeedVendor = {
 type ParsedVendor = {
   vendor_code: string;
   name: string;
-  is_active: boolean;
+  status: MasterStatus;
   papers: SeedPaper[];
 };
 
@@ -73,7 +74,7 @@ function parse(path: string): ParsedVendor[] {
       };
     });
 
-    return { vendor_code: code, name: v.name.trim(), is_active: v.is_active ?? true, papers };
+    return { vendor_code: code, name: v.name.trim(), status: v.status ?? "active", papers };
   });
 }
 
@@ -90,7 +91,7 @@ async function main() {
   logger.info(`database: ${mongoose.connection.name}`);
 
   const existing = new Map(
-    (await Vendor.find({}).select("vendor_code name is_active papers").lean()).map((v) => [
+    (await Vendor.find({}).select("vendor_code name status papers").lean()).map((v) => [
       v.vendor_code,
       v,
     ]),
@@ -109,7 +110,7 @@ async function main() {
     return (
       cur &&
       (cur.name !== v.name ||
-        cur.is_active !== v.is_active ||
+        cur.status !== v.status ||
         paperCodes(cur.papers) !== paperCodes(v.papers))
     );
   });
@@ -138,7 +139,7 @@ async function main() {
           filter: { vendor_code: v.vendor_code },
           // $set only the fields the sheet owns — a vendor that has since gained an
           // address or GST number in the portal keeps them.
-          update: { $set: { name: v.name, is_active: v.is_active, papers: v.papers } },
+          update: { $set: { name: v.name, status: v.status, papers: v.papers } },
           upsert: true,
         },
       })),

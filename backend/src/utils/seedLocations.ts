@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db";
 import { Location } from "../models/Location.model";
+import type { MasterStatus } from "../models/masterStatus";
 import { logger } from "./logger";
 
 const DEFAULT_FILE = "../docs/locations-seed.json";
@@ -23,12 +24,12 @@ type SeedLocation = {
   name: string;
   godown?: string;
   sort_order?: number;
-  is_active?: boolean;
+  status?: MasterStatus;
 };
 type ParsedLocation = Required<Pick<SeedLocation, "location_code" | "name">> & {
   godown?: string;
   sort_order?: number;
-  is_active: boolean;
+  status: MasterStatus;
 };
 
 function parse(path: string): ParsedLocation[] {
@@ -49,7 +50,7 @@ function parse(path: string): ParsedLocation[] {
       name: v.name.trim(),
       godown: v.godown?.trim() || undefined,
       sort_order: v.sort_order,
-      is_active: v.is_active ?? true,
+      status: v.status ?? "active",
     };
   });
 }
@@ -76,7 +77,7 @@ async function main() {
       (cur.name !== l.name ||
         cur.godown !== l.godown ||
         cur.sort_order !== l.sort_order ||
-        cur.is_active !== l.is_active)
+        cur.status !== l.status)
     );
   });
 
@@ -96,7 +97,7 @@ async function main() {
         updateOne: {
           filter: { location_code: l.location_code },
           update: {
-            $set: { name: l.name, godown: l.godown, sort_order: l.sort_order, is_active: l.is_active },
+            $set: { name: l.name, godown: l.godown, sort_order: l.sort_order, status: l.status },
           },
           upsert: true,
         },

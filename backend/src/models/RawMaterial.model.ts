@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import { MASTER_STATUSES, type MasterStatus } from "./masterStatus";
 
 export interface IRawMaterial {
   _id: Types.ObjectId;
@@ -13,7 +14,7 @@ export interface IRawMaterial {
    *  should follow how the godown actually thinks about its materials, which is rarely
    *  alphabetical. Absent sorts last, so an unnumbered material never jumps to the top. */
   sort_order?: number;
-  is_active: boolean;
+  status: MasterStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,7 +32,7 @@ const rawMaterialSchema = new Schema<IRawMaterial>(
     // Stock threshold that should trigger a reorder. Absent = nobody tracks it yet.
     reorder_level: { type: Number, min: 0 },
     sort_order: { type: Number },
-    is_active: { type: Boolean, default: true, index: true },
+    status: { type: String, enum: [...MASTER_STATUSES], default: "active", required: true, index: true },
   },
   { timestamps: true, collection: "raw_materials" },
 );
