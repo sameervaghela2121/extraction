@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { vendorsApi } from "../../api/masters.api";
