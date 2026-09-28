@@ -74,7 +74,7 @@ const NAV: NavItem[] = [
       { to: "/masters/locations", label: "Locations" },
       { to: "/masters/material-types", label: "Material types" },
       { to: "/masters/remarks", label: "Remarks" },
-      { to: "/masters/raw-material", label: "Raw materials" },
+      { to: "/masters/raw-material", label: "Paper Codes" },
       { to: "/masters/rolls", label: "Rolls" },
     ],
   },
