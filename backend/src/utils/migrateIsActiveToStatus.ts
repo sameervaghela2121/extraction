@@ -4,8 +4,15 @@
  * string enum takes a third state as one more value in MASTER_STATUSES, a boolean needs a
  * migration.
  *
- *   npx tsx src/utils/migrateIsActiveToStatus.ts                 # dry run, changes nothing
- *   npx tsx src/utils/migrateIsActiveToStatus.ts --apply         # write
+ *   npx tsx src/utils/migrateIsActiveToStatus.ts                           # dry run
+ *   npx tsx src/utils/migrateIsActiveToStatus.ts --apply --keep-is-active  # before deploy
+ *   npx tsx src/utils/migrateIsActiveToStatus.ts --apply                   # after deploy
+ *
+ * --keep-is-active writes status without removing is_active, so the code still running
+ * (which reads is_active) and the code about to run (which reads status) both see every
+ * row correctly while the deploy rolls over. The plain --apply after the deploy re-derives
+ * status from is_active — picking up anything the old code changed in the meantime — and
+ * removes is_active for good.
  *
  * Dry run is the default on purpose: .env points at production. Read the summary first.
  *
@@ -28,6 +35,7 @@ const MODELS = [Location, RawMaterial, Remark, Vendor];
 
 async function main() {
   const apply = process.argv.includes("--apply");
+  const keepIsActive = process.argv.includes("--keep-is-active");
 
   await connectDb();
   logger.info(`database: ${mongoose.connection.name}`);
@@ -52,13 +60,13 @@ async function main() {
           filter: { _id: r._id },
           update: {
             $set: { status: r.is_active === false ? "inactive" : "active" },
-            $unset: { is_active: "" },
+            ...(keepIsActive ? {} : { $unset: { is_active: "" } }),
           },
         },
       })),
       { ordered: false },
     );
-    logger.info(`  written: ${result.modifiedCount} updated`);
+    logger.info(`  written: ${result.modifiedCount} updated${keepIsActive ? " (is_active kept)" : ""}`);
   }
 
   if (!total) logger.info("nothing to do — no row carries is_active.");
