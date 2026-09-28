@@ -381,13 +381,13 @@ export default function RawMaterialPage() {
                         <button className="btn btn-sm" onClick={() => openEdit(row)}>
                           Edit
                         </button>
-                        <button
+                        {/* <button
                           className="btn btn-sm btn-ghost"
                           title="Delete raw material"
                           onClick={() => setDeleting(row)}
                         >
                           <Trash2 size={14} />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
