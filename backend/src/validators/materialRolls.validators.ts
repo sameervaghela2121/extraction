@@ -30,14 +30,14 @@ export const createRollSchema = z.object({
   weight: z.number({ required_error: "Weight is required" }).positive("Weight must be greater than 0"),
   gsm: z.number({ required_error: "GSM is required" }).positive("GSM must be greater than 0"),
   width: z.number({ required_error: "Width is required" }).positive("Width must be greater than 0"),
-  location: z.string().trim().min(1, "Location is required"),
+  // The Location's id from GET /locations — not its code or name.
+  location: objectId.describe("Location"),
   date: z
     .string({ required_error: "Date is required" })
     .datetime({ offset: true })
     .or(z.string().date()),
   // A code from the remark master, when the roll is worth flagging — a shade variation,
-  // a misprint. Not validated against the master: the phone picks it from its cached copy
-  // and `location` is stored the same way, as the code rather than a reference.
+  // a misprint. Not validated against the master: the phone picks it from its cached copy.
   remark_code: z.string().trim().min(1).optional(),
   // The note itself, when the code alone doesn't say enough. Both are optional and
   // independent — a roll can carry either, both, or neither.
@@ -99,7 +99,7 @@ export const listRollsQuerySchema = z.object({
   material_id: objectId.optional(),
   vendor_id: objectId.optional(),
   status: z.enum(ROLL_STATUSES).optional(),
-  location: z.string().trim().optional(),
+  location: objectId.optional(),
   // A Remark's id — matches a roll whose remark_codes array contains it, same as filtering
   // vendor_id or status matches an exact field. Renamed from the old remark_code (a code
   // string) now that the field itself stores real references.

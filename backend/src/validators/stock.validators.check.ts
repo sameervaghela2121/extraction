@@ -10,7 +10,7 @@ const base = {
   transaction_type: "OUT" as const,
   material_id: "68f4a1b2c3d4e5f678901234",
   roll_id: "68f4a1b2c3d4e5f678901235",
-  location: "Rack A",
+  location: "68f4a1b2c3d4e5f678901236",
 };
 
 // Photos are optional — the flow that existed before this field still validates.

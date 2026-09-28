@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { LOCATION_STATUSES } from "../models/Location.model";
 
 export const createLocationSchema = z.object({
   location_code: z.string().trim().min(1, "Location code is required"),
@@ -8,7 +7,7 @@ export const createLocationSchema = z.object({
   // "Godown A side 2" together without parsing the name.
   godown: z.string().trim().optional(),
   sort_order: z.number().int().optional(),
-  status: z.enum(LOCATION_STATUSES).optional(),
+  is_active: z.boolean().optional(),
 });
 
 export const updateLocationSchema = createLocationSchema
@@ -18,7 +17,11 @@ export const updateLocationSchema = createLocationSchema
 export const listLocationsQuerySchema = z.object({
   q: z.string().trim().optional(),
   godown: z.string().trim().optional(),
-  status: z.enum(LOCATION_STATUSES).optional(),
+  // Query strings are text, so "true"/"false" — z.coerce.boolean() would read "false" as true.
+  is_active: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 /** Every location's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */

@@ -146,7 +146,7 @@ function rollLabel(roll: MaterialRollListItem): LabelItem {
     code: roll.roll_number,
     lines: [
       `${roll.royal_touche_code ? `RT ${roll.royal_touche_code}` : "No RT code"} · ${roll.gsm} gsm · ${roll.width} mm`,
-      roll.location,
+      roll.location?.name ?? "-",
     ],
   };
 }
@@ -984,7 +984,7 @@ export default function BarcodeGeneratorPage() {
                       <td>{roll.royal_touche_code ?? "—"}</td>
                       <td>{roll.gsm}</td>
                       <td>{roll.width}</td>
-                      <td>{roll.location}</td>
+                      <td>{roll.location?.name ?? "-"}</td>
                       <td>{roll.status}</td>
                     </tr>
                   ))}

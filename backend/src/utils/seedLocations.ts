@@ -23,12 +23,12 @@ type SeedLocation = {
   name: string;
   godown?: string;
   sort_order?: number;
-  status?: "active" | "inactive";
+  is_active?: boolean;
 };
 type ParsedLocation = Required<Pick<SeedLocation, "location_code" | "name">> & {
   godown?: string;
   sort_order?: number;
-  status: "active" | "inactive";
+  is_active: boolean;
 };
 
 function parse(path: string): ParsedLocation[] {
@@ -49,7 +49,7 @@ function parse(path: string): ParsedLocation[] {
       name: v.name.trim(),
       godown: v.godown?.trim() || undefined,
       sort_order: v.sort_order,
-      status: v.status ?? "active",
+      is_active: v.is_active ?? true,
     };
   });
 }
@@ -76,7 +76,7 @@ async function main() {
       (cur.name !== l.name ||
         cur.godown !== l.godown ||
         cur.sort_order !== l.sort_order ||
-        cur.status !== l.status)
+        cur.is_active !== l.is_active)
     );
   });
 
@@ -96,7 +96,7 @@ async function main() {
         updateOne: {
           filter: { location_code: l.location_code },
           update: {
-            $set: { name: l.name, godown: l.godown, sort_order: l.sort_order, status: l.status },
+            $set: { name: l.name, godown: l.godown, sort_order: l.sort_order, is_active: l.is_active },
           },
           upsert: true,
         },
