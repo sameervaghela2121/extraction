@@ -48,12 +48,13 @@ export interface IStockTransaction {
   /** Where the roll was before this movement, and where it is after. Both set on
    *  OUT/RETURN so the ledger reads as a journey and the return can put the roll back
    *  exactly where it came from. */
-  from_location?: string;
-  to_location?: string;
+  from_location?: Types.ObjectId | null;
+  /** Null on RETURN_TO_VENDOR: the roll went to the vendor, not to a location. */
+  to_location?: Types.ObjectId | null;
   remarks?: string;
   /** A code from the remark master ("MISPRINT"), when the operator picked one rather than
    *  only typing. Stored as the code, not a ref: the phone fills it offline from its
-   *  cached list, exactly like `location`. Free-text `remarks` still stands on its own. */
+   *  cached list. Free-text `remarks` still stands on its own. */
   remark_code?: string;
   /** GCS object paths for photos taken at the moment of the movement — the roll as it
    *  left, and the roll as it came back. Evidence for a disputed weight, so they hang off
@@ -86,8 +87,8 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     roll_weight_after: { type: Number, min: 0 },
     // Free text: who took it. No employee master exists yet.
     issued_to: { type: String, trim: true },
-    from_location: { type: String, trim: true },
-    to_location: { type: String, trim: true },
+    from_location: { type: Schema.Types.ObjectId, ref: "Location" },
+    to_location: { type: Schema.Types.ObjectId, ref: "Location" },
     remarks: { type: String, trim: true },
     remark_code: { type: String, uppercase: true, trim: true },
     // Paths, not URLs — a stored URL expires, a path does not. Read URLs are signed per

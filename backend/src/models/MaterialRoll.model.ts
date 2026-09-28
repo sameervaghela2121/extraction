@@ -38,7 +38,8 @@ export interface IMaterialRoll {
   gsm: number;
   /** Millimetres. */
   width: number;
-  location: string;
+  /** Null once the roll has gone back to its vendor — it is no longer at any location. */
+  location: Types.ObjectId | null;
   /** GCS object paths, not URLs: a stored URL expires, a path does not. Read URLs are
    *  signed per response. Four captures from the registration flow, all optional. */
   tag_photo_path?: string;
@@ -108,7 +109,7 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     unit: { type: String, trim: true, default: "kg" },
     gsm: { type: Number, min: 0, required: true },
     width: { type: Number, min: 0, required: true },
-    location: { type: String, trim: true, required: true },
+    location: { type: Schema.Types.ObjectId, ref: "Location", default: null, index: true },
     tag_photo_path: { type: String, trim: true },
     stitched_barcode_photo_path: { type: String, trim: true },
     side1_photo_path: { type: String, trim: true },

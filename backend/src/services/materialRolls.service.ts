@@ -9,6 +9,12 @@ import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/c
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import { refreshSummaries, refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
+import {
+  LOCATION_REF_SELECT,
+  loadUsableLocation,
+  locationRefResponse,
+  type LocationRef,
+} from "./locations.service";
 
 type RollInput = {
   roll_number: string;
@@ -63,7 +69,6 @@ const PATCHABLE = [
   "unit",
   "gsm",
   "width",
-  "location",
   ...PHOTO_FIELDS,
 ] as const;
 const ROLL_TAKEN = "A roll with this number already exists";
@@ -90,6 +95,7 @@ const REF_POPULATE = [
   { path: "material_id", select: "name" },
   { path: "vendor_id", select: "name vendor_code" },
   { path: "remark_codes", select: "remark_code label status" },
+  { path: "location", select: LOCATION_REF_SELECT },
 ];
 
 function refResponse(ref?: Types.ObjectId | NamedRef) {
@@ -116,10 +122,11 @@ function remarkRefResponse(refs?: Array<Types.ObjectId | RemarkRef>) {
   );
 }
 
-type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_codes"> & {
+type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_codes" | "location"> & {
   material_id: Types.ObjectId | NamedRef;
   vendor_id?: Types.ObjectId | NamedRef;
   remark_codes?: Array<Types.ObjectId | RemarkRef>;
+  location: Types.ObjectId | LocationRef | null;
 };
 
 async function toResponse(r: PopulatedRoll) {
@@ -145,7 +152,7 @@ async function toResponse(r: PopulatedRoll) {
     unit: r.unit,
     gsm: r.gsm,
     width: r.width,
-    location: r.location,
+    location: locationRefResponse(r.location),
     date: r.date,
     status: r.status,
     // Paths are what the client submits back; URLs are what it renders. Both are sent so
@@ -305,7 +312,7 @@ export const materialRollsService = {
     if (query.updated_after) filter.updatedAt = { $gt: query.updated_after };
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.vendor_id) filter.vendor_id = new Types.ObjectId(query.vendor_id);
-    if (query.location) filter.location = query.location;
+    if (query.location) filter.location = new Types.ObjectId(query.location);
     // remark_codes is an array field — Mongo matches a scalar against it as "array contains
     // this value" with no operator needed, same as every equality filter above.
     if (query.remark_id) filter.remark_codes = new Types.ObjectId(query.remark_id);
@@ -368,10 +375,11 @@ export const materialRollsService = {
     // on a phone over mobile data, where every avoidable trip to Atlas is felt.
     // Promise.all rejects on the first failure, which is the behaviour the sequential
     // version had: the caller sees whichever check failed.
-    const [, material, vendor] = await Promise.all([
+    const [, material, vendor, location] = await Promise.all([
       ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN),
       loadUsableMaterial(input.material_id),
       loadUsableVendor(input.vendor_id),
+      loadUsableLocation(input.location),
     ]);
 
     // A newly received roll is full unless the caller says otherwise.
@@ -427,12 +435,13 @@ export const materialRollsService = {
       created_by: new Types.ObjectId(actingUserId),
     });
 
-    // No populate: the two masters were already read by the checks above, so asking
-    // Mongo for them again would be two more round trips for documents we hold.
+    // No populate: the masters were already read by the checks above, so asking Mongo for
+    // them again would be more round trips for documents we hold.
     return toResponse({
       ...(roll.toObject() as unknown as PopulatedRoll),
       material_id: material ?? roll.material_id,
       vendor_id: vendor ?? roll.vendor_id,
+      location,
     });
   },
 
@@ -461,10 +470,16 @@ export const materialRollsService = {
       updates.vendor_id && updates.vendor_id !== roll.vendor_id?.toString()
         ? updates.vendor_id
         : undefined;
-    await assertRefsUsable(changedMaterial, changedVendor);
+    const changedLocation =
+      updates.location && updates.location !== roll.location?.toString() ? updates.location : undefined;
+    await Promise.all([
+      assertRefsUsable(changedMaterial, changedVendor),
+      changedLocation ? loadUsableLocation(changedLocation) : undefined,
+    ]);
 
     if (updates.material_id !== undefined) roll.material_id = new Types.ObjectId(updates.material_id);
     if (updates.vendor_id !== undefined) roll.vendor_id = new Types.ObjectId(updates.vendor_id);
+    if (changedLocation) roll.location = new Types.ObjectId(changedLocation);
     applyUpdates(roll, updates, PATCHABLE);
     // Not in PATCHABLE: these arrive as strings and need converting first.
     if (updates.date !== undefined) roll.date = new Date(updates.date);
