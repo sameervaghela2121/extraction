@@ -195,6 +195,13 @@ textarea {
 .btn-danger:hover {
   background: var(--danger-soft);
 }
+.btn-success {
+  color: var(--success);
+  border-color: color-mix(in oklch, var(--success) 40%, var(--border));
+}
+.btn-success:hover {
+  background: var(--success-soft);
+}
 .btn-ghost {
   border-color: transparent;
   background: transparent;
