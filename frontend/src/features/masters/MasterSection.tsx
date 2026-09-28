@@ -354,7 +354,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                                   Edit
                                 </button>
                                 <button
-                                  className="btn btn-sm btn-ghost"
+                                  className={`btn btn-sm ${row.status === "active" ? "btn-danger" : "btn-success"}`}
                                   onClick={() => toggleStatus(row)}
                                 >
                                   {row.status === "active" ? "Deactivate" : "Activate"}

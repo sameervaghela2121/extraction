@@ -332,7 +332,7 @@ export default function RawMaterialPage() {
   return (
     <div className="list-page">
       <PageHeader
-        title="Raw materials"
+        title="Paper Codes"
         subtitle="The Royal Touche paper codes, and the supplier each one comes from."
       />
 
