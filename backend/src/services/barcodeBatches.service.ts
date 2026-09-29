@@ -156,7 +156,7 @@ export const barcodeBatchesService = {
     type Result = {
       code: string;
       batch: IBarcodeBatch;
-      roll?: { roll_number: string; royal_touche_code?: string };
+      roll?: { roll_number: string; royal_touche_code?: string; delta_code?: string };
     };
     const results: Result[] = [];
     // batchId:number — the same run/number can be reached two ways (typed directly, and
@@ -183,15 +183,16 @@ export const barcodeBatchesService = {
       add({ batch: hit.batch, number: hit.number }, hit.code);
     }
 
-    // A roll number, or a paper code several rolls can share — either way, reached through
+    // A roll number, or a paper code (RT or Delta) several rolls can share — either way, reached through
     // the roll's own printed barcode field (an exact code, since it's what was actually
     // scanned in), not the roll record itself.
     const rx = new RegExp(escapeRegex(query), "i");
     const rolls = await MaterialRoll.find({
-      $or: [{ roll_number: rx }, { royal_touche_code: rx }],
+      // Delta through the roll's papers: a Delta-only roll has no royal_touche_code at all.
+      $or: [{ roll_number: rx }, { royal_touche_code: rx }, { "papers.delta_code": rx }],
       barcode: { $exists: true, $ne: "" },
     })
-      .select("roll_number royal_touche_code barcode")
+      .select("roll_number royal_touche_code papers.delta_code barcode")
       .limit(MAX_SEARCH_RESULTS)
       .lean();
     for (const roll of rolls) {
@@ -199,6 +200,7 @@ export const barcodeBatchesService = {
       add(resolveExactCode(batches, roll.barcode), roll.barcode.toUpperCase(), {
         roll_number: roll.roll_number,
         royal_touche_code: roll.royal_touche_code,
+        delta_code: roll.papers?.find((p) => p.delta_code)?.delta_code,
       });
     }
 

@@ -771,14 +771,14 @@ export default function BarcodeGeneratorPage() {
         </div>
       </div>
 
-      {/* Searches a code directly, a roll number, or a Royal Touche paper code (which can
+      {/* Searches a code directly, a roll number, or an RT or Delta paper code (which can
           span several rolls) — see barcodeBatchesService.search on the backend. Empty
           falls back to the plain list of saved runs below, exactly as before this existed. */}
       <div className="global-search" style={{ marginBottom: 14 }}>
         <Search size={16} className="global-search-icon" />
         <input
           className="global-search-input"
-          placeholder="Search by code, roll number or Royal Touche code"
+          placeholder="Search by code, roll number, RT code or Delta code"
           value={globalQuery}
           onChange={(e) => setGlobalQuery(e.target.value)}
         />
@@ -815,7 +815,7 @@ export default function BarcodeGeneratorPage() {
                     <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{hit.code}</div>
                     <div className="faint" style={{ fontSize: 12 }}>
                       {hit.roll
-                        ? `Roll ${hit.roll.roll_number}${hit.roll.royal_touche_code ? ` · RT ${hit.roll.royal_touche_code}` : ""}`
+                        ? `Roll ${hit.roll.roll_number}${hit.roll.royal_touche_code ? ` · RT ${hit.roll.royal_touche_code}` : ""}${hit.roll.delta_code ? ` · Delta ${hit.roll.delta_code}` : ""}`
                         : `${hit.batch.kind === "qr" ? "QR code" : "Barcode"} · ${hit.batch.widthMm} x ${hit.batch.heightMm} mm`}
                     </div>
                   </div>
