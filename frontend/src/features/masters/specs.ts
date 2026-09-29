@@ -1,5 +1,6 @@
 import { vendorsApi, locationsApi, materialTypesApi, remarksApi } from "../../api/masters.api";
-import type { MasterStatus, VendorPaper } from "../../types";
+import type { MasterStatus, Paginated, VendorPaper } from "../../types";
+import type { SearchQuery } from "../../api/masters.api";
 
 /** What every master row has in common. The rest is read through the field spec, which is
  *  why the section component can be one component instead of three near-identical ones. */
@@ -12,10 +13,11 @@ export interface MasterRow {
 
 export interface MasterApi {
   list: () => Promise<MasterRow[]>;
+  search: (query: SearchQuery) => Promise<Paginated<MasterRow>>;
   create: (body: Partial<MasterRow>) => Promise<MasterRow>;
   update: (id: string, body: Partial<MasterRow>) => Promise<MasterRow>;
   remove: (id: string) => Promise<unknown>;
-  reorder: (ids: string[]) => Promise<MasterRow[]>;
+  reorder: (ids: string[], offset?: number) => Promise<MasterRow[]>;
 }
 
 export interface MasterField {

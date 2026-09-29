@@ -22,21 +22,6 @@ export function nextSort(prev: Sort, key: string): Sort {
   return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
 }
 
-/**
- * Compare two cells of one column.
- *
- * Blanks sort last in BOTH directions — a column of dashes at the top of a descending sort
- * is never what someone clicking a header wanted. Text uses `numeric: true` so "Bay 10"
- * lands after "Bay 9" rather than before it.
- */
-export function compareCells(a: unknown, b: unknown, numeric = false): number {
-  const aBlank = a === null || a === undefined || a === "";
-  const bBlank = b === null || b === undefined || b === "";
-  if (aBlank || bBlank) return aBlank && bBlank ? 0 : aBlank ? 1 : -1;
-  if (numeric) return Number(a) - Number(b);
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
-}
-
 /** A `<th>` whose label is the sort control. Styling lives in global.css (.sort-header) so
  *  both tables pick up the same treatment. */
 export function SortHeader({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, Printer, Search, Send, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
+import { deltaCodes, rtCodes } from "../masters/rollPapers";
 import { apiErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
@@ -138,6 +139,14 @@ function loadLabelSize(kind: LabelKind): LabelSizeMm {
   return defaultSizeFor(kind);
 }
 
+/** RT code when the paper has one, else its Delta code — a Delta-only roll still gets a code. */
+function paperLabel(roll: MaterialRollListItem): string {
+  const rt = rtCodes(roll);
+  if (rt !== "—") return `RT ${rt}`;
+  const delta = deltaCodes(roll);
+  return delta !== "—" ? `Delta ${delta}` : "No paper code";
+}
+
 /** A roll's label reads the roll number; the small print is what tells two similar rolls
  *  apart on a rack. */
 function rollLabel(roll: MaterialRollListItem): LabelItem {
@@ -145,7 +154,7 @@ function rollLabel(roll: MaterialRollListItem): LabelItem {
     key: roll.id,
     code: roll.roll_number,
     lines: [
-      `${roll.royal_touche_code ? `RT ${roll.royal_touche_code}` : "No RT code"} · ${roll.gsm} gsm · ${roll.width} mm`,
+      `${paperLabel(roll)} · ${roll.gsm} gsm · ${roll.width} mm`,
       roll.location?.name ?? "-",
     ],
   };
@@ -762,14 +771,14 @@ export default function BarcodeGeneratorPage() {
         </div>
       </div>
 
-      {/* Searches a code directly, a roll number, or a Royal Touche paper code (which can
+      {/* Searches a code directly, a roll number, or an RT or Delta paper code (which can
           span several rolls) — see barcodeBatchesService.search on the backend. Empty
           falls back to the plain list of saved runs below, exactly as before this existed. */}
       <div className="global-search" style={{ marginBottom: 14 }}>
         <Search size={16} className="global-search-icon" />
         <input
           className="global-search-input"
-          placeholder="Search by code, roll number or Royal Touche code"
+          placeholder="Search by code, roll number, RT code or Delta code"
           value={globalQuery}
           onChange={(e) => setGlobalQuery(e.target.value)}
         />
@@ -806,7 +815,7 @@ export default function BarcodeGeneratorPage() {
                     <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{hit.code}</div>
                     <div className="faint" style={{ fontSize: 12 }}>
                       {hit.roll
-                        ? `Roll ${hit.roll.roll_number}${hit.roll.royal_touche_code ? ` · RT ${hit.roll.royal_touche_code}` : ""}`
+                        ? `Roll ${hit.roll.roll_number}${hit.roll.royal_touche_code ? ` · RT ${hit.roll.royal_touche_code}` : ""}${hit.roll.delta_code ? ` · Delta ${hit.roll.delta_code}` : ""}`
                         : `${hit.batch.kind === "qr" ? "QR code" : "Barcode"} · ${hit.batch.widthMm} x ${hit.batch.heightMm} mm`}
                     </div>
                   </div>
@@ -964,6 +973,7 @@ export default function BarcodeGeneratorPage() {
                     <th style={{ width: 44 }}></th>
                     <th>Roll number</th>
                     <th>RT code</th>
+                    <th>Delta code</th>
                     <th>GSM</th>
                     <th>Width</th>
                     <th>Location</th>
@@ -981,7 +991,8 @@ export default function BarcodeGeneratorPage() {
                         />
                       </td>
                       <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
-                      <td>{roll.royal_touche_code ?? "—"}</td>
+                      <td>{rtCodes(roll)}</td>
+                      <td>{deltaCodes(roll)}</td>
                       <td>{roll.gsm}</td>
                       <td>{roll.width}</td>
                       <td>{roll.location?.name ?? "-"}</td>
@@ -990,7 +1001,7 @@ export default function BarcodeGeneratorPage() {
                   ))}
                   {rolls.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                      <td colSpan={8} className="faint" style={{ textAlign: "center", padding: 20 }}>
                         No rolls match that search.
                       </td>
                     </tr>

@@ -5,9 +5,9 @@ export interface BarcodeSearchResult {
   /** The single generated code this hit resolves to — never a whole run's range. */
   code: string;
   batch: BarcodeBatch;
-  /** Present when the hit came through a roll (matched on roll_number or
-   *  royal_touche_code) rather than the code itself. */
-  roll?: { roll_number: string; royal_touche_code?: string };
+  /** Present when the hit came through a roll (matched on roll_number, royal_touche_code
+   *  or a Delta code) rather than the code itself. */
+  roll?: { roll_number: string; royal_touche_code?: string; delta_code?: string };
 }
 
 export interface BarcodeBatchInput {

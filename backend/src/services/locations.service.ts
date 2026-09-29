@@ -1,6 +1,8 @@
 import { Types, type FilterQuery } from "mongoose";
 import { Location, type ILocation } from "../models/Location.model";
 import type { MasterStatus } from "../models/masterStatus";
+import type { z } from "zod";
+import type { searchLocationsSchema } from "../validators/locations.validators";
 import { ApiError } from "../utils/ApiError";
 import {
   escapeRegex,
@@ -9,6 +11,10 @@ import {
   applyUpdates,
   nextSortOrder,
   reorderDocs,
+  directed,
+  paginated,
+  pagedAggregate,
+  type SortSpec,
 } from "../utils/crud";
 
 type LocationInput = {
@@ -58,23 +64,47 @@ export async function loadUsableLocation(id: string): Promise<LocationRef> {
   return location;
 }
 
+/** Shared by the GET list (the app's picker) and the admin panel's paged search. */
+function filterOf(query: { q?: string; godown?: string; status?: MasterStatus }): FilterQuery<ILocation> {
+  const filter: FilterQuery<ILocation> = {};
+  if (query.status) filter.status = query.status;
+  if (query.godown) filter.godown = query.godown;
+  if (query.q) {
+    const rx = new RegExp(escapeRegex(query.q), "i");
+    filter.$or = [{ name: rx }, { location_code: rx }, { godown: rx }];
+  }
+  return filter;
+}
+
+/** What each sortable column sorts by. sort_order — the walk through the warehouse — is the
+ *  default, with name breaking ties the same way the GET list does. */
+const SORTS: Record<NonNullable<z.infer<typeof searchLocationsSchema>["sort"]>, SortSpec> = {
+  sort_order: { sort_order: 1, name: 1 },
+  location_code: { location_code: 1 },
+  name: { name: 1 },
+};
+
 export const locationsService = {
   // No pagination, same reasoning as vendors and materials: master data, read whole into
   // a picker. There will be a handful of bays, not thousands.
   async list(query: { q?: string; godown?: string; status?: MasterStatus }) {
-    const filter: FilterQuery<ILocation> = {};
-    if (query.status) filter.status = query.status;
-    if (query.godown) filter.godown = query.godown;
-    if (query.q) {
-      const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ name: rx }, { location_code: rx }, { godown: rx }];
-    }
+    const filter = filterOf(query);
     // sort_order first: a picker should follow the walk through the warehouse, not the
     // alphabet. Name breaks ties and covers rows nobody has ordered yet.
     const locations = await Location.find(filter)
       .sort({ sort_order: 1, name: 1 })
       .lean<ILocation[]>();
     return locations.map(toResponse);
+  },
+
+  /** One page for the admin panel: filtered, sorted and paged in the database. */
+  async search(input: z.infer<typeof searchLocationsSchema>) {
+    const { items, total } = await pagedAggregate<ILocation>(Location, [{ $match: filterOf(input) }], {
+      sort: directed(SORTS[input.sort ?? "sort_order"], input.order),
+      page: input.page,
+      pageSize: input.pageSize,
+    });
+    return paginated(items.map(toResponse), total, input.page, input.pageSize);
   },
 
   async get(id: string) {
@@ -116,8 +146,8 @@ export const locationsService = {
 
   // Drag-and-drop's other half: the frontend sends every row's id in its new top-to-bottom
   // order, this stamps 1..N onto them, and the caller re-reads the list to render it.
-  async reorder(ids: string[]) {
-    await reorderDocs(Location, "location", ids);
+  async reorder(ids: string[], offset?: number) {
+    await reorderDocs(Location, "location", ids, offset === undefined ? undefined : { offset, sort: SORTS.sort_order });
     return locationsService.list({});
   },
 };

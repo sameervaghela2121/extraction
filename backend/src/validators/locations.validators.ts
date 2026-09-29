@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MASTER_STATUSES } from "../models/masterStatus";
+import { masterSearchSchema } from "./search.validators";
 
 export const createLocationSchema = z.object({
   location_code: z.string().trim().min(1, "Location code is required"),
@@ -24,4 +25,10 @@ export const listLocationsQuerySchema = z.object({
 /** Every location's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */
 export const reorderLocationsSchema = z.object({
   ids: z.array(z.string()).min(1, "Provide at least one location id"),
+  // Set when the admin panel drags within one page of the paged list: where this page's
+  // first row sits in the full order. Absent = `ids` is the whole list (the original contract).
+  offset: z.number().int().nonnegative().optional(),
 });
+
+/** One page of the admin panel's list — see search.validators.ts. */
+export const searchLocationsSchema = masterSearchSchema(["sort_order", "location_code", "name"]);

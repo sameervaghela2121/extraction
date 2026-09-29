@@ -6,6 +6,10 @@ export const remarksController = {
     res.json(await remarksService.list(req.query));
   },
 
+  async search(req: Request, res: Response) {
+    res.json(await remarksService.search(req.body));
+  },
+
   async get(req: Request, res: Response) {
     res.json(await remarksService.get(req.params.id));
   },
@@ -23,6 +27,6 @@ export const remarksController = {
   },
 
   async reorder(req: Request, res: Response) {
-    res.json(await remarksService.reorder(req.body.ids));
+    res.json(await remarksService.reorder(req.body.ids, req.body.offset));
   },
 };

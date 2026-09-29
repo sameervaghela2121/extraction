@@ -8,6 +8,7 @@ import {
   createRawMaterialSchema,
   updateRawMaterialSchema,
   listRawMaterialsQuerySchema,
+  searchRawMaterialsSchema,
   reorderRawMaterialsSchema,
 } from "../validators/rawMaterials.validators";
 
@@ -18,6 +19,9 @@ const router = Router();
 const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
+
+// The admin panel's paged list. A POST so the GET list above can stay whole for the app.
+router.post("/search", validate({ body: searchRawMaterialsSchema }), asyncHandler(rawMaterialsController.search));
 
 router.get(
   "/",

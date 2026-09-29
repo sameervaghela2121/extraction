@@ -8,6 +8,7 @@ import {
   createLocationSchema,
   updateLocationSchema,
   listLocationsQuerySchema,
+  searchLocationsSchema,
   reorderLocationsSchema,
 } from "../validators/locations.validators";
 
@@ -18,6 +19,9 @@ const router = Router();
 const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
+
+// The admin panel's paged list. A POST so the GET list above can stay whole for the app.
+router.post("/search", validate({ body: searchLocationsSchema }), asyncHandler(locationsController.search));
 
 router.get(
   "/",

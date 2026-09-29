@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MASTER_STATUSES } from "../models/masterStatus";
+import { masterSearchSchema, searchSchema } from "./search.validators";
 
 const contactSchema = z.object({
   person: z.string().trim().optional(),
@@ -42,3 +43,9 @@ export const listVendorsQuerySchema = z.object({
   q: z.string().trim().optional(),
   status: z.enum(MASTER_STATUSES).optional(),
 });
+
+/** One page of the admin panel's vendor list — see search.validators.ts. */
+export const searchVendorsSchema = masterSearchSchema(["name", "vendor_code"]);
+
+/** One page of the paper-codes screen: every vendor's papers, one row per paper. */
+export const searchPapersSchema = searchSchema(["vendor", "royal_touche_code", "delta_code", "supplier_code_number"]);

@@ -6,6 +6,10 @@ export const locationsController = {
     res.json(await locationsService.list(req.query));
   },
 
+  async search(req: Request, res: Response) {
+    res.json(await locationsService.search(req.body));
+  },
+
   async get(req: Request, res: Response) {
     res.json(await locationsService.get(req.params.id));
   },
@@ -23,6 +27,6 @@ export const locationsController = {
   },
 
   async reorder(req: Request, res: Response) {
-    res.json(await locationsService.reorder(req.body.ids));
+    res.json(await locationsService.reorder(req.body.ids, req.body.offset));
   },
 };

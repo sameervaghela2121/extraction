@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { ROLL_STATUSES } from "../models/MaterialRoll.model";
+import { basePaperSchema } from "./vendors.validators";
+import { searchSchema } from "./search.validators";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
 // Only paths this API minted: "rolls/YYYY/MM/<uuid>.<ext>". Rejecting anything else stops
@@ -16,11 +18,14 @@ export const createRollSchema = z.object({
   // roll number. Not minted here: it names the paper, so every roll of that paper carries
   // the same one — which also means a phone can fill it in with no signal.
   //
-  // Optional for now, at the client's request, while the mobile app is being wired up. The
-  // catalogue also lists Delta-range papers that have no RT code at all, so a roll made
-  // from one has nothing to put here. A roll without it cannot be traced back to its paper
-  // — worth making required again once registration reliably supplies it.
+  // Input only, never stored: the paper's RT code, for a client that sends it instead of
+  // `papers` (older app versions). The service looks the paper up on the vendor by it and
+  // stores that paper; the roll's own record keeps its codes in `papers` alone.
   royal_touche_code: z.string().trim().min(1).optional(),
+  // The paper(s) picked from the chosen vendor's `papers`, sent as the vendor list returned
+  // them. Only the codes are trusted: the service finds each one on the vendor and stores
+  // the vendor's own copy, so a client can't book a roll against another supplier's paper.
+  papers: z.array(basePaperSchema).min(1, "Pick at least one paper").max(10).optional(),
   // The pre-printed label scanned at registration, e.g. "RT2026040712345678". Minted by
   // the admin panel's barcode batches, so the phone only ever echoes what it read.
   // Optional: rolls received before the labels existed have none.
@@ -114,4 +119,14 @@ export const listRollsQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),
+});
+
+/** The admin panel's paged roll list, as a POST body — the same filters as the GET list,
+ *  which stays as it is for the app's delta pull. */
+export const searchRollsSchema = searchSchema(["roll_number", "date"]).extend({
+  material_id: objectId.optional(),
+  vendor_id: objectId.optional(),
+  status: z.enum(ROLL_STATUSES).optional(),
+  location: objectId.optional(),
+  remark_id: objectId.optional(),
 });
