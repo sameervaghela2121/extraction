@@ -15,9 +15,7 @@ export interface IBasePaper {
    * Royal Touche's code for the paper, e.g. "639". Goes onto the roll as-is.
    *
    * Optional because the sheet also lists papers used only in the Delta range, which have
-   * a delta_code and nothing else. They are kept so the master mirrors the sheet, but a
-   * roll REQUIRES this field — so a registration picker must offer only papers that have
-   * one. Every paper has at least one of the two codes.
+   * a delta_code and nothing else. Every paper has at least one of the two codes.
    */
   royal_touche_code?: string;
   /** Delta's code for the same paper. The only code on a Delta-range paper. */
@@ -29,6 +27,28 @@ export interface IBasePaper {
   /** Where the paper is used: "1.00mm", "1.25mm", "Delta", or a combination. */
   found_in?: string;
 }
+
+/**
+ * What makes two paper rows the same paper. RT code first: it is the code that ends up on a
+ * roll's label. A Delta-range paper has no RT code, so it is keyed by its delta code instead.
+ */
+export function paperKey(paper: Pick<IBasePaper, "royal_touche_code" | "delta_code">): string {
+  return (paper.royal_touche_code || `delta:${paper.delta_code ?? ""}`).toUpperCase();
+}
+
+/** Shared with MaterialRoll, which keeps its own copy of the paper(s) it was booked against. */
+export const basePaperSchema = new Schema<IBasePaper>(
+  {
+    royal_touche_code: { type: String, uppercase: true, trim: true },
+    delta_code: { type: String, uppercase: true, trim: true },
+    is_common: { type: Boolean },
+    supplier_code_number: { type: String, trim: true },
+    found_in: { type: String, trim: true },
+  },
+  // No _id per paper: they are identified by their code, and an id nobody references is
+  // just more bytes on every vendor fetch.
+  { _id: false },
+);
 
 export interface IVendor {
   _id: Types.ObjectId;
@@ -57,23 +77,7 @@ const vendorSchema = new Schema<IVendor>(
     // Short stable handle. Renaming a vendor must not break what referenced it.
     vendor_code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     name: { type: String, required: true, trim: true },
-    papers: {
-      type: [
-        new Schema<IBasePaper>(
-          {
-            royal_touche_code: { type: String, uppercase: true, trim: true },
-            delta_code: { type: String, uppercase: true, trim: true },
-            is_common: { type: Boolean },
-            supplier_code_number: { type: String, trim: true },
-            found_in: { type: String, trim: true },
-          },
-          // No _id per paper: they are identified by their code, and an id nobody
-          // references is just more bytes on every vendor fetch.
-          { _id: false },
-        ),
-      ],
-      default: undefined,
-    },
+    papers: { type: [basePaperSchema], default: undefined },
     contact: {
       person: { type: String, trim: true },
       phone: { type: String, trim: true },

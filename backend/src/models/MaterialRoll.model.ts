@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import { basePaperSchema, type IBasePaper } from "./Vendor.model";
 
 /**
  * IN_STOCK          = still has weight on it, however much has been drawn off.
@@ -19,8 +20,14 @@ export interface IMaterialRoll {
   _id: Types.ObjectId;
   roll_number: string;
   /** Royal Touche's code for the base paper, off the label. Shared by every roll of it.
-   *  Optional for now — see createRollSchema. */
+   *  Filled from `papers` when those are sent; kept as its own field because labels,
+   *  search and older app versions all read it directly. */
   royal_touche_code?: string;
+  /** The vendor's paper(s) this roll was booked against — the same shape as vendor.papers,
+   *  copied whole at registration so RT code, Delta code and supplier code all survive, and
+   *  a Delta-only paper can be recorded at all. A copy, not a reference: papers carry no id,
+   *  and editing the vendor's list later must not rewrite what already arrived. */
+  papers?: IBasePaper[];
   /** The pre-printed label stuck on the roll, e.g. "RT2026040712345678" — generated in
    *  the admin panel before the roll exists and scanned in at registration. Separate from
    *  roll_number, which is the mill's own number off the roll. */
@@ -87,6 +94,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // Not required for now, at the client's request. Sparse is deliberate: without it the
     // index would carry an entry for every roll that has no code.
     royal_touche_code: { type: String, uppercase: true, trim: true, index: true, sparse: true },
+    // Undefined rather than [] when none were picked, same convention as remark_codes.
+    papers: { type: [basePaperSchema], default: undefined },
     // The label code printed by the barcode-batch screen. Indexed because scanning a
     // label to find its roll is the whole point of it. Sparse — rolls registered before
     // the labels existed, and any roll registered without one, carry nothing here.

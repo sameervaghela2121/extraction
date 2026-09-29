@@ -292,6 +292,8 @@ export interface MaterialRollListItem {
   id: string;
   roll_number: string;
   royal_touche_code?: string;
+  /** The vendor paper(s) this roll was booked against — the same shape as a vendor's papers. */
+  papers?: VendorPaper[];
   batch_no?: string;
   gsm: number;
   width: number;
@@ -314,6 +316,9 @@ export interface MaterialRoll {
   id: string;
   roll_number: string;
   royal_touche_code?: string;
+  /** The vendor paper(s) this roll was booked against: RT code, Delta code, supplier code.
+   *  Copied at registration, so later edits to the vendor's list don't change it. */
+  papers: VendorPaper[];
   /** The pre-printed label from the Barcode generator, scanned at registration. Separate
    *  from roll_number, which is the mill's own number off the roll. */
   barcode?: string;
