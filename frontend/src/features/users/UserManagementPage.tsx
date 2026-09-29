@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { usersApi } from "../../api/users.api";
 import { useAuth } from "../../context/AuthContext";
@@ -6,6 +6,8 @@ import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { PageHeader, Spinner, Avatar, Modal } from "../../components/ui";
 import type { ManagedUser, UserRole, UserStatus } from "../../types";
+import Pager from "../masters/Pager";
+import { useServerPage } from "../masters/useServerPage";
 
 // This panel only ever deals in the two godown roles — staff and admin accounts are
 // managed outside it, and super_admin never appears here at all. The backend enforces the
@@ -23,9 +25,10 @@ const EMPTY_INVITE: InviteForm = { name: "", email: "", role: "godown_operator" 
 export default function UserManagementPage() {
   const { user: me } = useAuth();
   const { notify } = useToast();
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  // Searched and paged by the server, oldest account first — the order the list always had.
+  // The godown-only boundary is enforced there too (usersService.search), not just here.
+  const { rows: users, setRows: setUsers, total, page, setPage, search, setSearch, query, loading, fetching, reload } =
+    useServerPage<ManagedUser>((q) => usersApi.search(q), { key: "createdAt", dir: "asc" });
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invite, setInvite] = useState<InviteForm>(EMPTY_INVITE);
@@ -42,30 +45,9 @@ export default function UserManagementPage() {
   const canEdit = me?.role === "admin" || me?.role === "super_admin";
   const inviteRoles = me?.role === "godown_supervisor" ? GODOWN_ROLES.filter(([v]) => v === "godown_operator") : GODOWN_ROLES;
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      // Defensive filter on top of the backend's own — belt and suspenders against this
-      // list ever showing a role it shouldn't.
-      const rows = await usersApi.list();
-      setUsers(rows.filter((u) => u.role === "godown_supervisor" || u.role === "godown_operator"));
-    } catch (err) {
-      notify(apiErrorMessage(err), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
-  }, [users, search]);
+  // Defensive filter on top of the backend's own — belt and suspenders against this list
+  // ever showing a role it shouldn't.
+  const visible = users.filter((u) => u.role === "godown_supervisor" || u.role === "godown_operator");
 
   const openInvite = () => {
     setInvite({ ...EMPTY_INVITE, role: inviteRoles[0][0] });
@@ -79,7 +61,7 @@ export default function UserManagementPage() {
       await usersApi.invite(invite.name, invite.email, invite.role);
       notify(`Invite sent to ${invite.email}`);
       setInviteOpen(false);
-      load();
+      reload();
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
@@ -148,7 +130,7 @@ export default function UserManagementPage() {
                   {canEdit && <th style={{ width: 90 }}></th>}
                 </tr>
               </thead>
-              <tbody>
+              <tbody style={fetching ? { opacity: 0.6 } : undefined}>
                 {visible.map((u) => (
                   <tr key={u.id}>
                     <td>
@@ -187,12 +169,13 @@ export default function UserManagementPage() {
                 {visible.length === 0 && (
                   <tr>
                     <td colSpan={canEdit ? 5 : 4} className="faint" style={{ textAlign: "center", padding: 20 }}>
-                      {search ? "Nothing matches that search." : "No godown users yet."}
+                      {query ? "Nothing matches that search." : "No godown users yet."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+            <Pager page={page} total={total} onChange={setPage} label="users" />
           </div>
         )}
       </div>

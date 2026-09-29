@@ -4,7 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/auth.middleware";
 import { requireAdmin, requireRole } from "../middleware/rbac.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { inviteUserSchema, updateUserSchema } from "../validators/users.validators";
+import { inviteUserSchema, searchUsersSchema, updateUserSchema } from "../validators/users.validators";
 
 const router = Router();
 
@@ -17,6 +17,8 @@ router.use(requireAuth);
 const canManage = requireRole("admin", "godown_supervisor");
 
 router.get("/", canManage, asyncHandler(usersController.list));
+// The paged list the admin panel uses; same access and same godown-only boundary as GET.
+router.post("/search", canManage, validate({ body: searchUsersSchema }), asyncHandler(usersController.search));
 router.post("/invite", canManage, validate({ body: inviteUserSchema }), asyncHandler(usersController.invite));
 router.patch("/:id", requireAdmin, validate({ body: updateUserSchema }), asyncHandler(usersController.update));
 router.delete("/:id", requireAdmin, asyncHandler(usersController.remove));

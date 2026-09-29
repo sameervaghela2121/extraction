@@ -9,6 +9,7 @@ import {
   updateRollSchema,
   updateRollRemarkCodesSchema,
   listRollsQuerySchema,
+  searchRollsSchema,
 } from "../validators/materialRolls.validators";
 
 const router = Router();
@@ -16,6 +17,9 @@ const router = Router();
 const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
+
+// The admin panel's paged list. A POST so the GET list above can stay as the app uses it.
+router.post("/search", validate({ body: searchRollsSchema }), asyncHandler(materialRollsController.list));
 
 router.get(
   "/",

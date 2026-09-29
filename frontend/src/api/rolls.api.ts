@@ -9,15 +9,16 @@ export const rollsApi = {
       .get<Paginated<MaterialRollListItem>>("/material-rolls", { params })
       .then((r) => r.data),
 
-  /** The full roll — the list item is deliberately narrower than this. */
-  listFull: (params: {
+  /** The full roll — the list item is deliberately narrower than this. The admin panel's
+   *  POST search; the GET list stays as the mobile app uses it. */
+  listFull: (body: {
     q?: string;
     sort?: "roll_number" | "date";
     order?: "asc" | "desc";
     page?: number;
     pageSize?: number;
   }) =>
-    api.get<Paginated<MaterialRoll>>("/material-rolls", { params }).then((r) => r.data),
+    api.post<Paginated<MaterialRoll>>("/material-rolls/search", body).then((r) => r.data),
 
   get: (id: string) => api.get<MaterialRoll>(`/material-rolls/${id}`).then((r) => r.data),
 

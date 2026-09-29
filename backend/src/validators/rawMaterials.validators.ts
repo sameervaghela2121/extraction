@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MASTER_STATUSES } from "../models/masterStatus";
+import { masterSearchSchema } from "./search.validators";
 
 export const createRawMaterialSchema = z.object({
   material_code: z.string().trim().min(1, "Material code is required"),
@@ -26,4 +27,10 @@ export const listRawMaterialsQuerySchema = z.object({
 /** Every material's id, in the new top-to-bottom order — see reorderDocs in utils/crud.ts. */
 export const reorderRawMaterialsSchema = z.object({
   ids: z.array(z.string()).min(1, "Provide at least one material id"),
+  // Set when the admin panel drags within one page of the paged list: where this page's
+  // first row sits in the full order. Absent = `ids` is the whole list (the original contract).
+  offset: z.number().int().nonnegative().optional(),
 });
+
+/** One page of the admin panel's list — see search.validators.ts. */
+export const searchRawMaterialsSchema = masterSearchSchema(["sort_order", "material_code", "name"]);

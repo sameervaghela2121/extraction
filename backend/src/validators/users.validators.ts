@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { searchSchema } from "./search.validators";
 
 // This panel manages the godown roles only — staff and admin accounts are handled outside
 // it, and super_admin is never granted through the API at all (a direct Mongo write only).
@@ -22,3 +23,6 @@ export const updateUserSchema = z
   .refine((v) => v.role !== undefined || v.status !== undefined, {
     message: "Provide role and/or status to update",
   });
+
+/** One page of the user-management list — see search.validators.ts. */
+export const searchUsersSchema = searchSchema(["createdAt", "name", "email"]);

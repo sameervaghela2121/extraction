@@ -1,6 +1,8 @@
 import { type FilterQuery } from "mongoose";
 import { Remark, type IRemark } from "../models/Remark.model";
 import type { MasterStatus } from "../models/masterStatus";
+import type { z } from "zod";
+import type { searchRemarksSchema } from "../validators/remarks.validators";
 import {
   escapeRegex,
   findOr404,
@@ -8,6 +10,10 @@ import {
   applyUpdates,
   nextSortOrder,
   reorderDocs,
+  directed,
+  paginated,
+  pagedAggregate,
+  type SortSpec,
 } from "../utils/crud";
 
 type RemarkInput = {
@@ -32,19 +38,43 @@ function toResponse(r: IRemark) {
   };
 }
 
+/** Shared by the GET list (the app's picker) and the admin panel's paged search. */
+function filterOf(query: { q?: string; status?: MasterStatus }): FilterQuery<IRemark> {
+  const filter: FilterQuery<IRemark> = {};
+  if (query.status) filter.status = query.status;
+  if (query.q) {
+    const rx = new RegExp(escapeRegex(query.q), "i");
+    filter.$or = [{ label: rx }, { remark_code: rx }];
+  }
+  return filter;
+}
+
+/** What each sortable column sorts by. sort_order is the default — the common remarks at
+ *  the top — with label breaking ties the same way the GET list does. */
+const SORTS: Record<NonNullable<z.infer<typeof searchRemarksSchema>["sort"]>, SortSpec> = {
+  sort_order: { sort_order: 1, label: 1 },
+  remark_code: { remark_code: 1 },
+  label: { label: 1 },
+};
+
 export const remarksService = {
   // No pagination, same reasoning as the other masters: a picker reads the whole list.
   async list(query: { q?: string; status?: MasterStatus }) {
-    const filter: FilterQuery<IRemark> = {};
-    if (query.status) filter.status = query.status;
-    if (query.q) {
-      const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ label: rx }, { remark_code: rx }];
-    }
+    const filter = filterOf(query);
     // sort_order first so the common remarks sit at the top of the picker; label breaks
     // ties and covers rows nobody has ordered yet.
     const remarks = await Remark.find(filter).sort({ sort_order: 1, label: 1 }).lean<IRemark[]>();
     return remarks.map(toResponse);
+  },
+
+  /** One page for the admin panel: filtered, sorted and paged in the database. */
+  async search(input: z.infer<typeof searchRemarksSchema>) {
+    const { items, total } = await pagedAggregate<IRemark>(Remark, [{ $match: filterOf(input) }], {
+      sort: directed(SORTS[input.sort ?? "sort_order"], input.order),
+      page: input.page,
+      pageSize: input.pageSize,
+    });
+    return paginated(items.map(toResponse), total, input.page, input.pageSize);
   },
 
   async get(id: string) {
@@ -81,8 +111,8 @@ export const remarksService = {
     return { id: remark._id.toString(), status: remark.status };
   },
 
-  async reorder(ids: string[]) {
-    await reorderDocs(Remark, "remark", ids);
+  async reorder(ids: string[], offset?: number) {
+    await reorderDocs(Remark, "remark", ids, offset === undefined ? undefined : { offset, sort: SORTS.sort_order });
     return remarksService.list({});
   },
 };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ROLL_STATUSES } from "../models/MaterialRoll.model";
 import { basePaperSchema } from "./vendors.validators";
+import { searchSchema } from "./search.validators";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
 // Only paths this API minted: "rolls/YYYY/MM/<uuid>.<ext>". Rejecting anything else stops
@@ -119,4 +120,14 @@ export const listRollsQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(200).optional(),
+});
+
+/** The admin panel's paged roll list, as a POST body — the same filters as the GET list,
+ *  which stays as it is for the app's delta pull. */
+export const searchRollsSchema = searchSchema(["roll_number", "date"]).extend({
+  material_id: objectId.optional(),
+  vendor_id: objectId.optional(),
+  status: z.enum(ROLL_STATUSES).optional(),
+  location: objectId.optional(),
+  remark_id: objectId.optional(),
 });

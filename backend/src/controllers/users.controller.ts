@@ -6,6 +6,10 @@ export const usersController = {
     res.json(await usersService.list());
   },
 
+  async search(req: Request, res: Response) {
+    res.json(await usersService.search(req.body));
+  },
+
   async invite(req: Request, res: Response) {
     res.status(201).json(await usersService.invite(req.body, req.auth!.role));
   },

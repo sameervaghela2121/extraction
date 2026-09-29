@@ -6,11 +6,59 @@ import { DocumentModel } from "../models/Document.model";
 import { emailService } from "./email.service";
 import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
-import { GODOWN_ROLES } from "../validators/users.validators";
+import { GODOWN_ROLES, type searchUsersSchema } from "../validators/users.validators";
+import type { z } from "zod";
+import { directed, escapeRegex, paginated, pagedAggregate, type SortSpec } from "../utils/crud";
+
+const USER_SORTS: Record<NonNullable<z.infer<typeof searchUsersSchema>["sort"]>, SortSpec> = {
+  createdAt: { createdAt: 1 },
+  name: { name: 1 },
+  email: { email: 1 },
+};
+
+type ListedUser = { _id: Types.ObjectId; name: string; email: string; role: UserRole; status: UserStatus };
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const usersService = {
+  /**
+   * One page of the user-management list: the same godown-only boundary as list(), with the
+   * search and paging done in the database. Document counts are fetched for this page's
+   * users only, not aggregated across every document in the system.
+   */
+  async search(input: z.infer<typeof searchUsersSchema>) {
+    const match: Record<string, unknown> = { role: { $in: GODOWN_ROLES } };
+    if (input.q) {
+      const rx = new RegExp(escapeRegex(input.q), "i");
+      match.$or = [{ name: rx }, { email: rx }];
+    }
+    const { items, total } = await pagedAggregate<ListedUser>(User, [{ $match: match }], {
+      sort: directed(USER_SORTS[input.sort ?? "createdAt"], input.order),
+      page: input.page,
+      pageSize: input.pageSize,
+      // Explicit: `select: false` on the schema does not apply to an aggregate.
+      project: { name: 1, email: 1, role: 1, status: 1 },
+    });
+    const counts = await DocumentModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { ownerId: { $in: items.map((u) => u._id) } } },
+      { $group: { _id: "$ownerId", count: { $sum: 1 } } },
+    ]);
+    const countByUser = new Map(counts.map((c) => [c._id.toString(), c.count]));
+    return paginated(
+      items.map((u) => ({
+        id: u._id.toString(),
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        status: u.status,
+        docCount: countByUser.get(u._id.toString()) ?? 0,
+      })),
+      total,
+      input.page,
+      input.pageSize,
+    );
+  },
+
   // Staff and admin accounts are managed outside this panel, and super_admin never shows
   // up anywhere (see User.model.ts) — so this list is godown roles only, for every caller,
   // not just filtered in the UI. A godown_supervisor now has API access to this same list
