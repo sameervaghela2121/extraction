@@ -40,6 +40,9 @@ function crud<T extends { id: string }>(path: string) {
 
 export const vendorsApi = {
   ...crud<Vendor>("/vendors"),
+  /** The vendor table: vendors without their papers, which have their own screen. */
+  search: (query: SearchQuery) =>
+    api.post<Paginated<Omit<Vendor, "papers">>>("/vendors/search", query).then((r) => r.data),
   /** The paper-codes screen: every vendor's papers, one row per paper, paged by the server. */
   searchPapers: (query: SearchQuery) =>
     api.post<Paginated<PaperRow>>("/vendors/papers/search", query).then((r) => r.data),

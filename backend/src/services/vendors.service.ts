@@ -51,6 +51,22 @@ function toResponse(v: IVendor) {
   };
 }
 
+/** A vendor as a row of the admin panel's vendor table: no papers. They have their own
+ *  screen (the papers search), and a page of vendors would otherwise carry hundreds. */
+function toRowResponse(v: Omit<IVendor, "papers">) {
+  return {
+    id: v._id.toString(),
+    vendor_code: v.vendor_code,
+    name: v.name,
+    contact: v.contact ?? {},
+    address: v.address,
+    gst_number: v.gst_number,
+    status: v.status,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+  };
+}
+
 /** Shared by the GET list (the app's picker) and the admin panel's paged search. */
 function filterOf(query: { q?: string; status?: MasterStatus }): FilterQuery<IVendor> {
   const filter: FilterQuery<IVendor> = {};
@@ -92,12 +108,18 @@ export const vendorsService = {
 
   /** One page for the admin panel: filtered, sorted and paged in the database. */
   async search(input: z.infer<typeof searchVendorsSchema>) {
-    const { items, total } = await pagedAggregate<IVendor>(Vendor, [{ $match: filterOf(input) }], {
-      sort: directed(SORTS[input.sort ?? "name"], input.order),
-      page: input.page,
-      pageSize: input.pageSize,
-    });
-    return paginated(items.map(toResponse), total, input.page, input.pageSize);
+    const { items, total } = await pagedAggregate<Omit<IVendor, "papers">>(
+      Vendor,
+      [{ $match: filterOf(input) }],
+      {
+        sort: directed(SORTS[input.sort ?? "name"], input.order),
+        page: input.page,
+        pageSize: input.pageSize,
+        // Dropped in the database, so the papers never leave MongoDB.
+        project: { papers: 0 },
+      },
+    );
+    return paginated(items.map(toRowResponse), total, input.page, input.pageSize);
   },
 
   /**
