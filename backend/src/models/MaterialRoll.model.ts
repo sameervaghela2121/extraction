@@ -149,6 +149,12 @@ materialRollSchema.index({ client_id: 1 }, { unique: true, sparse: true });
 
 // Serves the delta pull: `updated_after=<checkpoint>` sorted ascending, which is how a
 // device catches up on everything that changed while it was offline.
-materialRollSchema.index({ updatedAt: 1 });
+// _id too: the pull sorts { updatedAt, _id }, and without it Mongo sorts the tie-breaker
+// in memory on every page.
+materialRollSchema.index({ updatedAt: 1, _id: 1 });
+
+// The admin panel's roll list, which opens newest-received first and pages from there.
+// Without it every page sorts the whole collection in memory before skipping to its rows.
+materialRollSchema.index({ date: -1, _id: -1 });
 
 export const MaterialRoll = model<IMaterialRoll>("MaterialRoll", materialRollSchema);

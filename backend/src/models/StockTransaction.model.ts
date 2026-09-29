@@ -73,9 +73,10 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     transaction_type: { type: String, enum: [...TRANSACTION_TYPES], required: true, index: true },
     // When the movement physically happened — not when the row was written.
     transaction_date: { type: Date, required: true, index: true },
-    material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true, index: true },
+    // Indexed by the compound indexes below, which also serve the date sort.
+    material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true },
     // Absent for movements that aren't roll-level (a bulk adjustment, loose stock).
-    roll_id: { type: Schema.Types.ObjectId, ref: "MaterialRoll", index: true },
+    roll_id: { type: Schema.Types.ObjectId, ref: "MaterialRoll" },
     // Only meaningful on IN.
     vendor_id: { type: Schema.Types.ObjectId, ref: "Vendor" },
     // Always positive. The direction lives in transaction_type, so a signed weight
@@ -106,7 +107,18 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
 stockTransactionSchema.index({ client_id: 1 }, { unique: true, sparse: true });
 
 // Serves the delta pull, same as the roll's.
-stockTransactionSchema.index({ updatedAt: 1 });
+// _id too: the pull sorts { updatedAt, _id }, and without it Mongo sorts the tie-breaker
+// in memory on every page.
+stockTransactionSchema.index({ updatedAt: 1, _id: 1 });
+
+// A roll's history, newest first — the history screens, the app, the RETURN's lookup of its
+// own OUT, and the weight correction's "last two rows". Answered from the index, sort
+// included, instead of fetching every movement of the roll and sorting in memory. Also
+// serves plain roll_id lookups (delete), as its prefix.
+stockTransactionSchema.index({ roll_id: 1, transaction_date: -1, _id: -1 });
+
+// The same for a material's movements (GET /stock/movements?material_id=).
+stockTransactionSchema.index({ material_id: 1, transaction_date: -1, _id: -1 });
 
 export const StockTransaction = model<IStockTransaction>(
   "StockTransaction",

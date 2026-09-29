@@ -6,6 +6,10 @@ export const rawMaterialsController = {
     res.json(await rawMaterialsService.list(req.query));
   },
 
+  async search(req: Request, res: Response) {
+    res.json(await rawMaterialsService.search(req.body));
+  },
+
   async get(req: Request, res: Response) {
     res.json(await rawMaterialsService.get(req.params.id));
   },
@@ -23,6 +27,6 @@ export const rawMaterialsController = {
   },
 
   async reorder(req: Request, res: Response) {
-    res.json(await rawMaterialsService.reorder(req.body.ids));
+    res.json(await rawMaterialsService.reorder(req.body.ids, req.body.offset));
   },
 };

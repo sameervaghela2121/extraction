@@ -8,6 +8,7 @@ import {
   createRemarkSchema,
   updateRemarkSchema,
   listRemarksQuerySchema,
+  searchRemarksSchema,
   reorderRemarksSchema,
 } from "../validators/remarks.validators";
 
@@ -18,6 +19,9 @@ const router = Router();
 const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
+
+// The admin panel's paged list. A POST so the GET list above can stay whole for the app.
+router.post("/search", validate({ body: searchRemarksSchema }), asyncHandler(remarksController.search));
 
 router.get("/", validate({ query: listRemarksQuerySchema }), asyncHandler(remarksController.list));
 router.get("/:id", asyncHandler(remarksController.get));

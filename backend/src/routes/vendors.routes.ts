@@ -8,6 +8,8 @@ import {
   createVendorSchema,
   updateVendorSchema,
   listVendorsQuerySchema,
+  searchVendorsSchema,
+  searchPapersSchema,
 } from "../validators/vendors.validators";
 
 const router = Router();
@@ -18,6 +20,10 @@ const router = Router();
 const canWrite = requireGodownWrite;
 
 router.use(requireAuth);
+
+// The admin panel's paged list. A POST so the GET list above can stay whole for the app.
+router.post("/search", validate({ body: searchVendorsSchema }), asyncHandler(vendorsController.search));
+router.post("/papers/search", validate({ body: searchPapersSchema }), asyncHandler(vendorsController.searchPapers));
 
 router.get("/", validate({ query: listVendorsQuerySchema }), asyncHandler(vendorsController.list));
 router.get("/:id", asyncHandler(vendorsController.get));

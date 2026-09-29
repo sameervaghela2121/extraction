@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
-import { vendorsApi } from "../../api/masters.api";
+import { vendorsApi, type PaperRow } from "../../api/masters.api";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
-import Pager, { pageOf } from "./Pager";
-import { compareCells, nextSort, SortHeader, type Sort } from "./sorting";
+import Pager from "./Pager";
+import { nextSort, SortHeader } from "./sorting";
+import { useServerPage } from "./useServerPage";
 import type { Vendor, VendorPaper } from "../../types";
 
 /**
  * The paper-codes sheet, as its own screen.
  *
- * Papers are still embedded in their supplier server-side — there is no papers collection
- * and no papers endpoint, and nothing about the backend changed for this screen. So a row
- * here is "paper N of vendor V", every edit is a PATCH of that vendor's whole `papers`
- * array, and the list is built by reading every vendor once and flattening.
+ * Papers are embedded in their supplier server-side — there is no papers collection. So a
+ * row here is "paper N of vendor V", and every edit is a PATCH of that vendor's whole
+ * `papers` array. The list itself is searched and paged by the server
+ * (POST /vendors/papers/search), one page at a time.
  *
  * That embedding is also why a row is identified by its vendor plus its position rather
  * than by an id: the rows have none (`{ _id: false }` on the schema), and an RT code is not
@@ -27,13 +28,9 @@ function paperKey(paper: VendorPaper): string {
   return (paper.royal_touche_code || `delta:${paper.delta_code ?? ""}`).toUpperCase();
 }
 
-/** One flattened row: the paper, the supplier it belongs to, and where it sits in that
- *  supplier's array — which is what a save has to address. */
-interface Row {
-  vendor: Vendor;
-  index: number;
-  paper: VendorPaper;
-}
+/** One row: the paper, the supplier it belongs to, and where it sits in that supplier's
+ *  array — which is what a save has to address. */
+type Row = PaperRow;
 
 /**
  * `found_in` and `is_common` are carried but never rendered.
@@ -84,16 +81,11 @@ function toPaper(form: FormState): VendorPaper {
   };
 }
 
-/** Deliberately only the columns on screen: matching a hidden field would surface rows
- *  where nothing visible explains the hit. */
-function matches(row: Row, q: string): boolean {
-  return [
-    row.paper.royal_touche_code,
-    row.paper.delta_code,
-    row.paper.supplier_code_number,
-    row.vendor.name,
-  ].some((value) => (value ?? "").toLowerCase().includes(q));
-}
+/** A row that moved or changed since the page loaded. Its own class so its message reaches
+ *  the user — apiErrorMessage only passes API errors through. */
+class StaleRowError extends Error {}
+
+const errorText = (err: unknown) => (err instanceof StaleRowError ? err.message : apiErrorMessage(err));
 
 /** Searchable vendor dropdown. 74 suppliers arrive in one unpaginated call, so this
  *  filters what is already in memory rather than querying per keystroke. */
@@ -177,10 +169,13 @@ function VendorPicker({
 
 export default function RawMaterialPage() {
   const { notify } = useToast();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  // Searched, sorted and paged by the server. Vendor is the sortable column, and the table
+  // starts on it — never in an "unsorted" state (see nextSort in sorting.tsx).
+  const { rows, total, page, setPage, search, setSearch, query, sort, setSort, loading, fetching, reload } =
+    useServerPage<Row>((q) => vendorsApi.searchPapers(q), { key: "vendor", dir: "asc" });
+  // The vendor picker's options, fetched the first time the form opens rather than with the
+  // table — browsing the list never needs them.
+  const [vendors, setVendors] = useState<Vendor[] | null>(null);
   // null = closed, "new" = adding, otherwise the row being edited.
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -189,70 +184,45 @@ export default function RawMaterialPage() {
   // roll booked against that RT code is left pointing at a paper nobody can look up.
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
-  // Vendor is the only sortable column here, and the table starts on it — never in an
-  // "unsorted" state, for the reason spelled out in sorting.ts's nextSort.
-  const [sort, setSort] = useState<Sort>({ key: "vendor", dir: "asc" });
 
-  const load = async () => {
-    setLoading(true);
+  const loadVendors = async () => {
+    if (vendors) return;
     try {
       setVendors(await vendorsApi.list());
     } catch (err) {
       notify(apiErrorMessage(err), "error");
-    } finally {
-      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const rows = useMemo(
-    () =>
-      vendors.flatMap((vendor) =>
-        (vendor.papers ?? []).map((paper, index) => ({ vendor, index, paper })),
-      ),
-    [vendors],
-  );
-
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? rows.filter((row) => matches(row, q)) : rows;
-  }, [rows, search]);
-
-  // Ascending by vendor from the start, matching the order the rows already arrive in: the
-  // API returns vendors name-ascending and Array.prototype.sort is stable, so this renders
-  // exactly what it did before while giving the header an honest icon to show. Papers keep
-  // their sheet order within a supplier.
-  const ordered = useMemo(() => {
-    if (!sort) return visible;
-    const direction = sort.dir === "asc" ? 1 : -1;
-    return [...visible].sort((a, b) => compareCells(a.vendor.name, b.vendor.name) * direction);
-  }, [visible, sort]);
-
-  // A filter that shrinks the list under the current page would otherwise leave an empty
-  // table with no obvious way back. Re-sorting reshuffles which rows land on which page,
-  // so it needs the same reset.
-  useEffect(() => {
-    setPage(1);
-  }, [search, sort]);
-
-  const pageRows = pageOf(ordered, page);
-
   const openCreate = () => {
+    loadVendors();
     setForm(EMPTY);
     setEditing("new");
   };
 
   const openEdit = (row: Row) => {
+    loadVendors();
     setForm(toForm(row));
     setEditing(row);
   };
 
   const setValue = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  /**
+   * The vendor's papers as they are now, with `row` checked to still be where the list saw
+   * it. A row is addressed by its position, so if the vendor's papers changed since this
+   * page loaded, editing "paper 12" would silently edit a different paper.
+   */
+  const freshPapers = async (row: Row): Promise<VendorPaper[]> => {
+    const vendor = await vendorsApi.get(row.vendor.id);
+    const papers = vendor.papers ?? [];
+    const current = papers[row.index];
+    if (!current || paperKey(current) !== paperKey(row.paper)) {
+      throw new StaleRowError("This raw material changed since the list was loaded — reload and try again.");
+    }
+    return papers;
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -270,43 +240,41 @@ export default function RawMaterialPage() {
       return notify("Enter the supplier code / name.", "error");
     }
 
-    const target = vendors.find((v) => v.id === form.vendorId);
-    if (!target) return notify("That vendor no longer exists — reload and try again.", "error");
-
     const from = editing !== "new" && editing ? editing : null;
-    const moving = Boolean(from && from.vendor.id !== target.id);
-
-    // Codes repeat across suppliers — 42 already do — but two rows with the same code under
-    // ONE supplier would collide, because the backend merges a vendor's papers by code.
-    const key = paperKey(paper);
-    const clashes = (target.papers ?? []).some(
-      (p, i) => paperKey(p) === key && !(from && !moving && i === from.index),
-    );
-    if (clashes) {
-      return notify(`${target.name} already has a raw material with this code.`, "error");
-    }
+    const moving = Boolean(from && from.vendor.id !== form.vendorId);
 
     setSaving(true);
     try {
-      const targetPapers =
-        from && !moving
-          ? (target.papers ?? []).map((p, i) => (i === from.index ? paper : p))
-          : [...(target.papers ?? []), paper];
+      // Read fresh, not from the page: the table only holds one page of rows, and the vendor
+      // may have changed since it loaded.
+      const target = await vendorsApi.get(form.vendorId);
+      const targetPapers = from && !moving ? await freshPapers(from) : (target.papers ?? []);
+      const sourcePapers = from && moving ? await freshPapers(from) : null;
+
+      // Codes repeat across suppliers, but two rows with the same code under ONE supplier
+      // would collide, because the backend merges a vendor's papers by code.
+      const key = paperKey(paper);
+      const clashes = targetPapers.some((p, i) => paperKey(p) === key && !(from && !moving && i === from.index));
+      if (clashes) {
+        notify(`${target.name} already has a raw material with this code.`, "error");
+        return;
+      }
+
+      const nextTarget =
+        from && !moving ? targetPapers.map((p, i) => (i === from.index ? paper : p)) : [...targetPapers, paper];
 
       // Added to the new supplier before being removed from the old one. If the second call
       // fails the row is duplicated — visible, and deletable — rather than lost from both.
-      await vendorsApi.update(target.id, { papers: targetPapers });
-      if (from && moving) {
-        await vendorsApi.update(from.vendor.id, {
-          papers: (from.vendor.papers ?? []).filter((_, i) => i !== from.index),
-        });
+      await vendorsApi.update(target.id, { papers: nextTarget });
+      if (from && sourcePapers) {
+        await vendorsApi.update(from.vendor.id, { papers: sourcePapers.filter((_, i) => i !== from.index) });
       }
 
-      await load();
+      await reload();
       setEditing(null);
       notify(from ? "Saved" : "Raw material added");
     } catch (err) {
-      notify(apiErrorMessage(err), "error");
+      notify(errorText(err), "error");
     } finally {
       setSaving(false);
     }
@@ -316,14 +284,13 @@ export default function RawMaterialPage() {
     if (!deleting) return;
     setDeletingNow(true);
     try {
-      await vendorsApi.update(deleting.vendor.id, {
-        papers: (deleting.vendor.papers ?? []).filter((_, i) => i !== deleting.index),
-      });
-      await load();
+      const papers = await freshPapers(deleting);
+      await vendorsApi.update(deleting.vendor.id, { papers: papers.filter((_, i) => i !== deleting.index) });
+      await reload();
       setDeleting(null);
       notify("Raw material removed");
     } catch (err) {
-      notify(apiErrorMessage(err), "error");
+      notify(errorText(err), "error");
     } finally {
       setDeletingNow(false);
     }
@@ -369,8 +336,8 @@ export default function RawMaterialPage() {
                   <th style={{ width: 120 }}></th>
                 </tr>
               </thead>
-              <tbody>
-                {pageRows.map((row) => (
+              <tbody style={fetching ? { opacity: 0.6 } : undefined}>
+                {rows.map((row) => (
                   <tr key={`${row.vendor.id}:${row.index}`}>
                     <td>{row.paper.royal_touche_code || "—"}</td>
                     <td>{row.paper.delta_code || "—"}</td>
@@ -392,16 +359,16 @@ export default function RawMaterialPage() {
                     </td>
                   </tr>
                 ))}
-                {pageRows.length === 0 && (
+                {rows.length === 0 && (
                   <tr>
                     <td colSpan={5} className="faint" style={{ textAlign: "center", padding: 20 }}>
-                      {search ? "Nothing matches that search." : "Nothing here yet."}
+                      {query ? "Nothing matches that search." : "Nothing here yet."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-            <Pager page={page} total={visible.length} onChange={setPage} label="raw materials" />
+            <Pager page={page} total={total} onChange={setPage} label="raw materials" />
           </div>
         )}
       </div>
@@ -460,7 +427,7 @@ export default function RawMaterialPage() {
           <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
             <span className="faint">Vendor *</span>
             <VendorPicker
-              vendors={vendors}
+              vendors={vendors ?? []}
               value={form.vendorId}
               onChange={(id) => setValue("vendorId", id)}
             />
@@ -495,8 +462,7 @@ export default function RawMaterialPage() {
           </div>
 
           <p className="faint" style={{ margin: 0, fontSize: 12 }}>
-            A raw material needs a Royal Touche code or a Delta code. Only rows with an RT
-            code can be picked for a roll.
+            A raw material needs a Royal Touche code or a Delta code.
           </p>
 
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>

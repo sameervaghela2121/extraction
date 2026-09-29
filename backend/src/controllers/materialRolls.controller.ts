@@ -3,7 +3,8 @@ import { materialRollsService } from "../services/materialRolls.service";
 
 export const materialRollsController = {
   async list(req: Request, res: Response) {
-    res.json(await materialRollsService.list(req.query));
+    // GET passes filters in the query string, POST /search in the body — same filters.
+    res.json(await materialRollsService.list(req.method === "POST" ? req.body : req.query));
   },
 
   async get(req: Request, res: Response) {

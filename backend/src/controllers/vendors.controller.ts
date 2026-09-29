@@ -6,6 +6,14 @@ export const vendorsController = {
     res.json(await vendorsService.list(req.query));
   },
 
+  async search(req: Request, res: Response) {
+    res.json(await vendorsService.search(req.body));
+  },
+
+  async searchPapers(req: Request, res: Response) {
+    res.json(await vendorsService.searchPapers(req.body));
+  },
+
   async get(req: Request, res: Response) {
     res.json(await vendorsService.get(req.params.id));
   },

@@ -1,4 +1,4 @@
-import { Types, type Model } from "mongoose";
+import { Types, type Model, type PipelineStage } from "mongoose";
 import { ApiError } from "./ApiError";
 
 /** Where a newly created row lands in a `sort_order`-driven picker: after everything that
@@ -12,29 +12,120 @@ export async function nextSortOrder<T extends { sort_order?: number }>(
   return ((highest as { sort_order?: number } | null)?.sort_order ?? 0) + 1;
 }
 
+/** A sort for a paged list: field -> direction, in priority order. */
+export type SortSpec = Record<string, 1 | -1>;
+
+/** `spec` as given for "asc", every direction flipped for "desc". */
+export function directed(spec: SortSpec, order: "asc" | "desc" = "asc"): SortSpec {
+  if (order === "asc") return spec;
+  return Object.fromEntries(Object.entries(spec).map(([k, v]) => [k, v === 1 ? -1 : 1])) as SortSpec;
+}
+
 /**
- * Rewrite `sort_order` for a whole picker at once, from a drag-and-drop's finished order.
+ * Case-insensitive, and "A-2" before "A-10" — how people read codes and names, not
+ * Mongo's default byte order (where "Zebra" sorts before "apple").
+ */
+const LIST_COLLATION = { locale: "en", strength: 2, numericOrdering: true };
+
+/** A number no real sort_order reaches, so an unnumbered row sorts after numbered ones. */
+const UNNUMBERED = Number.MAX_SAFE_INTEGER;
+
+/**
+ * The $sort stages for `sort`, with a missing sort_order sorting last rather than first
+ * (Mongo's default for a missing field) and _id as the final tie-breaker, so two rows that
+ * compare equal can't swap places between one page and the next.
+ */
+function sortStages(sort: SortSpec): PipelineStage[] {
+  const stages: PipelineStage[] = [];
+  const spec: Record<string, 1 | -1> = {};
+  for (const [field, dir] of Object.entries(sort)) {
+    if (field === "sort_order") {
+      stages.push({ $addFields: { _sort_order: { $ifNull: ["$sort_order", UNNUMBERED] } } });
+      spec._sort_order = dir;
+    } else {
+      spec[field] = dir;
+    }
+  }
+  if (!("_id" in spec)) spec._id = 1;
+  stages.push({ $sort: spec });
+  return stages;
+}
+
+/**
+ * One page of `stages`' output, sorted, plus the total it was cut from — in a single round
+ * trip ($facet) rather than a find and a separate count.
  *
- * The caller sends every row's id in its new top-to-bottom order (not just the ones that
- * moved) — simplest possible contract, and it sidesteps the off-by-one bugs a "shift only
- * the affected range" endpoint invites. Ids are matched against the collection first so a
- * stale or foreign id fails the whole request with a clear 400 rather than silently
- * numbering a partial list.
+ * `stages` comes first, so a caller can reshape documents before filtering (the papers list
+ * unwinds vendors into one row per paper). `project` trims each returned row, which a
+ * pipeline needs explicitly: `select: false` on a schema field does not apply to aggregate.
+ */
+export async function pagedAggregate<T>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any collection's model
+  model: Model<any>,
+  stages: PipelineStage[],
+  opts: { sort: SortSpec; page: number; pageSize: number; project?: Record<string, 0 | 1> },
+): Promise<{ items: T[]; total: number }> {
+  const pageStages: PipelineStage.FacetPipelineStage[] = [
+    { $skip: (opts.page - 1) * opts.pageSize },
+    { $limit: opts.pageSize },
+  ];
+  if (opts.project) pageStages.push({ $project: opts.project });
+  const [result] = await model
+    .aggregate<{ items: T[]; total: Array<{ n: number }> }>([
+      ...stages,
+      ...sortStages(opts.sort),
+      { $facet: { items: pageStages, total: [{ $count: "n" }] } },
+    ])
+    .collation(LIST_COLLATION);
+  return { items: result?.items ?? [], total: result?.total[0]?.n ?? 0 };
+}
+
+/**
+ * Rewrite `sort_order` for a picker from a drag-and-drop's finished order.
+ *
+ * Without `page`, `ids` is every row's id in its new top-to-bottom order — the original
+ * contract. With `page`, the admin panel drags within one page of a paged list, so `ids`
+ * is only that page, starting at `page.offset` in the full order. The full order is read
+ * with the same sort the list uses, the page's slice is replaced with the new order, and
+ * the whole sequence is renumbered 1..N — so rows on other pages keep their place, and the
+ * numbering stays contiguous for the next page-level drag. A page whose rows are not the
+ * ones currently at that position (someone reordered or added a row meanwhile) is refused
+ * rather than scrambling the order.
  */
 export async function reorderDocs<T extends { sort_order?: number }>(
   model: Model<T>,
   label: string,
   ids: string[],
+  page?: { offset: number; sort: SortSpec },
 ): Promise<void> {
   if (ids.some((id) => !Types.ObjectId.isValid(id))) {
     throw ApiError.badRequest(`One or more ${label} ids are invalid`);
   }
-  const count = await model.countDocuments({ _id: { $in: ids } } as never);
-  if (count !== ids.length) {
-    throw ApiError.badRequest(`One or more ${label} ids were not found`);
+  if (new Set(ids).size !== ids.length) {
+    throw ApiError.badRequest(`The same ${label} appears twice in the new order`);
   }
+
+  let sequence = ids;
+  if (page) {
+    const all = await model
+      .aggregate<{ _id: Types.ObjectId }>([...sortStages(page.sort), { $project: { _id: 1 } }])
+      .collation(LIST_COLLATION);
+    const current = all.map((d) => d._id.toString());
+    const slice = current.slice(page.offset, page.offset + ids.length);
+    const sameRows = slice.length === ids.length && slice.every((id) => ids.includes(id));
+    if (!sameRows) {
+      throw ApiError.conflict(`The ${label} list changed since it was loaded — reload and try again`);
+    }
+    sequence = [...current.slice(0, page.offset), ...ids, ...current.slice(page.offset + ids.length)];
+  } else {
+    const count = await model.countDocuments({ _id: { $in: ids } } as never);
+    if (count !== ids.length) {
+      throw ApiError.badRequest(`One or more ${label} ids were not found`);
+    }
+  }
+
   await model.bulkWrite(
-    ids.map((id, index) => ({
+    sequence.map((id, index) => ({
       updateOne: { filter: { _id: id }, update: { $set: { sort_order: index + 1 } } },
     })) as never,
   );

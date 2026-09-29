@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { Plus, GripVertical } from "lucide-react";
 import {
@@ -19,8 +19,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
-import Pager, { pageOf } from "./Pager";
-import { compareCells, nextSort, SortHeader, type Sort } from "./sorting";
+import Pager, { PAGE_SIZE } from "./Pager";
+import { nextSort, SortHeader, type Sort } from "./sorting";
+import { useServerPage } from "./useServerPage";
 import type { MasterRow, MasterSpec } from "./specs";
 
 /**
@@ -87,141 +88,61 @@ function toForm(row: MasterRow): FormState {
 
 export default function MasterSection({ spec }: { spec: MasterSpec }) {
   const { notify } = useToast();
-  const [rows, setRows] = useState<MasterRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  /**
+   * Starts on the sortable column, ascending — never in an "unsorted" state (see nextSort).
+   * A reorderable master starts on sort_order instead: that is the order dragging acts on,
+   * and the order its picker shows. MasterDataPage remounts this per section, so this is
+   * computed afresh for each master.
+   */
+  const initialSort: Sort = spec.reorderable
+    ? { key: "sort_order", dir: "asc" }
+    : (() => {
+        const first = spec.fields.find((f) => f.inList && f.sortable);
+        return first ? { key: first.name, dir: "asc" } : null;
+      })();
+  // Searched, sorted and paged by the server: one request per page, nothing held in memory
+  // beyond the rows on screen.
+  const { rows, setRows, total, page, setPage, search, setSearch, query, sort, setSort, loading, fetching, reload } =
+    useServerPage<MasterRow>((q) => spec.api.search(q), initialSort);
   // null = closed, "new" = create, otherwise the id being edited.
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
-  /**
-   * Starts on the sortable column, ascending — never in an "unsorted" state.
-   *
-   * An unsorted state was indistinguishable from ascending here: the API already returns
-   * vendors ordered by name, and a vendor_code is the slugified name for 71 of the 74, so
-   * the two orderings render the same rows in the same sequence. Every click that moved
-   * between those two states looked like a click that did nothing.
-   *
-   * Lazy initialiser, not a plain value: it reads the spec, and MasterDataPage remounts
-   * this component per section, so it re-runs for each master rather than going stale.
-   *
-   * A reorderable master starts on sort_order ascending rather than its code column — that
-   * is the order dragging acts on, and it is also what the API already returns rows in, so
-   * this stops the previous default (re-sorting by code client-side) from immediately
-   * undoing the server's own ordering the moment the page loads.
-   */
-  const [sort, setSort] = useState<Sort>(() => {
-    if (spec.reorderable) return { key: "sort_order", dir: "asc" };
-    const first = spec.fields.find((f) => f.inList && f.sortable);
-    return first ? { key: first.name, dir: "asc" } : null;
-  });
-  // Dragging only makes sense against the one complete, stable sequence it edits — search
-  // hides rows out of that sequence, and any other sort shows a different one entirely.
-  // Switching either back on brings the handles right back rather than needing a reset.
-  const canDrag = Boolean(spec.reorderable) && !search.trim() && sort?.key === "sort_order" && sort.dir === "asc";
+  // Dragging edits the sort_order sequence, so it is only offered while the table shows that
+  // sequence unfiltered. It works within the current page; the server slots the page's new
+  // order back into the full list, so rows on other pages keep their place.
+  const canDrag =
+    Boolean(spec.reorderable) && !search.trim() && !query && sort?.key === "sort_order" && sort.dir === "asc";
   const [reordering, setReordering] = useState(false);
   // A few pixels of slop before a drag starts, so clicking the handle (or a button
   // elsewhere in the row) never gets mistaken for the beginning of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      setRows(await spec.api.list());
-    } catch (err) {
-      notify(apiErrorMessage(err), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.key]);
-
-  // Filtered here rather than server-side: these lists are read whole (no pagination on
-  // any of the three endpoints), so a round-trip per keystroke would buy nothing.
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      spec.fields.some((f) => String(row[f.name] ?? "").toLowerCase().includes(q)),
-    );
-  }, [rows, search, spec.fields]);
-
-  // Sorted after filtering — same set either way, and this sorts the smaller list.
-  const ordered = useMemo(() => {
-    if (!sort) return visible;
-    const field = spec.fields.find((f) => f.name === sort.key);
-    const direction = sort.dir === "asc" ? 1 : -1;
-    // Copied before sorting: Array.prototype.sort mutates, and `visible` is the memoised
-    // filter result that other renders read.
-    return [...visible].sort(
-      (a, b) => compareCells(a[sort.key], b[sort.key], field?.type === "number") * direction,
-    );
-  }, [visible, sort, spec.fields]);
-
   const toggleSort = (key: string) => setSort((prev) => nextSort(prev, key));
 
-  // A filter that shrinks the list under the current page would otherwise leave an empty
-  // table with no obvious way back.
-  useEffect(() => {
-    setPage(1);
-  }, [search, spec.key]);
-
-  // Re-sorting reshuffles which rows fall on which page, so staying on page 4 would land
-  // the user somewhere arbitrary in the new order.
-  useEffect(() => {
-    setPage(1);
-  }, [sort]);
-
-  // All rows on one "page" while dragging is live: reordering across a page boundary isn't
-  // supported, and these masters are small enough (a handful to a few hundred rows) that
-  // showing them all costs nothing.
-  const pageRows = canDrag ? ordered : pageOf(ordered, page);
-
-  /** Move the dropped row within the currently-displayed order, then persist the whole new
-   *  sequence — see reorder() in masters.api.ts. Applied optimistically so the row doesn't
-   *  snap back while the request is in flight; a failure reloads from the server rather than
-   *  leaving the screen showing an order that didn't actually save.
-   *
-   * The optimistic update is wrapped in flushSync rather than a plain setRows: dnd-kit plays
-   * its own "settle into place" animation synchronously, inside this same handler, based on
-   * whatever order SortableContext's `items` currently holds. A plain setRows doesn't apply
-   * until React's next render, which lands after that animation already ran — so the row
-   * visibly snaps back to its old spot for a frame before jumping to the new one. flushSync
-   * forces the reorder to commit (and SortableContext's `items` to update) before dnd-kit
-   * gets to animate anything, so it settles into the right place on the first try. */
+  /** Move the dropped row within this page, then save the page's new order. Applied
+   *  optimistically, and inside flushSync: dnd-kit animates the drop synchronously from
+   *  SortableContext's current `items`, so a plain setRows (applied on the next render)
+   *  would show the row snapping back for a frame before jumping to its new place. The page
+   *  is reloaded either way, so a failed save shows the order the server actually has. */
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = ordered.findIndex((r) => r.id === active.id);
-    const newIndex = ordered.findIndex((r) => r.id === over.id);
+    const oldIndex = rows.findIndex((r) => r.id === active.id);
+    const newIndex = rows.findIndex((r) => r.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    // Valid to replace the whole `rows` state with just this reordered set: canDrag already
-    // guarantees no search filter is narrowing it, so `ordered` and `rows` cover the same
-    // rows, just possibly in a different sequence.
-    //
-    // Renumbering `sort_order` here, not just moving array positions, matters: `ordered` is
-    // re-derived by sorting on that field on every render, so a row moved to index 0 but
-    // still carrying its old sort_order (say, 4) gets sorted straight back to position 4 on
-    // the very next render — visible as the row snapping back until the server's response
-    // (with real renumbered values) arrives and moves it again. Assigning 1..N locally,
-    // matching exactly what the server is about to compute, makes that re-sort a no-op.
-    const next = arrayMove(ordered, oldIndex, newIndex).map((row, index) => ({
-      ...row,
-      sort_order: index + 1,
-    }));
+    const next = arrayMove(rows, oldIndex, newIndex);
     flushSync(() => setRows(next));
     setReordering(true);
     try {
-      setRows(await spec.api.reorder(next.map((r) => r.id)));
+      await spec.api.reorder(
+        next.map((r) => r.id),
+        (page - 1) * PAGE_SIZE,
+      );
     } catch (err) {
       notify(apiErrorMessage(err), "error");
-      await load();
     } finally {
+      await reload();
       setReordering(false);
     }
   };
@@ -258,11 +179,11 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
     setSaving(true);
     try {
       const body = buildBody();
-      const saved =
-        editing === "new" ? await spec.api.create(body) : await spec.api.update(editing!, body);
-      setRows((prev) =>
-        editing === "new" ? [...prev, saved] : prev.map((r) => (r.id === saved.id ? saved : r)),
-      );
+      if (editing === "new") await spec.api.create(body);
+      else await spec.api.update(editing!, body);
+      // Reloaded rather than patched in: a new or edited row may belong on another page, or
+      // no longer match the search.
+      await reload();
       setEditing(null);
       notify(editing === "new" ? `${spec.noun} added` : "Saved");
     } catch (err) {
@@ -335,11 +256,11 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
               </thead>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext
-                  items={pageRows.map((r) => r.id)}
+                  items={rows.map((r) => r.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <tbody style={reordering ? { opacity: 0.6 } : undefined}>
-                    {pageRows.map((row) => (
+                  <tbody style={reordering || fetching ? { opacity: 0.6 } : undefined}>
+                    {rows.map((row) => (
                       <SortableRow key={row.id} id={row.id} disabled={!canDrag}>
                         {(handle) => (
                           <>
@@ -365,14 +286,14 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                         )}
                       </SortableRow>
                     ))}
-                    {pageRows.length === 0 && (
+                    {rows.length === 0 && (
                       <tr>
                         <td
                           colSpan={columns.length + 2 + (canDrag ? 1 : 0)}
                           className="faint"
                           style={{ textAlign: "center", padding: 20 }}
                         >
-                          {search ? "Nothing matches that search." : "Nothing here yet."}
+                          {query ? "Nothing matches that search." : "Nothing here yet."}
                         </td>
                       </tr>
                     )}
@@ -380,14 +301,11 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                 </SortableContext>
               </DndContext>
             </table>
-            {canDrag ? (
-              <div className="row" style={{ padding: "10px 12px" }}>
-                <span className="faint" style={{ fontSize: 12 }}>
-                  {visible.length} {spec.plural} · drag the handle to reorder
-                </span>
+            <Pager page={page} total={total} onChange={setPage} label={spec.plural} />
+            {canDrag && (
+              <div className="faint" style={{ fontSize: 12, padding: "0 12px 10px" }}>
+                Drag the handle to reorder{total > PAGE_SIZE ? " rows on this page" : ""}.
               </div>
-            ) : (
-              <Pager page={page} total={visible.length} onChange={setPage} label={spec.plural} />
             )}
           </div>
         )}

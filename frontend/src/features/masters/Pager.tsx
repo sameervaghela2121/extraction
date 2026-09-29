@@ -1,12 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+/** Rows per page on every server-paged table. The backend's default page size too. */
 export const PAGE_SIZE = 25;
-
-/** Page a list that is already in memory. Every master endpoint returns its rows whole,
- *  so this is display paging — no fetch per page. */
-export function pageOf<T>(rows: T[], page: number, size = PAGE_SIZE): T[] {
-  return rows.slice((page - 1) * size, page * size);
-}
 
 export default function Pager({
   page,
