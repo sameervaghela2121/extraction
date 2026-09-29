@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ROLL_STATUSES } from "../models/MaterialRoll.model";
+import { basePaperSchema } from "./vendors.validators";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
 // Only paths this API minted: "rolls/YYYY/MM/<uuid>.<ext>". Rejecting anything else stops
@@ -21,6 +22,10 @@ export const createRollSchema = z.object({
   // from one has nothing to put here. A roll without it cannot be traced back to its paper
   // — worth making required again once registration reliably supplies it.
   royal_touche_code: z.string().trim().min(1).optional(),
+  // The paper(s) picked from the chosen vendor's `papers`, sent as the vendor list returned
+  // them. Only the codes are trusted: the service finds each one on the vendor and stores
+  // the vendor's own copy, so a client can't book a roll against another supplier's paper.
+  papers: z.array(basePaperSchema).min(1, "Pick at least one paper").max(10).optional(),
   // The pre-printed label scanned at registration, e.g. "RT2026040712345678". Minted by
   // the admin panel's barcode batches, so the phone only ever echoes what it read.
   // Optional: rolls received before the labels existed have none.

@@ -1,5 +1,5 @@
 import { type FilterQuery } from "mongoose";
-import { Vendor, type IVendor, type IBasePaper } from "../models/Vendor.model";
+import { Vendor, paperKey, type IVendor, type IBasePaper } from "../models/Vendor.model";
 import type { MasterStatus } from "../models/masterStatus";
 import { escapeRegex, findOr404, ensureCodeFree, applyUpdates } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
@@ -38,12 +38,6 @@ function toResponse(v: IVendor) {
     createdAt: v.createdAt,
     updatedAt: v.updatedAt,
   };
-}
-
-/** What makes two paper rows the same paper. RT code first: it is the code that ends up on
- *  a roll. A Delta-range paper has no RT code, so it is keyed by its delta code instead. */
-function paperKey(paper: IBasePaper): string {
-  return (paper.royal_touche_code || `delta:${paper.delta_code}`).toUpperCase();
 }
 
 export const vendorsService = {

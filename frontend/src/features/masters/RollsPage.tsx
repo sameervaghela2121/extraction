@@ -5,6 +5,7 @@ import { apiErrorMessage } from "../../api/client";
 import { rollsApi } from "../../api/rolls.api";
 import { stockApi } from "../../api/stock.api";
 import { locationsApi, materialTypesApi } from "../../api/masters.api";
+import { deltaCodes, rtCodes, supplierCodes } from "./rollPapers";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
@@ -361,6 +362,7 @@ export default function RollsPage() {
                     onToggle={(key) => setSort((prev) => nextSort(prev, key))}
                   />
                   <th>RT code</th>
+                  <th>Delta code</th>
                   <th>Current weight</th>
                   <th>Status</th>
                   <th style={{ width: 170 }}></th>
@@ -370,7 +372,8 @@ export default function RollsPage() {
                 {rolls.map((roll) => (
                   <tr key={roll.id}>
                     <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
-                    <td>{roll.royal_touche_code || "—"}</td>
+                    <td>{rtCodes(roll)}</td>
+                    <td>{deltaCodes(roll)}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>
                       {roll.remaining_weight ?? 0} {roll.unit}
                     </td>
@@ -409,7 +412,7 @@ export default function RollsPage() {
                 ))}
                 {rolls.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={6} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {search ? "No rolls match that search." : "No rolls yet."}
                     </td>
                   </tr>
@@ -463,7 +466,11 @@ export default function RollsPage() {
             <div className="roll-readonly">
               <div>
                 <span className="faint">RT code</span>
-                <strong>{deleting.royal_touche_code || "—"}</strong>
+                <strong>{rtCodes(deleting)}</strong>
+              </div>
+              <div>
+                <span className="faint">Delta code</span>
+                <strong>{deltaCodes(deleting)}</strong>
               </div>
               <div>
                 <span className="faint">Current weight</span>
@@ -519,7 +526,15 @@ export default function RollsPage() {
               </div>
               <div>
                 <span className="faint">RT code</span>
-                <strong>{editing.royal_touche_code || "—"}</strong>
+                <strong>{rtCodes(editing)}</strong>
+              </div>
+              <div>
+                <span className="faint">Delta code</span>
+                <strong>{deltaCodes(editing)}</strong>
+              </div>
+              <div>
+                <span className="faint">Supplier code</span>
+                <strong>{supplierCodes(editing)}</strong>
               </div>
               <div>
                 <span className="faint">Barcode</span>

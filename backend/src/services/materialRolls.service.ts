@@ -2,7 +2,7 @@ import { Types, type FilterQuery, type HydratedDocument } from "mongoose";
 import { MaterialRoll, type IMaterialRoll, type RollStatus } from "../models/MaterialRoll.model";
 import { StockTransaction } from "../models/StockTransaction.model";
 import { RawMaterial } from "../models/RawMaterial.model";
-import { Vendor } from "../models/Vendor.model";
+import { Vendor, paperKey, type IBasePaper } from "../models/Vendor.model";
 import { Remark } from "../models/Remark.model";
 import type { MasterStatus } from "../models/masterStatus";
 import { ApiError } from "../utils/ApiError";
@@ -21,6 +21,8 @@ type RollInput = {
   roll_number: string;
   /** Royal Touche's code for the base paper, read off the label. Optional for now. */
   royal_touche_code?: string;
+  /** Papers picked from the vendor's list. Resolved against the vendor — see resolvePapers. */
+  papers?: IBasePaper[];
   /** The pre-printed label scanned onto the roll. */
   barcode?: string;
   /** A code from the remark master, noted at registration. */
@@ -140,6 +142,9 @@ async function toResponse(r: PopulatedRoll) {
     id: r._id.toString(),
     roll_number: r.roll_number,
     royal_touche_code: r.royal_touche_code,
+    // `[]` rather than undefined so a client can map over it without a guard — same as a
+    // vendor's papers.
+    papers: r.papers ?? [],
     barcode: r.barcode,
     remark_code: r.remark_code,
     remarks: r.remarks,
@@ -215,17 +220,67 @@ async function loadUsableMaterial(materialId?: string): Promise<UsableRef> {
   return material;
 }
 
-// vendor_code as well as the name: roll screens show it as the Supplier Code Number.
+type VendorWithPapers = { name: string; papers?: IBasePaper[] };
+
+// vendor_code as well as the name: roll screens show it as the Supplier Code Number. Papers
+// too, so registration can resolve the picked paper without a second round trip.
 async function loadUsableVendor(
   vendorId?: string,
-): Promise<(NamedRef & { vendor_code: string }) | undefined> {
+): Promise<(NamedRef & { vendor_code: string; papers?: IBasePaper[] }) | undefined> {
   if (!vendorId) return undefined;
-  const vendor = await Vendor.findById(vendorId).select("status name vendor_code").lean();
+  const vendor = await Vendor.findById(vendorId).select("status name vendor_code papers").lean();
   if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
   if (vendor.status !== "active") {
     throw ApiError.badRequest(`${vendor.name} is inactive — pick a different vendor`);
   }
   return vendor;
+}
+
+/**
+ * The papers to store on a roll, resolved against its vendor.
+ *
+ * Each picked paper is found on the vendor by its RT code, or by its Delta code when it has
+ * none, and the vendor's own copy is what gets stored: the client only chooses which paper,
+ * never what that paper says. A paper the vendor doesn't have is refused.
+ *
+ * With nothing picked, a bare royal_touche_code (all an older app version sends) is looked
+ * up the same way and its paper filled in. No match there is not an error: that code was
+ * never checked against the vendor before, and refusing it now would break registrations
+ * that work today.
+ */
+function resolvePapers(
+  vendor: VendorWithPapers,
+  picked: IBasePaper[] | undefined,
+  royalToucheCode: string | undefined,
+): IBasePaper[] | undefined {
+  const own = vendor.papers ?? [];
+  const same = (a?: string, b?: string) => Boolean(a && b && a.toUpperCase() === b.toUpperCase());
+  const find = (p: Pick<IBasePaper, "royal_touche_code" | "delta_code">) =>
+    p.royal_touche_code
+      ? own.find((v) => same(v.royal_touche_code, p.royal_touche_code))
+      : own.find((v) => same(v.delta_code, p.delta_code));
+
+  if (!picked?.length) {
+    const match = royalToucheCode ? find({ royal_touche_code: royalToucheCode }) : undefined;
+    return match ? [{ ...match }] : undefined;
+  }
+
+  // Keyed so the same paper picked twice is stored once.
+  const resolved = new Map<string, IBasePaper>();
+  for (const p of picked) {
+    const match = find(p);
+    if (!match) {
+      const code = p.royal_touche_code ? `RT ${p.royal_touche_code}` : `Delta ${p.delta_code}`;
+      throw ApiError.badRequest(`Paper ${code} is not one of ${vendor.name}'s papers`);
+    }
+    resolved.set(paperKey(match), { ...match });
+  }
+  return [...resolved.values()];
+}
+
+/** The RT code a roll carries on its own: the first picked paper that has one. */
+function royalToucheCodeOf(papers: IBasePaper[] | undefined, fallback?: string) {
+  return papers?.find((p) => p.royal_touche_code)?.royal_touche_code ?? fallback?.toUpperCase();
 }
 
 async function assertRefsUsable(materialId?: string, vendorId?: string) {
@@ -322,6 +377,8 @@ export const materialRollsService = {
       filter.$or = [
         { roll_number: rx },
         { royal_touche_code: rx },
+        { "papers.delta_code": rx },
+        { "papers.supplier_code_number": rx },
         { barcode: rx },
         { batch_no: rx },
       ];
@@ -383,6 +440,8 @@ export const materialRollsService = {
       loadUsableLocation(input.location),
     ]);
 
+    const papers = vendor ? resolvePapers(vendor, input.papers, input.royal_touche_code) : undefined;
+
     // A newly received roll is full unless the caller says otherwise.
     const remaining = input.remaining_weight ?? input.weight;
     if (remaining > input.weight) {
@@ -396,10 +455,13 @@ export const materialRollsService = {
       roll = await MaterialRoll.create({
         ...input,
         roll_number: rollNumber,
+        // The vendor's copies, never the client's — see resolvePapers.
+        papers,
         // Off the label, not minted: the code names the base paper, so rolls of the same
-        // paper share it and there is nothing for the server to allocate. Absent rather
-        // than empty when the client omits it, so the sparse index skips the row.
-        royal_touche_code: input.royal_touche_code?.toUpperCase(),
+        // paper share it and there is nothing for the server to allocate. Taken from the
+        // picked paper when there is one. Absent rather than empty when there's no code
+        // at all, so the sparse index skips the row.
+        royal_touche_code: royalToucheCodeOf(papers, input.royal_touche_code),
         // Same deal: read off the label, uppercased so a scan and a typed code match.
         barcode: input.barcode?.toUpperCase(),
         remaining_weight: remaining,
@@ -484,6 +546,17 @@ export const materialRollsService = {
     applyUpdates(roll, updates, PATCHABLE);
     // Not in PATCHABLE: these arrive as strings and need converting first.
     if (updates.date !== undefined) roll.date = new Date(updates.date);
+
+    // After applyUpdates, so the RT code derived from the new papers wins over any
+    // royal_touche_code sent alongside them. Resolved against whichever vendor the roll now
+    // points at; not required to be active — correcting an old roll's paper must still work
+    // once its vendor has retired.
+    if (updates.papers !== undefined) {
+      const vendor = await Vendor.findById(roll.vendor_id).select("name papers").lean();
+      if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
+      roll.papers = resolvePapers(vendor, updates.papers, undefined);
+      roll.royal_touche_code = royalToucheCodeOf(roll.papers);
+    }
 
     if (
       roll.remaining_weight !== undefined &&
