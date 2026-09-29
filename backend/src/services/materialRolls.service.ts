@@ -19,7 +19,8 @@ import {
 
 type RollInput = {
   roll_number: string;
-  /** Royal Touche's code for the base paper, read off the label. Optional for now. */
+  /** Input only: an RT code to look the paper up by, from a client that doesn't send
+   *  `papers` (older app versions). Never stored — see resolvePapers. */
   royal_touche_code?: string;
   /** Papers picked from the vendor's list. Resolved against the vendor — see resolvePapers. */
   papers?: IBasePaper[];
@@ -61,8 +62,8 @@ const PHOTO_FIELDS = [
 // because correcting a mistyped figure is a correction, not a movement — see updateRollSchema.
 const PATCHABLE = [
   "remaining_weight",
-  // Correctable like roll_number: both are read off the label, so both can be mistyped.
-  "royal_touche_code",
+  // Correctable like roll_number: read off the label, so it can be mistyped. The paper
+  // (and its RT code) changes through `papers` instead — see update().
   "barcode",
   "remark_code",
   "remarks",
@@ -141,7 +142,9 @@ async function toResponse(r: PopulatedRoll) {
   return {
     id: r._id.toString(),
     roll_number: r.roll_number,
-    royal_touche_code: r.royal_touche_code,
+    // Not stored — derived from the papers, so it can never disagree with them. Kept in
+    // the response so every client that reads it (the app, labels) works unchanged.
+    royal_touche_code: royalToucheCodeOf(r.papers),
     // `[]` rather than undefined so a client can map over it without a guard — same as a
     // vendor's papers.
     papers: r.papers ?? [],
@@ -244,9 +247,8 @@ async function loadUsableVendor(
  * never what that paper says. A paper the vendor doesn't have is refused.
  *
  * With nothing picked, a bare royal_touche_code (all an older app version sends) is looked
- * up the same way and its paper filled in. No match there is not an error: that code was
- * never checked against the vendor before, and refusing it now would break registrations
- * that work today.
+ * up the same way and its paper filled in. A code the vendor doesn't have is refused as
+ * well: the roll no longer stores the code on its own, so accepting it would drop it.
  */
 function resolvePapers(
   vendor: VendorWithPapers,
@@ -261,8 +263,12 @@ function resolvePapers(
       : own.find((v) => same(v.delta_code, p.delta_code));
 
   if (!picked?.length) {
-    const match = royalToucheCode ? find({ royal_touche_code: royalToucheCode }) : undefined;
-    return match ? [{ ...match }] : undefined;
+    if (!royalToucheCode) return undefined;
+    const match = find({ royal_touche_code: royalToucheCode });
+    if (!match) {
+      throw ApiError.badRequest(`Paper RT ${royalToucheCode} is not one of ${vendor.name}'s papers`);
+    }
+    return [{ ...match }];
   }
 
   // Keyed so the same paper picked twice is stored once.
@@ -278,9 +284,9 @@ function resolvePapers(
   return [...resolved.values()];
 }
 
-/** The RT code a roll carries on its own: the first picked paper that has one. */
-function royalToucheCodeOf(papers: IBasePaper[] | undefined, fallback?: string) {
-  return papers?.find((p) => p.royal_touche_code)?.royal_touche_code ?? fallback?.toUpperCase();
+/** The roll's RT code, as responses show it: the first of its papers that has one. */
+function royalToucheCodeOf(papers: IBasePaper[] | undefined) {
+  return papers?.find((p) => p.royal_touche_code)?.royal_touche_code;
 }
 
 async function assertRefsUsable(materialId?: string, vendorId?: string) {
@@ -376,7 +382,7 @@ export const materialRollsService = {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [
         { roll_number: rx },
-        { royal_touche_code: rx },
+        { "papers.royal_touche_code": rx },
         { "papers.delta_code": rx },
         { "papers.supplier_code_number": rx },
         { barcode: rx },
@@ -452,17 +458,14 @@ export const materialRollsService = {
 
     let roll: HydratedDocument<IMaterialRoll>;
     try {
+      // royal_touche_code is input only — it chose the paper above, and isn't stored.
+      const { royal_touche_code: _lookupCode, ...fields } = input;
       roll = await MaterialRoll.create({
-        ...input,
+        ...fields,
         roll_number: rollNumber,
         // The vendor's copies, never the client's — see resolvePapers.
         papers,
-        // Off the label, not minted: the code names the base paper, so rolls of the same
-        // paper share it and there is nothing for the server to allocate. Taken from the
-        // picked paper when there is one. Absent rather than empty when there's no code
-        // at all, so the sparse index skips the row.
-        royal_touche_code: royalToucheCodeOf(papers, input.royal_touche_code),
-        // Same deal: read off the label, uppercased so a scan and a typed code match.
+        // Read off the label: read off the label, uppercased so a scan and a typed code match.
         barcode: input.barcode?.toUpperCase(),
         remaining_weight: remaining,
       });
@@ -547,15 +550,13 @@ export const materialRollsService = {
     // Not in PATCHABLE: these arrive as strings and need converting first.
     if (updates.date !== undefined) roll.date = new Date(updates.date);
 
-    // After applyUpdates, so the RT code derived from the new papers wins over any
-    // royal_touche_code sent alongside them. Resolved against whichever vendor the roll now
-    // points at; not required to be active — correcting an old roll's paper must still work
-    // once its vendor has retired.
-    if (updates.papers !== undefined) {
+    // A new paper, as `papers` or as a bare RT code (resolved the same way as at
+    // registration). Resolved against whichever vendor the roll now points at; not required
+    // to be active — correcting an old roll's paper must still work once its vendor retired.
+    if (updates.papers !== undefined || updates.royal_touche_code !== undefined) {
       const vendor = await Vendor.findById(roll.vendor_id).select("name papers").lean();
       if (!vendor) throw ApiError.badRequest("That vendor no longer exists — pick another");
-      roll.papers = resolvePapers(vendor, updates.papers, undefined);
-      roll.royal_touche_code = royalToucheCodeOf(roll.papers);
+      roll.papers = resolvePapers(vendor, updates.papers, updates.royal_touche_code);
     }
 
     if (

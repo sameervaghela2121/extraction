@@ -188,18 +188,18 @@ export const barcodeBatchesService = {
     // scanned in), not the roll record itself.
     const rx = new RegExp(escapeRegex(query), "i");
     const rolls = await MaterialRoll.find({
-      // Delta through the roll's papers: a Delta-only roll has no royal_touche_code at all.
-      $or: [{ roll_number: rx }, { royal_touche_code: rx }, { "papers.delta_code": rx }],
+      // Both codes live in the roll's papers.
+      $or: [{ roll_number: rx }, { "papers.royal_touche_code": rx }, { "papers.delta_code": rx }],
       barcode: { $exists: true, $ne: "" },
     })
-      .select("roll_number royal_touche_code papers.delta_code barcode")
+      .select("roll_number papers.royal_touche_code papers.delta_code barcode")
       .limit(MAX_SEARCH_RESULTS)
       .lean();
     for (const roll of rolls) {
       if (!roll.barcode) continue;
       add(resolveExactCode(batches, roll.barcode), roll.barcode.toUpperCase(), {
         roll_number: roll.roll_number,
-        royal_touche_code: roll.royal_touche_code,
+        royal_touche_code: roll.papers?.find((p) => p.royal_touche_code)?.royal_touche_code,
         delta_code: roll.papers?.find((p) => p.delta_code)?.delta_code,
       });
     }

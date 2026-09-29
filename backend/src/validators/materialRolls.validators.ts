@@ -18,10 +18,9 @@ export const createRollSchema = z.object({
   // roll number. Not minted here: it names the paper, so every roll of that paper carries
   // the same one — which also means a phone can fill it in with no signal.
   //
-  // Optional for now, at the client's request, while the mobile app is being wired up. The
-  // catalogue also lists Delta-range papers that have no RT code at all, so a roll made
-  // from one has nothing to put here. A roll without it cannot be traced back to its paper
-  // — worth making required again once registration reliably supplies it.
+  // Input only, never stored: the paper's RT code, for a client that sends it instead of
+  // `papers` (older app versions). The service looks the paper up on the vendor by it and
+  // stores that paper; the roll's own record keeps its codes in `papers` alone.
   royal_touche_code: z.string().trim().min(1).optional(),
   // The paper(s) picked from the chosen vendor's `papers`, sent as the vendor list returned
   // them. Only the codes are trusted: the service finds each one on the vendor and stores
