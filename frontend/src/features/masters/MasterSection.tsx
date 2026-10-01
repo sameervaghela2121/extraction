@@ -257,7 +257,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
         <input
           className="input"
           style={{ flex: 1, minWidth: 180 }}
-          placeholder={`Search ${spec.label.toLowerCase()}`}
+          placeholder={`Search by ${spec.label.toLowerCase()} Code`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
