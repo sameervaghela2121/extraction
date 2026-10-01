@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
@@ -92,13 +92,19 @@ type VendorOption = PaperRow["vendor"];
 
 const vendorLabel = (v: VendorOption) => (v.vendor_code ? `${v.vendor_code} · ${v.name}` : v.name);
 
-/** How many matches the dropdown lists at once. More than that: keep typing. */
-const VENDOR_OPTIONS = 20;
+/** Vendors per request. The dropdown asks for the next batch as it scrolls. */
+const VENDOR_PAGE = 25;
+/** How close to the bottom of the list (px) counts as "reached the end". */
+const NEAR_BOTTOM_PX = 40;
 
 /**
  * Searchable vendor dropdown, searched by the server (POST /vendors/search) — the same
- * search as the Vendors page, without each vendor's papers. Typing is debounced, and only
- * the newest answer is shown, so a slow response can't replace a newer one.
+ * search as the Vendors page, without each vendor's papers. Every vendor is reachable: the
+ * list loads 25 at a time and fetches the next 25 as it's scrolled near the bottom.
+ *
+ * Typing starts a new search (debounced) from page 1. Each search has an id; an answer for
+ * an older search is dropped, so a slow response can't mix into a newer list, and a page is
+ * never requested twice while it's already on its way.
  */
 function VendorPicker({
   selected,
@@ -115,31 +121,69 @@ function VendorPicker({
   const [options, setOptions] = useState<VendorOption[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const latest = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  /** The current search. Bumped on every new one; older answers are ignored. */
+  const searchId = useRef(0);
+  /** What the current search is for — null until its debounce fires, so a scroll in the
+   *  meantime can't load a page of the previous search under the new one's id. */
+  const activeQuery = useRef<string | null>(null);
+  const nextPage = useRef(1);
+  /** The search whose page is in flight, so the same page isn't requested twice. */
+  const inFlight = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const id = ++latest.current;
-    setLoading(true);
-    const timer = setTimeout(async () => {
+  const loadPage = useCallback(
+    async (id: number, q: string) => {
+      if (inFlight.current === id) return;
+      inFlight.current = id;
+      setLoading(true);
+      const page = nextPage.current;
       try {
-        const res = await vendorsApi.search({
-          page: 1,
-          pageSize: VENDOR_OPTIONS,
-          q: query.trim() || undefined,
-          sort: "name",
-        });
-        if (id !== latest.current) return;
-        setOptions(res.items.map((v) => ({ id: v.id, name: v.name, vendor_code: v.vendor_code })));
+        const res = await vendorsApi.search({ page, pageSize: VENDOR_PAGE, q: q || undefined, sort: "name" });
+        if (id !== searchId.current) return;
+        const batch = res.items.map((v) => ({ id: v.id, name: v.name, vendor_code: v.vendor_code }));
+        nextPage.current = page + 1;
+        setOptions((prev) => (page === 1 ? batch : [...prev, ...batch]));
         setTotal(res.total);
       } catch (err) {
-        if (id === latest.current) notify(apiErrorMessage(err), "error");
+        if (id === searchId.current) notify(apiErrorMessage(err), "error");
       } finally {
-        if (id === latest.current) setLoading(false);
+        if (inFlight.current === id) inFlight.current = null;
+        if (id === searchId.current) setLoading(false);
       }
+    },
+    [notify],
+  );
+
+  // A new search: from page 1, once typing pauses.
+  useEffect(() => {
+    if (!open) return;
+    const id = ++searchId.current;
+    activeQuery.current = null;
+    nextPage.current = 1;
+    setOptions([]);
+    setTotal(0);
+    setLoading(true);
+    const timer = setTimeout(() => {
+      activeQuery.current = query.trim();
+      loadPage(id, activeQuery.current);
     }, 250);
     return () => clearTimeout(timer);
-  }, [open, query, notify]);
+  }, [open, query, loadPage]);
+
+  /** Fetch the next batch if the list is scrolled near its end — or is too short to scroll
+   *  at all, which would otherwise leave the rest unreachable. */
+  const loadMoreIfNeeded = useCallback(() => {
+    const el = listRef.current;
+    if (!el || activeQuery.current === null || options.length >= total) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_BOTTOM_PX) {
+      loadPage(searchId.current, activeQuery.current);
+    }
+  }, [options.length, total, loadPage]);
+
+  // After each batch lands: if it didn't fill the list, keep going.
+  useEffect(() => {
+    if (open) loadMoreIfNeeded();
+  }, [open, options, loadMoreIfNeeded]);
 
   return (
     <div style={{ position: "relative" }}>
@@ -159,6 +203,8 @@ function VendorPicker({
       />
       {open && (
         <div
+          ref={listRef}
+          onScroll={loadMoreIfNeeded}
           style={{
             position: "absolute",
             zIndex: 20,
@@ -188,19 +234,14 @@ function VendorPicker({
               {vendorLabel(v)}
             </button>
           ))}
-          {loading && options.length === 0 && (
+          {loading && (
             <div className="faint" style={{ padding: 10, fontSize: 13 }}>
-              Searching…
+              {options.length ? "Loading more…" : "Searching…"}
             </div>
           )}
           {!loading && options.length === 0 && (
             <div className="faint" style={{ padding: 10, fontSize: 13 }}>
               No vendor matches that.
-            </div>
-          )}
-          {total > options.length && (
-            <div className="faint" style={{ padding: "6px 10px", fontSize: 12 }}>
-              Showing {options.length} of {total} — type to narrow it down.
             </div>
           )}
         </div>
