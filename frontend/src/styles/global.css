@@ -202,15 +202,15 @@ textarea {
 .btn-success:hover {
   background: var(--success-soft);
 }
-/* Log out, in the sidebar and the mobile top bar: solid red so it can't be mistaken for an
-   ordinary control. */
+/* Log out, in the sidebar and the mobile top bar: a plain icon button like the rest, with
+   just the icon in red. */
 .btn-logout {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger);
 }
 .btn-logout:hover {
-  background: color-mix(in oklch, var(--danger) 85%, black);
+  background: var(--danger-soft);
 }
 .btn-ghost {
   border-color: transparent;
