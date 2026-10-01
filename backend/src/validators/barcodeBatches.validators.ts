@@ -5,14 +5,13 @@ export const MAX_BATCH_LABELS = 500;
 
 export const createBarcodeBatchSchema = z
   .object({
-    prefix: z.string().trim().max(12).optional().default(""),
-    // Blank means "no date in the code" — the panel offers a date, it isn't mandatory.
+    // Both required for a new run: the code is prefix + date + number. Runs saved before
+    // this rule may still have a blank one — they're only read back, never re-validated.
+    prefix: z.string({ required_error: "Enter the letters the code starts with" }).trim().min(1, "Enter the letters the code starts with").max(12),
     date: z
-      .string()
+      .string({ required_error: "Pick a date" })
       .trim()
-      .regex(/^(\d{4}-\d{2}-\d{2})?$/, "Date must be YYYY-MM-DD")
-      .optional()
-      .default(""),
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date (YYYY-MM-DD)"),
     from_number: z.number().int().min(0),
     to_number: z.number().int().min(0),
     kind: z.enum(["barcode", "qr"]).optional().default("barcode"),

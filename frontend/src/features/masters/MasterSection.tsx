@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "../../context/ToastContext";
+import { AxiosError } from "axios";
 import { apiErrorMessage } from "../../api/client";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager, { PAGE_SIZE } from "./Pager";
@@ -78,6 +79,9 @@ type FormState = { values: Record<string, string> };
 
 const EMPTY: FormState = { values: {} };
 
+/** A validation message per field name. */
+type FieldErrors = Record<string, string | undefined>;
+
 function toForm(row: MasterRow): FormState {
   const values: Record<string, string> = {};
   for (const [k, v] of Object.entries(row)) {
@@ -108,6 +112,7 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
   // Dragging edits the sort_order sequence, so it is only offered while the table shows that
   // sequence unfiltered. It works within the current page; the server slots the page's new
   // order back into the full list, so rows on other pages keep their place.
@@ -149,16 +154,42 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
 
   const openCreate = () => {
     setForm(EMPTY);
+    setErrors({});
     setEditing("new");
   };
 
   const openEdit = (row: MasterRow) => {
     setForm(toForm(row));
+    setErrors({});
     setEditing(row.id);
   };
 
-  const setValue = (name: string, value: string) =>
+  // Editing a field clears its own message, so the error disappears as soon as it's fixed.
+  const setValue = (name: string, value: string) => {
     setForm((prev) => ({ ...prev, values: { ...prev.values, [name]: value } }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
+  };
+
+  /** Each field's problem, keyed by field name — shown under the field, not as a toast or
+   *  the browser's own popup. The same rules the backend applies, checked before the trip. */
+  const validate = (): FieldErrors => {
+    const found: FieldErrors = {};
+    for (const f of spec.fields.filter((field) => !field.readOnly)) {
+      // Trimmed first: a field holding only spaces would otherwise count as filled.
+      const raw = form.values[f.name]?.trim() ?? "";
+      if (!raw) {
+        if (f.required) found[f.name] = `Enter the ${f.label.toLowerCase()}.`;
+        continue;
+      }
+      if (f.type === "number" && (!Number.isFinite(Number(raw)) || Number(raw) < 0)) {
+        found[f.name] = `${f.label} must be a number, 0 or more.`;
+      }
+    }
+    return found;
+  };
+
+  /** The field a "code already exists" answer from the server is about. */
+  const codeField = spec.fields.find((f) => f.name.endsWith("_code"));
 
   const buildBody = (): Partial<MasterRow> => {
     const body: Record<string, unknown> = {};
@@ -176,6 +207,9 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const found = validate();
+    setErrors(found);
+    if (Object.keys(found).length) return;
     setSaving(true);
     try {
       const body = buildBody();
@@ -187,7 +221,11 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
       setEditing(null);
       notify(editing === "new" ? `${spec.noun} added` : "Saved");
     } catch (err) {
-      notify(apiErrorMessage(err), "error");
+      // A taken code is the user's to fix, so it goes under the code field. Anything else
+      // (network, server) isn't about one field, and stays a toast.
+      const duplicate = err instanceof AxiosError && err.response?.status === 409 && codeField;
+      if (duplicate) setErrors({ [codeField.name]: apiErrorMessage(err) });
+      else notify(apiErrorMessage(err), "error");
     } finally {
       setSaving(false);
     }
@@ -317,7 +355,9 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
         title={editing === "new" ? `Add ${spec.noun}` : `Edit ${spec.noun}`}
         size="medium"
       >
-        <form onSubmit={submit} style={{ display: "grid", gap: 12, padding: 16 }}>
+        {/* noValidate: the checks in validate() show their message under the field instead
+            of the browser's own popup. */}
+        <form onSubmit={submit} noValidate style={{ display: "grid", gap: 12, padding: 16 }}>
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
             {spec.fields.filter((f) => !f.readOnly).map((f) => (
               <label key={f.name} style={{ display: "grid", gap: 4, fontSize: 13 }}>
@@ -330,8 +370,9 @@ export default function MasterSection({ spec }: { spec: MasterSpec }) {
                   type={f.type === "number" ? "number" : "text"}
                   value={form.values[f.name] ?? ""}
                   onChange={(e) => setValue(f.name, e.target.value)}
-                  required={f.required}
+                  aria-invalid={Boolean(errors[f.name]) || undefined}
                 />
+                {errors[f.name] && <span className="field-error">{errors[f.name]}</span>}
               </label>
             ))}
           </div>

@@ -390,7 +390,16 @@ export default function BarcodeGeneratorPage() {
    */
   const [nextStart, setNextStart] = useState<number | null>(null);
 
+  // Both are required for a run: the code is prefix + date + number. Shown under the field.
+  const prefixError = prefix.trim() ? null : "Enter the letters the code starts with.";
+  const dateError = date ? null : "Pick a date.";
+
   useEffect(() => {
+    // Nothing to look up until both are filled — and asking anyway would 400 into a toast.
+    if (prefixError || dateError) {
+      setNextStart(null);
+      return;
+    }
     let cancelled = false;
     // Debounced: the prefix box fires this on every keystroke.
     const timer = setTimeout(async () => {
@@ -418,7 +427,7 @@ export default function BarcodeGeneratorPage() {
   // "501 labels: …" and only reveal the limit once the run had been submitted.
   const validCount = Number.isInteger(count) && count > 0 && count <= MAX_SERIES;
   // Null until the server says where to start; nothing can be generated before then.
-  const canGenerate = validCount && nextStart !== null && !saving;
+  const canGenerate = validCount && !prefixError && !dateError && nextStart !== null && !saving;
 
   const seriesInput = {
     prefix,
@@ -508,6 +517,9 @@ export default function BarcodeGeneratorPage() {
   };
 
   const addSeries = async () => {
+    // The button is already disabled for these; checked again because the submit path is
+    // what actually writes.
+    if (prefixError || dateError) return;
     if (!validCount) {
       notify("Enter how many barcodes to print.", "error");
       return;
@@ -737,7 +749,9 @@ export default function BarcodeGeneratorPage() {
               placeholder="RT"
               value={prefix}
               onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+              aria-invalid={Boolean(prefixError) || undefined}
             />
+            {prefixError && <small className="field-error">{prefixError}</small>}
           </label>
           <label className="barcode-field">
             <span>Date</span>
@@ -746,7 +760,9 @@ export default function BarcodeGeneratorPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              aria-invalid={Boolean(dateError) || undefined}
             />
+            {dateError && <small className="field-error">{dateError}</small>}
           </label>
           <label className="barcode-field">
             <span>Quantity</span>
