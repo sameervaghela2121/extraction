@@ -351,7 +351,7 @@ export interface MaterialRoll {
   updatedAt: string;
 }
 
-export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME";
+export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME" | "RETURN_TO_VENDOR";
 
 /** One row of the append-only ledger. `description` is rendered server-side and is meant to
  *  be shown as-is — don't rebuild it from the numbers. */

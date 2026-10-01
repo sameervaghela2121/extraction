@@ -54,6 +54,17 @@ const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
   RETURNED_TO_VENDOR: "status-returned",
 };
 
+/** A history row's type badge, in the same colours as the roll status it leaves the roll
+ *  in: back in stock green, out red, used up grey, to the vendor amber. */
+const MOVEMENT_BADGE: Record<StockMovement["transaction_type"], { label: string; className: string }> = {
+  IN: { label: "IN", className: "status-in" },
+  RETURN: { label: "RETURN", className: "status-in" },
+  OUT: { label: "OUT", className: "status-out" },
+  CONSUME: { label: "CONSUMED", className: "status-consumed" },
+  RETURN_TO_VENDOR: { label: "TO VENDOR", className: "status-returned" },
+  ADJUSTMENT: { label: "ADJUSTED", className: "status-neutral" },
+};
+
 /**
  * Never render a blank badge.
  *
@@ -522,10 +533,22 @@ export default function RollsPage() {
           <form onSubmit={submit} style={{ display: "grid", gap: 14, padding: 16 }}>
             {/* Read only: roll_number, RT code and barcode are read off the physical roll,
                 and status follows the roll's movements. */}
-            <div className="roll-readonly">
+            {/* Two rows of three: the roll itself on top, the paper it was booked against
+                below — so nothing wraps onto a row of its own. */}
+            <div className="roll-readonly roll-readonly-edit">
               <div>
                 <span className="faint">Roll number</span>
                 <strong>{editing.roll_number}</strong>
+              </div>
+              <div>
+                <span className="faint">Barcode</span>
+                <strong>{editing.barcode || "—"}</strong>
+              </div>
+              <div>
+                <span className="faint">Status</span>
+                <span className={`status ${statusClass(editing.status)}`} style={{ justifySelf: "start" }}>
+                  {statusText(editing.status)}
+                </span>
               </div>
               <div>
                 <span className="faint">RT code</span>
@@ -539,17 +562,11 @@ export default function RollsPage() {
                 <span className="faint">Supplier code</span>
                 <strong>{supplierCodes(editing)}</strong>
               </div>
-              <div>
-                <span className="faint">Barcode</span>
-                <strong>{editing.barcode || "—"}</strong>
-              </div>
-              <div>
-                <span className="faint">Status</span>
-                <strong>{STATUS_LABEL[editing.status]}</strong>
-              </div>
             </div>
 
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+            {/* alignItems start: a field whose hint wraps to two lines would otherwise stretch
+                its neighbour and push that one's input down out of line. */}
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))", alignItems: "start" }}>
               <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <span className="faint">Material *</span>
                 <SearchSelect
@@ -673,32 +690,48 @@ export default function RollsPage() {
               )}
             </div>
 
-            <div>
-              <strong style={{ fontSize: 13 }}>History</strong>
+            <div className="roll-history">
+              <div className="roll-history-title">
+                <strong>History</strong>
+                {movementCount !== null && history.length > 0 && (
+                  <span className="faint">
+                    {history.length} movement{history.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
               {movementCount === null ? (
-                <p className="faint" style={{ fontSize: 12, margin: "6px 0 0" }}>
-                  Loading…
-                </p>
+                <p className="faint roll-history-empty">Loading…</p>
               ) : history.length === 0 ? (
-                <p className="faint" style={{ fontSize: 12, margin: "6px 0 0" }}>
-                  Nothing recorded against this roll.
-                </p>
+                <p className="faint roll-history-empty">Nothing recorded against this roll.</p>
               ) : (
-                <div className="stack" style={{ gap: 4, marginTop: 6, maxHeight: 180, overflowY: "auto" }}>
-                  {history.map((m) => (
-                    <div key={m.id} className="roll-history-row">
-                      <span className="faint" style={{ fontSize: 12, minWidth: 74 }}>
-                        {new Date(m.transaction_date).toLocaleDateString()}
-                      </span>
-                      {/* Rendered as-is: the server writes this sentence precisely so no
-                          client has to rebuild it from the numbers. */}
-                      <span style={{ fontSize: 13 }}>{m.description}</span>
-                      <div className="spacer" />
-                      <span className="faint" style={{ fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
-                        {m.roll_weight_after ?? "—"} {editing.unit}
-                      </span>
-                    </div>
-                  ))}
+                <div className="roll-history-table">
+                  <div className="roll-history-row roll-history-head">
+                    <span>Date</span>
+                    <span>Movement</span>
+                    <span>Balance</span>
+                  </div>
+                  <div className="roll-history-body">
+                    {history.map((m) => {
+                      const badge = MOVEMENT_BADGE[m.transaction_type] ?? {
+                        label: m.transaction_type,
+                        className: "status-neutral",
+                      };
+                      return (
+                        <div key={m.id} className="roll-history-row">
+                          <span className="faint">{new Date(m.transaction_date).toLocaleDateString()}</span>
+                          <span className="roll-history-movement">
+                            <span className={`status roll-history-badge ${badge.className}`}>{badge.label}</span>
+                            {/* Rendered as-is: the server writes this sentence precisely so no
+                                client has to rebuild it from the numbers. */}
+                            <span>{m.description}</span>
+                          </span>
+                          <span className="roll-history-balance">
+                            {m.roll_weight_after ?? "—"} {editing.unit}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -726,10 +759,35 @@ export default function RollsPage() {
         .roll-readonly > div { display: grid; gap: 2px; }
         .roll-readonly span { font-size: 11px; }
         .roll-readonly strong { font-size: 13px; }
-        .roll-history-row {
-          display: flex; align-items: center; gap: 10px;
-          padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-2);
+        .roll-readonly-edit { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
+        .roll-readonly-edit strong { overflow-wrap: anywhere; }
+        @media (max-width: 600px) {
+          .roll-readonly-edit { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
+        .status-neutral { background: var(--surface-2); color: var(--text-muted); }
+
+        .roll-history { display: grid; gap: 8px; }
+        .roll-history-title { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+        .roll-history-title .faint { font-size: 12px; }
+        .roll-history-empty { font-size: 12px; margin: 0; }
+        .roll-history-table {
+          border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+        }
+        .roll-history-body { max-height: 200px; overflow-y: auto; }
+        .roll-history-row {
+          display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px;
+          align-items: center; gap: 12px; padding: 8px 12px; font-size: 13px;
+        }
+        .roll-history-body .roll-history-row + .roll-history-row { border-top: 1px solid var(--border); }
+        .roll-history-head {
+          background: var(--surface-2); font-size: 11px; font-weight: 600;
+          color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .roll-history-head > span:last-child, .roll-history-balance { text-align: right; }
+        .roll-history-row > .faint { font-size: 12px; }
+        .roll-history-movement { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .roll-history-badge { font-size: 10.5px; padding: 2px 8px; flex-shrink: 0; }
+        .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
     </div>
   );
