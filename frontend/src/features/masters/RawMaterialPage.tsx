@@ -186,7 +186,7 @@ function VendorPicker({
   }, [open, options, loadMoreIfNeeded]);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div className="dropdown">
       <input
         className="input"
         placeholder="Search a vendor by name or code"
@@ -202,28 +202,14 @@ function VendorPicker({
         onChange={(e) => setQuery(e.target.value)}
       />
       {open && (
-        <div
-          ref={listRef}
-          onScroll={loadMoreIfNeeded}
-          style={{
-            position: "absolute",
-            zIndex: 20,
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            maxHeight: 220,
-            overflowY: "auto",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-          }}
-        >
+        <div ref={listRef} onScroll={loadMoreIfNeeded} className="dropdown-panel" role="listbox">
           {options.map((v) => (
             <button
               key={v.id}
               type="button"
-              className="vendor-option"
+              role="option"
+              aria-selected={v.id === selected?.id}
+              className="dropdown-option"
               // onMouseDown, not onClick: the input's blur fires first on a click and would
               // unmount this list before the click ever landed on it.
               onMouseDown={() => {
@@ -234,16 +220,8 @@ function VendorPicker({
               {vendorLabel(v)}
             </button>
           ))}
-          {loading && (
-            <div className="faint" style={{ padding: 10, fontSize: 13 }}>
-              {options.length ? "Loading more…" : "Searching…"}
-            </div>
-          )}
-          {!loading && options.length === 0 && (
-            <div className="faint" style={{ padding: 10, fontSize: 13 }}>
-              No vendor matches that.
-            </div>
-          )}
+          {loading && <div className="dropdown-note">{options.length ? "Loading more…" : "Searching…"}</div>}
+          {!loading && options.length === 0 && <div className="dropdown-note">No vendor matches that.</div>}
         </div>
       )}
     </div>
@@ -573,14 +551,6 @@ export default function RawMaterialPage() {
         </form>
       </Modal>
 
-      <style>{`
-        .vendor-option {
-          display: block; width: 100%; text-align: left;
-          padding: 8px 10px; border: 0; background: none;
-          font: inherit; font-size: 13px; color: var(--text); cursor: pointer;
-        }
-        .vendor-option:hover { background: var(--surface-2); }
-      `}</style>
     </div>
   );
 }

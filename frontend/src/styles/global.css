@@ -244,6 +244,49 @@ textarea {
   color: var(--danger);
   font-size: 12px;
 }
+
+/* ---- Searchable dropdown (SearchSelect, the vendor picker) ---- */
+.dropdown {
+  position: relative;
+}
+.dropdown-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.dropdown-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+/* Same blue as the primary button, white text — so the row under the pointer is obvious. */
+.dropdown-option:hover {
+  background: var(--brand);
+  color: #fff;
+}
+.dropdown-option[aria-selected="true"]:not(:hover) {
+  background: var(--brand-soft);
+}
+.dropdown-note {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
 .field-label {
   display: block;
   font-size: 12.5px;

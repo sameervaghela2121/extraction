@@ -6,6 +6,7 @@ import { rollsApi } from "../../api/rolls.api";
 import { stockApi } from "../../api/stock.api";
 import { locationsApi, materialTypesApi } from "../../api/masters.api";
 import { deltaCodes, rtCodes, supplierCodes } from "./rollPapers";
+import SearchSelect from "../../components/SearchSelect";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
@@ -384,17 +385,19 @@ export default function RollsPage() {
                     </td>
                     <td>
                       <div className="row gap-8">
-                        {/* A finished roll has nothing left to correct: its weight is 0 by
-                            definition and it will never move again. Disabled outright
-                            rather than opening a form where every field is locked. */}
+                        {/* A finished roll — used up, or sent back to its vendor — has nothing left
+                            to correct: its weight is 0 and it will never move again. Disabled
+                            outright rather than opening a form where every field is locked. */}
                         <button
                           className="btn btn-sm"
                           onClick={() => openEdit(roll)}
-                          disabled={roll.status === "CONSUMED"}
+                          disabled={roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR"}
                           title={
                             roll.status === "CONSUMED"
                               ? "This roll is consumed, so it can no longer be edited."
-                              : undefined
+                              : roll.status === "RETURNED_TO_VENDOR"
+                                ? "This roll was returned to its vendor, so it can no longer be edited."
+                                : undefined
                           }
                         >
                           Edit
@@ -547,46 +550,39 @@ export default function RollsPage() {
             </div>
 
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
-              <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <span className="faint">Material *</span>
-                <select
-                  className="input"
+                <SearchSelect
+                  placeholder="Search a material"
                   value={form.material_id}
-                  onChange={(e) => setValue("material_id", e.target.value)}
-                  required
-                >
-                  {/* The roll's own material is offered even when it has since been
-                      deactivated, so opening the form doesn't silently re-point the roll. */}
-                  {!materials.some((m) => m.id === form.material_id) && (
-                    <option value={form.material_id}>{editing.material_id.name ?? "—"}</option>
-                  )}
-                  {materials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.material_code} · {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(id) => setValue("material_id", id)}
+                  options={[
+                    // The roll's own material is offered even when it has since been
+                    // deactivated, so opening the form doesn't silently re-point the roll.
+                    ...(materials.some((m) => m.id === form.material_id)
+                      ? []
+                      : [{ value: form.material_id, label: editing.material_id.name ?? "—" }]),
+                    ...materials.map((m) => ({ value: m.id, label: `${m.material_code} · ${m.name}` })),
+                  ]}
+                />
+              </div>
 
-              <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <span className="faint">Location</span>
-                <select
-                  className="input"
+                <SearchSelect
+                  placeholder="Search a location"
                   value={form.location}
-                  onChange={(e) => setValue("location", e.target.value)}
-                >
-                  {!editing.location && <option value="">-</option>}
-                  {/* The roll's current location stays pickable even once it is deactivated. */}
-                  {editing.location && !activeLocations.some((l) => l.id === editing.location!.id) && (
-                    <option value={editing.location.id}>{editing.location.name ?? "-"}</option>
-                  )}
-                  {activeLocations.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(id) => setValue("location", id)}
+                  options={[
+                    ...(editing.location ? [] : [{ value: "", label: "-" }]),
+                    // The roll's current location stays pickable even once it is deactivated.
+                    ...(editing.location && !activeLocations.some((l) => l.id === editing.location!.id)
+                      ? [{ value: editing.location.id, label: editing.location.name ?? "-" }]
+                      : []),
+                    ...activeLocations.map((l) => ({ value: l.id, label: l.name })),
+                  ]}
+                />
+              </div>
 
               <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <span className="faint">GSM *</span>
