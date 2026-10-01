@@ -155,35 +155,6 @@ textarea {
   font-size: 14px;
 }
 
-/* ---- Scrollbars ----
-   Thin, rounded and quiet everywhere — tables, master pages, dropdowns, modals — instead of
-   the browser's thick default. Chrome/Edge/Safari take the ::-webkit-scrollbar rules; Firefox
-   only supports the standard properties, so those go in a block Chrome skips (if Chrome sees
-   scrollbar-width it ignores the ::-webkit rules and falls back to its own thin bar). */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
-}
-::-webkit-scrollbar-corner {
-  background: transparent;
-}
-@supports not selector(::-webkit-scrollbar) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-strong) transparent;
-  }
-}
-
 /* ---- Buttons ---- */
 .btn {
   display: inline-flex;
@@ -230,6 +201,16 @@ textarea {
 }
 .btn-success:hover {
   background: var(--success-soft);
+}
+/* Log out, in the sidebar and the mobile top bar: solid red so it can't be mistaken for an
+   ordinary control. */
+.btn-logout {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn-logout:hover {
+  background: color-mix(in oklch, var(--danger) 85%, black);
 }
 .btn-ghost {
   border-color: transparent;
