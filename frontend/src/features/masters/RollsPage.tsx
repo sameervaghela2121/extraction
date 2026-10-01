@@ -54,11 +54,12 @@ const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
   RETURNED_TO_VENDOR: "status-returned",
 };
 
-/** A history row's type badge, in the same colours as the roll status it leaves the roll
- *  in: back in stock green, out red, used up grey, to the vendor amber. */
+/** A history row's type badge: where the movement left the roll, in its status colours —
+ *  in the godown green, out red, used up grey, to the vendor amber. A RETURN reads IN,
+ *  because that's where the roll ends up. */
 const MOVEMENT_BADGE: Record<StockMovement["transaction_type"], { label: string; className: string }> = {
   IN: { label: "IN", className: "status-in" },
-  RETURN: { label: "RETURN", className: "status-in" },
+  RETURN: { label: "IN", className: "status-in" },
   OUT: { label: "OUT", className: "status-out" },
   CONSUME: { label: "CONSUMED", className: "status-consumed" },
   RETURN_TO_VENDOR: { label: "TO VENDOR", className: "status-returned" },
@@ -713,10 +714,15 @@ export default function RollsPage() {
                   </div>
                   <div className="roll-history-body">
                     {history.map((m) => {
-                      const badge = MOVEMENT_BADGE[m.transaction_type] ?? {
-                        label: m.transaction_type,
-                        className: "status-neutral",
-                      };
+                      // A RETURN that brought nothing back used the roll up — it didn't come
+                      // back into the godown, so it reads CONSUMED, not IN.
+                      const badge =
+                        m.transaction_type === "RETURN" && m.roll_weight_after === 0
+                          ? MOVEMENT_BADGE.CONSUME
+                          : (MOVEMENT_BADGE[m.transaction_type] ?? {
+                              label: m.transaction_type,
+                              className: "status-neutral",
+                            });
                       return (
                         <div key={m.id} className="roll-history-row">
                           <span className="faint">{new Date(m.transaction_date).toLocaleDateString()}</span>
@@ -787,9 +793,10 @@ export default function RollsPage() {
         .roll-history-head > span:last-child, .roll-history-balance { text-align: right; }
         .roll-history-row > .faint { font-size: 12px; }
         .roll-history-movement { min-width: 0; overflow-wrap: anywhere; }
-        /* Compact: just wide enough for its label. The Type column, not the chip, keeps the
-           descriptions lined up. Same text size as before — only the coloured area shrinks. */
-        .roll-history-badge { font-size: 10.5px; padding: 1px 6px; line-height: 1.5; }
+        /* One width for every badge, so the Type column reads as a column. */
+        .roll-history-badge {
+          font-size: 10.5px; padding: 2px 0; width: 84px; text-align: center; box-sizing: border-box;
+        }
         .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
     </div>
