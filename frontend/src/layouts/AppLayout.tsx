@@ -222,7 +222,7 @@ export default function AppLayout() {
             <div className="faint" style={{ fontSize: 12, textTransform: "capitalize" }}>{user?.role}</div>
           </div>
           <div className="spacer" />
-          <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Log out">
+          <button className="btn btn-sm btn-logout" onClick={handleLogout} title="Log out" aria-label="Log out">
             <LogOut size={16} />
           </button>
         </div>
@@ -240,7 +240,7 @@ export default function AppLayout() {
             <div className="faint" style={{ fontSize: 12, textTransform: "capitalize" }}>{user?.role}</div>
           </div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Log out">
+        <button className="btn btn-sm btn-logout" onClick={handleLogout} title="Log out" aria-label="Log out">
           <LogOut size={16} />
         </button>
       </header>
