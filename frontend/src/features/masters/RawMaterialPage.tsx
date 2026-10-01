@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
@@ -7,7 +7,7 @@ import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager from "./Pager";
 import { nextSort, SortHeader } from "./sorting";
 import { useServerPage } from "./useServerPage";
-import type { Vendor, VendorPaper } from "../../types";
+import type { VendorPaper } from "../../types";
 
 /**
  * The paper-codes sheet, as its own screen.
@@ -87,37 +87,69 @@ class StaleRowError extends Error {}
 
 const errorText = (err: unknown) => (err instanceof StaleRowError ? err.message : apiErrorMessage(err));
 
-/** Searchable vendor dropdown. 74 suppliers arrive in one unpaginated call, so this
- *  filters what is already in memory rather than querying per keystroke. */
+/** A vendor as the picker shows and returns it. */
+type VendorOption = PaperRow["vendor"];
+
+const vendorLabel = (v: VendorOption) => (v.vendor_code ? `${v.vendor_code} · ${v.name}` : v.name);
+
+/** How many matches the dropdown lists at once. More than that: keep typing. */
+const VENDOR_OPTIONS = 20;
+
+/**
+ * Searchable vendor dropdown, searched by the server (POST /vendors/search) — the same
+ * search as the Vendors page, without each vendor's papers. Typing is debounced, and only
+ * the newest answer is shown, so a slow response can't replace a newer one.
+ */
 function VendorPicker({
-  vendors,
-  value,
+  selected,
+  invalid,
   onChange,
 }: {
-  vendors: Vendor[];
-  value: string;
-  onChange: (vendorId: string) => void;
+  selected: VendorOption | null;
+  invalid?: boolean;
+  onChange: (vendor: VendorOption) => void;
 }) {
+  const { notify } = useToast();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const selected = vendors.find((v) => v.id === value);
+  const [options, setOptions] = useState<VendorOption[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const latest = useRef(0);
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return vendors;
-    return vendors.filter((v) => `${v.vendor_code ?? ""} ${v.name}`.toLowerCase().includes(q));
-  }, [vendors, query]);
-
-  const labelOf = (v: Vendor) => (v.vendor_code ? `${v.vendor_code} · ${v.name}` : v.name);
+  useEffect(() => {
+    if (!open) return;
+    const id = ++latest.current;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await vendorsApi.search({
+          page: 1,
+          pageSize: VENDOR_OPTIONS,
+          q: query.trim() || undefined,
+          sort: "name",
+        });
+        if (id !== latest.current) return;
+        setOptions(res.items.map((v) => ({ id: v.id, name: v.name, vendor_code: v.vendor_code })));
+        setTotal(res.total);
+      } catch (err) {
+        if (id === latest.current) notify(apiErrorMessage(err), "error");
+      } finally {
+        if (id === latest.current) setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [open, query, notify]);
 
   return (
     <div style={{ position: "relative" }}>
       <input
         className="input"
         placeholder="Search a vendor by name or code"
+        aria-invalid={invalid || undefined}
         // Closed, the box shows the chosen supplier; open, it shows what is being typed.
         // Otherwise the field reads as an empty search box next to a made choice.
-        value={open ? query : selected ? labelOf(selected) : ""}
+        value={open ? query : selected ? vendorLabel(selected) : ""}
         onFocus={() => {
           setOpen(true);
           setQuery("");
@@ -141,7 +173,7 @@ function VendorPicker({
             boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
           }}
         >
-          {shown.map((v) => (
+          {options.map((v) => (
             <button
               key={v.id}
               type="button"
@@ -149,16 +181,26 @@ function VendorPicker({
               // onMouseDown, not onClick: the input's blur fires first on a click and would
               // unmount this list before the click ever landed on it.
               onMouseDown={() => {
-                onChange(v.id);
+                onChange(v);
                 setOpen(false);
               }}
             >
-              {labelOf(v)}
+              {vendorLabel(v)}
             </button>
           ))}
-          {shown.length === 0 && (
+          {loading && options.length === 0 && (
+            <div className="faint" style={{ padding: 10, fontSize: 13 }}>
+              Searching…
+            </div>
+          )}
+          {!loading && options.length === 0 && (
             <div className="faint" style={{ padding: 10, fontSize: 13 }}>
               No vendor matches that.
+            </div>
+          )}
+          {total > options.length && (
+            <div className="faint" style={{ padding: "6px 10px", fontSize: 12 }}>
+              Showing {options.length} of {total} — type to narrow it down.
             </div>
           )}
         </div>
@@ -167,15 +209,20 @@ function VendorPicker({
   );
 }
 
+/** Which field each validation message belongs under. `codes` covers RT and Delta together:
+ *  the rule is "at least one of the two", and a clash can be on either. */
+type FormErrors = Partial<Record<"vendor" | "codes" | "supplier", string>>;
+
 export default function RawMaterialPage() {
   const { notify } = useToast();
   // Searched, sorted and paged by the server. Vendor is the sortable column, and the table
   // starts on it — never in an "unsorted" state (see nextSort in sorting.tsx).
   const { rows, total, page, setPage, search, setSearch, query, sort, setSort, loading, fetching, reload } =
     useServerPage<Row>((q) => vendorsApi.searchPapers(q), { key: "vendor", dir: "asc" });
-  // The vendor picker's options, fetched the first time the form opens rather than with the
-  // table — browsing the list never needs them.
-  const [vendors, setVendors] = useState<Vendor[] | null>(null);
+  // The chosen vendor, for the picker to show; the form itself keeps just its id.
+  const [vendor, setVendor] = useState<VendorOption | null>(null);
+  // Shown under the field each one belongs to, not as a toast.
+  const [errors, setErrors] = useState<FormErrors>({});
   // null = closed, "new" = adding, otherwise the row being edited.
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -185,29 +232,35 @@ export default function RawMaterialPage() {
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
 
-  const loadVendors = async () => {
-    if (vendors) return;
-    try {
-      setVendors(await vendorsApi.list());
-    } catch (err) {
-      notify(apiErrorMessage(err), "error");
-    }
-  };
-
   const openCreate = () => {
-    loadVendors();
     setForm(EMPTY);
+    setVendor(null);
+    setErrors({});
     setEditing("new");
   };
 
   const openEdit = (row: Row) => {
-    loadVendors();
     setForm(toForm(row));
+    setVendor(row.vendor);
+    setErrors({});
     setEditing(row);
   };
 
-  const setValue = <K extends keyof FormState>(field: K, value: FormState[K]) =>
+  // Editing a field clears its own message, so the error disappears as soon as it's fixed.
+  const setValue = <K extends keyof FormState>(field: K, value: FormState[K], clears: keyof FormErrors) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => ({ ...prev, [clears]: undefined }));
+  };
+
+  /** The rules the backend also enforces, checked here so each message lands on its field. */
+  const validate = (paper: VendorPaper): FormErrors => {
+    const found: FormErrors = {};
+    if (!form.vendorId) found.vendor = "Pick the vendor this raw material comes from.";
+    if (!paper.royal_touche_code && !paper.delta_code) found.codes = "Enter an RT code or a Delta code.";
+    // Checked after trimming: a field holding only spaces would otherwise pass as filled.
+    if (!paper.supplier_code_number) found.supplier = "Enter the supplier code / name.";
+    return found;
+  };
 
   /**
    * The vendor's papers as they are now, with `row` checked to still be where the list saw
@@ -227,18 +280,9 @@ export default function RawMaterialPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const paper = toPaper(form);
-
-    if (!form.vendorId) return notify("Pick the vendor this raw material comes from.", "error");
-    // The same rule the backend's basePaperSchema enforces, checked here so the message
-    // names the field instead of arriving as a validation error after a round trip.
-    if (!paper.royal_touche_code && !paper.delta_code) {
-      return notify("Enter a Royal Touche code or a Delta code.", "error");
-    }
-    // The input's `required` already blocks an empty field, but not one holding only
-    // spaces — which toPaper trims away to nothing, saving a blank row past the guard.
-    if (!paper.supplier_code_number) {
-      return notify("Enter the supplier code / name.", "error");
-    }
+    const found = validate(paper);
+    setErrors(found);
+    if (Object.keys(found).length) return;
 
     const from = editing !== "new" && editing ? editing : null;
     const moving = Boolean(from && from.vendor.id !== form.vendorId);
@@ -256,7 +300,7 @@ export default function RawMaterialPage() {
       const key = paperKey(paper);
       const clashes = targetPapers.some((p, i) => paperKey(p) === key && !(from && !moving && i === from.index));
       if (clashes) {
-        notify(`${target.name} already has a raw material with this code.`, "error");
+        setErrors({ codes: `${target.name} already has a raw material with this code.` });
         return;
       }
 
@@ -307,7 +351,7 @@ export default function RawMaterialPage() {
         <input
           className="input"
           style={{ flex: 1, minWidth: 180 }}
-          placeholder="Search by code, supplier code or vendor"
+          placeholder="Search by RT code, Delta code, supplier code or vendor"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -423,47 +467,59 @@ export default function RawMaterialPage() {
         title={editing === "new" ? "Add raw material" : "Edit raw material"}
         size="medium"
       >
-        <form onSubmit={submit} style={{ display: "grid", gap: 12, padding: 16 }}>
-          <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+        {/* noValidate: the checks below show their message under the field, rather than the
+            browser's own popup or a toast. */}
+        <form onSubmit={submit} noValidate style={{ display: "grid", gap: 12, padding: 16 }}>
+          <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
             <span className="faint">Vendor *</span>
             <VendorPicker
-              vendors={vendors ?? []}
-              value={form.vendorId}
-              onChange={(id) => setValue("vendorId", id)}
+              selected={vendor}
+              invalid={Boolean(errors.vendor)}
+              onChange={(v) => {
+                setVendor(v);
+                setValue("vendorId", v.id, "vendor");
+              }}
             />
-          </label>
+            {errors.vendor && <span className="field-error">{errors.vendor}</span>}
+          </div>
 
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
             <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
               <span className="faint">RT code</span>
               <input
                 className="input"
+                aria-invalid={Boolean(errors.codes) || undefined}
                 value={form.royal_touche_code}
-                onChange={(e) => setValue("royal_touche_code", e.target.value)}
+                onChange={(e) => setValue("royal_touche_code", e.target.value, "codes")}
               />
             </label>
             <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
               <span className="faint">Delta code</span>
               <input
                 className="input"
+                aria-invalid={Boolean(errors.codes) || undefined}
                 value={form.delta_code}
-                onChange={(e) => setValue("delta_code", e.target.value)}
+                onChange={(e) => setValue("delta_code", e.target.value, "codes")}
               />
             </label>
+            {/* Under both code fields: the rule covers the pair, not either one alone. */}
+            <span
+              className={errors.codes ? "field-error" : "faint"}
+              style={{ gridColumn: "1 / -1", marginTop: -6, fontSize: 12 }}
+            >
+              {errors.codes ?? "A raw material needs an RT code or a Delta code."}
+            </span>
             <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
               <span className="faint">Supplier code / name *</span>
               <input
                 className="input"
+                aria-invalid={Boolean(errors.supplier) || undefined}
                 value={form.supplier_code_number}
-                onChange={(e) => setValue("supplier_code_number", e.target.value)}
-                required
+                onChange={(e) => setValue("supplier_code_number", e.target.value, "supplier")}
               />
+              {errors.supplier && <span className="field-error">{errors.supplier}</span>}
             </label>
           </div>
-
-          <p className="faint" style={{ margin: 0, fontSize: 12 }}>
-            A raw material needs a Royal Touche code or a Delta code.
-          </p>
 
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn" onClick={() => setEditing(null)}>

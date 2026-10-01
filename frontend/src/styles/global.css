@@ -231,6 +231,19 @@ textarea {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px var(--brand-ring);
 }
+/* A field that failed validation: red border, with the message under it in .field-error. */
+.input[aria-invalid="true"],
+.select[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.input[aria-invalid="true"]:focus,
+.select[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+}
 .field-label {
   display: block;
   font-size: 12.5px;
