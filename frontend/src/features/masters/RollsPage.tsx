@@ -707,6 +707,7 @@ export default function RollsPage() {
                 <div className="roll-history-table">
                   <div className="roll-history-row roll-history-head">
                     <span>Date</span>
+                    <span>Type</span>
                     <span>Movement</span>
                     <span>Balance</span>
                   </div>
@@ -719,12 +720,12 @@ export default function RollsPage() {
                       return (
                         <div key={m.id} className="roll-history-row">
                           <span className="faint">{new Date(m.transaction_date).toLocaleDateString()}</span>
-                          <span className="roll-history-movement">
+                          <span>
                             <span className={`status roll-history-badge ${badge.className}`}>{badge.label}</span>
-                            {/* Rendered as-is: the server writes this sentence precisely so no
-                                client has to rebuild it from the numbers. */}
-                            <span>{m.description}</span>
                           </span>
+                          {/* Rendered as-is: the server writes this sentence precisely so no
+                              client has to rebuild it from the numbers. */}
+                          <span className="roll-history-movement">{m.description}</span>
                           <span className="roll-history-balance">
                             {m.roll_weight_after ?? "—"} {editing.unit}
                           </span>
@@ -775,7 +776,7 @@ export default function RollsPage() {
         }
         .roll-history-body { max-height: 200px; overflow-y: auto; }
         .roll-history-row {
-          display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px;
+          display: grid; grid-template-columns: 90px 96px minmax(0, 1fr) 90px;
           align-items: center; gap: 12px; padding: 8px 12px; font-size: 13px;
         }
         .roll-history-body .roll-history-row + .roll-history-row { border-top: 1px solid var(--border); }
@@ -785,8 +786,11 @@ export default function RollsPage() {
         }
         .roll-history-head > span:last-child, .roll-history-balance { text-align: right; }
         .roll-history-row > .faint { font-size: 12px; }
-        .roll-history-movement { display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .roll-history-badge { font-size: 10.5px; padding: 2px 8px; flex-shrink: 0; }
+        .roll-history-movement { min-width: 0; overflow-wrap: anywhere; }
+        /* One width for every badge, so the Type column reads as a column. */
+        .roll-history-badge {
+          font-size: 10.5px; padding: 2px 0; width: 84px; text-align: center; box-sizing: border-box;
+        }
         .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
     </div>
