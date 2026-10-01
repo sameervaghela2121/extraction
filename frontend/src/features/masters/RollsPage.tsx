@@ -352,7 +352,7 @@ export default function RollsPage() {
         <input
           className="input"
           style={{ flex: 1, minWidth: 200 }}
-          placeholder="Search by roll number or RT code"
+          placeholder="Search by roll number, RT code, Delta code"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -776,7 +776,7 @@ export default function RollsPage() {
         }
         .roll-history-body { max-height: 200px; overflow-y: auto; }
         .roll-history-row {
-          display: grid; grid-template-columns: 90px 96px minmax(0, 1fr) 90px;
+          display: grid; grid-template-columns: 90px 78px minmax(0, 1fr) 90px;
           align-items: center; gap: 12px; padding: 8px 12px; font-size: 13px;
         }
         .roll-history-body .roll-history-row + .roll-history-row { border-top: 1px solid var(--border); }
@@ -789,7 +789,8 @@ export default function RollsPage() {
         .roll-history-movement { min-width: 0; overflow-wrap: anywhere; }
         /* One width for every badge, so the Type column reads as a column. */
         .roll-history-badge {
-          font-size: 10.5px; padding: 2px 0; width: 84px; text-align: center; box-sizing: border-box;
+          font-size: 9.5px; line-height: 1.5; padding: 1px 0; width: 68px; border-radius: 4px;
+          text-align: center; box-sizing: border-box; vertical-align: middle;
         }
         .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
