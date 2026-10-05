@@ -351,6 +351,8 @@ async function syncLastLedgerRow(roll: HydratedDocument<IMaterialRoll>): Promise
   await StockTransaction.updateOne({ _id: last._id }, { $set: fields });
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 export const materialRollsService = {
   // Paginated, unlike the masters: rolls grow without bound.
   async list(query: {
@@ -361,6 +363,8 @@ export const materialRollsService = {
     location?: string;
     remark_id?: string;
     updated_after?: Date;
+    date_from?: string;
+    date_to?: string;
     sort?: "roll_number" | "date";
     order?: "asc" | "desc";
     page?: number;
@@ -378,6 +382,22 @@ export const materialRollsService = {
     // remark_codes is an array field — Mongo matches a scalar against it as "array contains
     // this value" with no operator needed, same as every equality filter above.
     if (query.remark_id) filter.remark_codes = new Types.ObjectId(query.remark_id);
+    if (query.date_from || query.date_to) {
+      const range: { $gte?: Date; $lt?: Date; $lte?: Date } = {};
+      if (query.date_from) range.$gte = new Date(query.date_from);
+      if (query.date_to) {
+        // A plain day is stored as that day's UTC midnight, so an inclusive "up to the
+        // 5th" means everything before the 6th starts. An instant is taken as given.
+        if (DATE_ONLY.test(query.date_to)) {
+          const end = new Date(query.date_to);
+          end.setUTCDate(end.getUTCDate() + 1);
+          range.$lt = end;
+        } else {
+          range.$lte = new Date(query.date_to);
+        }
+      }
+      filter.date = range;
+    }
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
       filter.$or = [
