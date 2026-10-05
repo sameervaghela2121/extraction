@@ -99,27 +99,39 @@ export const updateRollRemarkCodesSchema = z.object({
   remark_codes: z.array(objectId).max(20, "Too many remark codes"),
 });
 
-export const listRollsQuerySchema = z.object({
-  q: z.string().trim().optional(),
-  material_id: objectId.optional(),
-  vendor_id: objectId.optional(),
-  status: z.enum(ROLL_STATUSES).optional(),
-  location: objectId.optional(),
-  // A Remark's id — matches a roll whose remark_codes array contains it, same as filtering
-  // vendor_id or status matches an exact field. Renamed from the old remark_code (a code
-  // string) now that the field itself stores real references.
-  remark_id: objectId.optional(),
-  // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
-  // to updatedAt ascending so the client can page through the backlog oldest-first and
-  // save the last updatedAt it saw as the next checkpoint.
-  updated_after: z.coerce.date().optional(),
-  // An allow-list rather than any field name: a free-form sort key lets a caller order by
-  // an unindexed field and turn a paged list into a collection scan.
-  sort: z.enum(["roll_number", "date"]).optional(),
-  order: z.enum(["asc", "desc"]).optional(),
-  page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().max(200).optional(),
-});
+// The same two spellings the roll's own date accepts on create: a plain day, or an instant.
+const dateParam = z.string().datetime({ offset: true }).or(z.string().date());
+
+export const listRollsQuerySchema = z
+  .object({
+    q: z.string().trim().optional(),
+    material_id: objectId.optional(),
+    vendor_id: objectId.optional(),
+    status: z.enum(ROLL_STATUSES).optional(),
+    location: objectId.optional(),
+    // A Remark's id — matches a roll whose remark_codes array contains it, same as filtering
+    // vendor_id or status matches an exact field. Renamed from the old remark_code (a code
+    // string) now that the field itself stores real references.
+    remark_id: objectId.optional(),
+    // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
+    // to updatedAt ascending so the client can page through the backlog oldest-first and
+    // save the last updatedAt it saw as the next checkpoint.
+    updated_after: z.coerce.date().optional(),
+    // A range on the roll's received date, both ends inclusive. A plain day as date_to
+    // covers that whole day, not just its first instant.
+    date_from: dateParam.optional(),
+    date_to: dateParam.optional(),
+    // An allow-list rather than any field name: a free-form sort key lets a caller order by
+    // an unindexed field and turn a paged list into a collection scan.
+    sort: z.enum(["roll_number", "date"]).optional(),
+    order: z.enum(["asc", "desc"]).optional(),
+    page: z.coerce.number().int().positive().optional(),
+    pageSize: z.coerce.number().int().positive().max(200).optional(),
+  })
+  .refine((v) => !v.date_from || !v.date_to || new Date(v.date_from) <= new Date(v.date_to), {
+    message: "date_from must be on or before date_to",
+    path: ["date_from"],
+  });
 
 /** The admin panel's paged roll list, as a POST body — the same filters as the GET list,
  *  which stays as it is for the app's delta pull. */
