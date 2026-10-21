@@ -4,10 +4,12 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import apiRoutes from "./routes";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.middleware";
+import { mcpProxy } from "./middleware/mcpProxy.middleware";
 
 export function createApp() {
   const app = express();
 
+  if (env.mcpServerUrl) app.use(mcpProxy());
   app.use(cors({ origin: env.frontendOrigin, credentials: true }));
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));

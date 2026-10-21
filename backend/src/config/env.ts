@@ -33,6 +33,10 @@ export const env = {
 
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
 
+  // Royal Touch MCP server, proxied under /mcp. Unset = no proxy (local dev, tests).
+  mcpServerUrl: process.env.MCP_SERVER_URL ?? "",
+  mcpProxySecret: process.env.MCP_PROXY_SECRET ?? "",
+
   smtp: {
     host: process.env.SMTP_HOST ?? "",
     port: Number(process.env.SMTP_PORT ?? 587),
