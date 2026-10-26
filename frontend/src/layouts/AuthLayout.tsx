@@ -9,7 +9,7 @@ export default function AuthLayout({ title, subtitle, children }: { title: strin
           <img
             src="/rt-logo-shield.png"
             alt=""
-            style={{ height: 30, width: "auto", display: "block" }}
+            style={{ height: 46, width: "auto", display: "block" }}
           />
           <strong style={{ fontSize: 18 }}>Royal Touche</strong>
         </div>
