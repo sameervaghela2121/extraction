@@ -212,7 +212,6 @@ export interface ManagedUser {
   email: string;
   role: UserRole;
   status: UserStatus;
-  docCount: number;
 }
 
 // ---- Royal Touche master data ----

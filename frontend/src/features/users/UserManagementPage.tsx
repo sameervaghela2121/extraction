@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { AxiosError } from "axios";
+import { Eye, EyeOff, Plus } from "lucide-react";
 import { usersApi } from "../../api/users.api";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -11,7 +12,7 @@ import { useServerPage } from "../masters/useServerPage";
 
 // This panel only ever deals in the two godown roles — staff and admin accounts are
 // managed outside it, and super_admin never appears here at all. The backend enforces the
-// same boundary (usersService.list filters by role, invite rejects anything else), so this
+// same boundary (usersService.list filters by role, create rejects anything else), so this
 // is UI convenience on top of a real restriction, not the restriction itself.
 const GODOWN_ROLES: ReadonlyArray<readonly [UserRole, string]> = [
   ["godown_supervisor", "Godown supervisor"],
@@ -19,8 +20,54 @@ const GODOWN_ROLES: ReadonlyArray<readonly [UserRole, string]> = [
 ];
 const ROLE_LABEL: Partial<Record<UserRole, string>> = Object.fromEntries(GODOWN_ROLES);
 
-type InviteForm = { name: string; email: string; role: UserRole };
-const EMPTY_INVITE: InviteForm = { name: "", email: "", role: "godown_operator" };
+type AddForm = { name: string; email: string; role: UserRole; password: string; confirm: string };
+const EMPTY_ADD: AddForm = { name: "", email: "", role: "godown_operator", password: "", confirm: "" };
+type AddErrors = Partial<Record<keyof AddForm, string>>;
+
+const MIN_PASSWORD = 8;
+
+/** The two password checks both forms share: long enough, and typed the same twice. */
+function passwordErrors(password: string, confirm: string): { password?: string; confirm?: string } {
+  if (password.length < MIN_PASSWORD) return { password: `Use at least ${MIN_PASSWORD} characters.` };
+  if (confirm !== password) return { confirm: "The two passwords don't match." };
+  return {};
+}
+
+/** A password box with a show/hide eye, so a long password can be checked before saving. */
+function PasswordInput({
+  value,
+  onChange,
+  invalid,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  invalid?: boolean;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        className="input"
+        type={shown ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid || undefined}
+        style={{ paddingRight: 38 }}
+      />
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => setShown((v) => !v)}
+        title={shown ? "Hide password" : "Show password"}
+        aria-label={shown ? "Hide password" : "Show password"}
+        style={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", padding: "4px 8px" }}
+      >
+        {shown ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
 
 export default function UserManagementPage() {
   const { user: me } = useAuth();
@@ -30,42 +77,95 @@ export default function UserManagementPage() {
   const { rows: users, setRows: setUsers, total, page, setPage, search, setSearch, query, loading, fetching, reload } =
     useServerPage<ManagedUser>((q) => usersApi.search(q), { key: "createdAt", dir: "asc" });
 
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [invite, setInvite] = useState<InviteForm>(EMPTY_INVITE);
-  const [inviting, setInviting] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [add, setAdd] = useState<AddForm>(EMPTY_ADD);
+  const [addErrors, setAddErrors] = useState<AddErrors>({});
+  const [adding, setAdding] = useState(false);
 
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [editRole, setEditRole] = useState<UserRole>("godown_operator");
   const [editStatus, setEditStatus] = useState<UserStatus>("active");
   const [saving, setSaving] = useState(false);
 
-  // A godown supervisor only ever invites operators, and role/status edits stay
-  // admin/super_admin-only — the backend already 403s otherwise, this just keeps the UI
-  // from offering a control that would fail.
-  const canEdit = me?.role === "admin" || me?.role === "super_admin";
-  const inviteRoles = me?.role === "godown_supervisor" ? GODOWN_ROLES.filter(([v]) => v === "godown_operator") : GODOWN_ROLES;
+  const [pwFor, setPwFor] = useState<ManagedUser | null>(null);
+  const [pw, setPw] = useState({ password: "", confirm: "" });
+  const [pwErrors, setPwErrors] = useState<{ password?: string; confirm?: string }>({});
+  const [pwSaving, setPwSaving] = useState(false);
+
+  // Anyone who can open this page may add a supervisor or an operator. Admins and super
+  // admins edit and set passwords for every godown account; a supervisor only for operators.
+  // The backend enforces all of it — this just hides controls that would fail.
+  const isAdmin = me?.role === "admin" || me?.role === "super_admin";
+  // Admins manage every godown account; a supervisor manages operators (edit and password),
+  // not other supervisors.
+  const canManageUser = (u: ManagedUser) => isAdmin || (me?.role === "godown_supervisor" && u.role === "godown_operator");
+  const canEdit = canManageUser;
+  const canSetPassword = canManageUser;
+  const showActions = isAdmin || me?.role === "godown_supervisor";
 
   // Defensive filter on top of the backend's own — belt and suspenders against this list
   // ever showing a role it shouldn't.
   const visible = users.filter((u) => u.role === "godown_supervisor" || u.role === "godown_operator");
 
-  const openInvite = () => {
-    setInvite({ ...EMPTY_INVITE, role: inviteRoles[0][0] });
-    setInviteOpen(true);
+  const openAdd = () => {
+    setAdd(EMPTY_ADD);
+    setAddErrors({});
+    setAddOpen(true);
   };
 
-  const submitInvite = async (e: FormEvent) => {
+  const setAddField = <K extends keyof AddForm>(field: K, value: AddForm[K]) => {
+    setAdd((v) => ({ ...v, [field]: value }));
+    setAddErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const submitAdd = async (e: FormEvent) => {
     e.preventDefault();
-    setInviting(true);
+    const found: AddErrors = {};
+    if (!add.name.trim()) found.name = "Enter the person's name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(add.email.trim())) found.email = "Enter a valid email.";
+    Object.assign(found, passwordErrors(add.password, add.confirm));
+    setAddErrors(found);
+    if (Object.keys(found).length) return;
+
+    setAdding(true);
     try {
-      await usersApi.invite(invite.name, invite.email, invite.role);
-      notify(`Invite sent to ${invite.email}`);
-      setInviteOpen(false);
+      await usersApi.create({ name: add.name.trim(), email: add.email.trim(), role: add.role, password: add.password });
+      notify(`${add.name.trim()} can log in now`);
+      setAddOpen(false);
       reload();
+    } catch (err) {
+      // A taken email belongs under the email field; anything else isn't about one field.
+      if (err instanceof AxiosError && err.response?.status === 409) setAddErrors({ email: apiErrorMessage(err) });
+      else notify(apiErrorMessage(err), "error");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const openSetPassword = (u: ManagedUser) => {
+    setPwFor(u);
+    setPw({ password: "", confirm: "" });
+    setPwErrors({});
+  };
+
+  const submitPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pwFor) return;
+    const found = passwordErrors(pw.password, pw.confirm);
+    setPwErrors(found);
+    if (Object.keys(found).length) return;
+
+    setPwSaving(true);
+    try {
+      const res = await usersApi.setPassword(pwFor.id, pw.password);
+      // An account still waiting on its invite becomes active once it has a password.
+      setUsers((prev) => prev.map((u) => (u.id === pwFor.id ? { ...u, status: res.status } : u)));
+      notify(`Password updated for ${pwFor.name}`);
+      setPwFor(null);
     } catch (err) {
       notify(apiErrorMessage(err), "error");
     } finally {
-      setInviting(false);
+      setPwSaving(false);
     }
   };
 
@@ -97,10 +197,10 @@ export default function UserManagementPage() {
     <div>
       <PageHeader
         title="User management"
-        subtitle="Invite and manage godown supervisors and operators."
+        subtitle="Add and manage godown supervisors and operators."
         actions={
-          <button className="btn btn-primary" onClick={openInvite}>
-            <Plus size={15} /> Invite user
+          <button className="btn btn-primary" onClick={openAdd}>
+            <Plus size={15} /> Add user
           </button>
         }
       />
@@ -125,9 +225,8 @@ export default function UserManagementPage() {
                 <tr>
                   <th>Name</th>
                   <th>Role</th>
-                  <th className="hide-narrow">Documents</th>
                   <th>Status</th>
-                  {canEdit && <th style={{ width: 90 }}></th>}
+                  {showActions && <th style={{ width: 200 }}></th>}
                 </tr>
               </thead>
               <tbody style={fetching ? { opacity: 0.6 } : undefined}>
@@ -149,7 +248,6 @@ export default function UserManagementPage() {
                         {ROLE_LABEL[u.role] ?? u.role}
                       </span>
                     </td>
-                    <td className="muted hide-narrow">{u.docCount}</td>
                     <td>
                       <span
                         className={`pill ${u.status === "active" ? "pill-verified" : u.status === "invited" ? "pill-pending" : "pill-archived"}`}
@@ -157,18 +255,27 @@ export default function UserManagementPage() {
                         {u.status}
                       </span>
                     </td>
-                    {canEdit && (
+                    {showActions && (
                       <td>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEdit(u)}>
-                          Edit
-                        </button>
+                        <div className="row gap-8">
+                          {canEdit(u) && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => openEdit(u)}>
+                              Edit
+                            </button>
+                          )}
+                          {canSetPassword(u) && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => openSetPassword(u)}>
+                              Set password
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
                 ))}
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={canEdit ? 5 : 4} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={showActions ? 4 : 3} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {query ? "Nothing matches that search." : "No godown users yet."}
                     </td>
                   </tr>
@@ -180,49 +287,123 @@ export default function UserManagementPage() {
         )}
       </div>
 
-      <Modal isOpen={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite user" size="medium">
-        <form onSubmit={submitInvite} style={{ display: "grid", gap: 14, padding: 16 }}>
+      <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Add user" size="medium">
+        {/* noValidate: each check shows its message under the field instead of the browser popup. */}
+        <form onSubmit={submitAdd} noValidate style={{ display: "grid", gap: 14, padding: 16 }}>
           <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
-            <span className="faint">Full name</span>
+            <span className="faint">Full name *</span>
             <input
               className="input"
-              value={invite.name}
-              onChange={(e) => setInvite((v) => ({ ...v, name: e.target.value }))}
-              required
+              value={add.name}
+              onChange={(e) => setAddField("name", e.target.value)}
+              aria-invalid={Boolean(addErrors.name) || undefined}
               autoFocus
             />
+            {addErrors.name && <span className="field-error">{addErrors.name}</span>}
           </label>
           <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
-            <span className="faint">Email</span>
+            <span className="faint">Email *</span>
             <input
               className="input"
               type="email"
-              value={invite.email}
-              onChange={(e) => setInvite((v) => ({ ...v, email: e.target.value }))}
-              required
+              autoComplete="off"
+              value={add.email}
+              onChange={(e) => setAddField("email", e.target.value)}
+              aria-invalid={Boolean(addErrors.email) || undefined}
             />
+            {addErrors.email && <span className="field-error">{addErrors.email}</span>}
           </label>
           <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
             <span className="faint">Role</span>
             <div className="row gap-8" style={{ flexWrap: "wrap" }}>
-              {inviteRoles.map(([value, label]) => (
+              {GODOWN_ROLES.map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
-                  className={`btn btn-sm ${invite.role === value ? "btn-primary" : ""}`}
-                  onClick={() => setInvite((v) => ({ ...v, role: value }))}
+                  className={`btn btn-sm ${add.role === value ? "btn-primary" : ""}`}
+                  onClick={() => setAddField("role", value)}
                 >
                   {label}
                 </button>
               ))}
             </div>
           </div>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <span className="faint">Password *</span>
+              <PasswordInput
+                value={add.password}
+                onChange={(v) => setAddField("password", v)}
+                invalid={Boolean(addErrors.password)}
+              />
+              {addErrors.password && <span className="field-error">{addErrors.password}</span>}
+            </div>
+            <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <span className="faint">Confirm password *</span>
+              <PasswordInput
+                value={add.confirm}
+                onChange={(v) => setAddField("confirm", v)}
+                invalid={Boolean(addErrors.confirm)}
+              />
+              {addErrors.confirm && <span className="field-error">{addErrors.confirm}</span>}
+            </div>
+          </div>
+          <p className="faint" style={{ margin: 0, fontSize: 12 }}>
+            The account is active straight away — share the password with them. No email is sent.
+          </p>
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
-            <button type="button" className="btn" onClick={() => setInviteOpen(false)}>
+            <button type="button" className="btn" onClick={() => setAddOpen(false)}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={inviting}>
-              {inviting ? "Sending…" : "Send invite"}
+            <button type="submit" className="btn btn-primary" disabled={adding}>
+              {adding ? "Adding…" : "Add user"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={pwFor !== null}
+        onClose={() => setPwFor(null)}
+        title={pwFor ? `Set password for ${pwFor.name}` : ""}
+        size="medium"
+      >
+        <form onSubmit={submitPassword} noValidate style={{ display: "grid", gap: 14, padding: 16 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(2, minmax(0,1fr))", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <span className="faint">New password *</span>
+              <PasswordInput
+                value={pw.password}
+                onChange={(v) => {
+                  setPw((p) => ({ ...p, password: v }));
+                  setPwErrors((e) => ({ ...e, password: undefined }));
+                }}
+                invalid={Boolean(pwErrors.password)}
+              />
+              {pwErrors.password && <span className="field-error">{pwErrors.password}</span>}
+            </div>
+            <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
+              <span className="faint">Confirm password *</span>
+              <PasswordInput
+                value={pw.confirm}
+                onChange={(v) => {
+                  setPw((p) => ({ ...p, confirm: v }));
+                  setPwErrors((e) => ({ ...e, confirm: undefined }));
+                }}
+                invalid={Boolean(pwErrors.confirm)}
+              />
+              {pwErrors.confirm && <span className="field-error">{pwErrors.confirm}</span>}
+            </div>
+          </div>
+          <p className="faint" style={{ margin: 0, fontSize: 12 }}>
+            Replaces their current password — the old one isn&apos;t needed.
+          </p>
+          <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => setPwFor(null)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={pwSaving}>
+              {pwSaving ? "Saving…" : "Set password"}
             </button>
           </div>
         </form>

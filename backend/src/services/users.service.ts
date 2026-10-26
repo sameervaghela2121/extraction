@@ -1,8 +1,8 @@
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { Types } from "mongoose";
 import { User, type UserRole, type UserStatus } from "../models/User.model";
 import { Invite } from "../models/Invite.model";
-import { DocumentModel } from "../models/Document.model";
 import { emailService } from "./email.service";
 import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
@@ -39,11 +39,6 @@ export const usersService = {
       // Explicit: `select: false` on the schema does not apply to an aggregate.
       project: { name: 1, email: 1, role: 1, status: 1 },
     });
-    const counts = await DocumentModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-      { $match: { ownerId: { $in: items.map((u) => u._id) } } },
-      { $group: { _id: "$ownerId", count: { $sum: 1 } } },
-    ]);
-    const countByUser = new Map(counts.map((c) => [c._id.toString(), c.count]));
     return paginated(
       items.map((u) => ({
         id: u._id.toString(),
@@ -51,7 +46,6 @@ export const usersService = {
         email: u.email,
         role: u.role,
         status: u.status,
-        docCount: countByUser.get(u._id.toString()) ?? 0,
       })),
       total,
       input.page,
@@ -68,19 +62,76 @@ export const usersService = {
     const users = await User.find({ role: { $in: GODOWN_ROLES } })
       .sort({ createdAt: 1 })
       .lean();
-    const counts = await DocumentModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-      { $group: { _id: "$ownerId", count: { $sum: 1 } } },
-    ]);
-    const countByUser = new Map(counts.map((c) => [c._id.toString(), c.count]));
-
     return users.map((u) => ({
       id: u._id.toString(),
       name: u.name,
       email: u.email,
       role: u.role,
       status: u.status,
-      docCount: countByUser.get(u._id.toString()) ?? 0,
     }));
+  },
+
+  /**
+   * Add a godown user with a password, active straight away — no invite email.
+   *
+   * Any role that can reach this panel may add either godown role (a supervisor may add
+   * another supervisor). An email already in use is refused, except an invite nobody
+   * accepted: that pending account is activated with this password instead, and its
+   * invite links stop working. Taking over a pending account sets its password, so it
+   * follows setPassword's rule: a supervisor may only do it for a pending operator.
+   */
+  async create(input: { name: string; email: string; role: UserRole; password: string }, actingUserRole: UserRole) {
+    const email = input.email.toLowerCase();
+    const existing = await User.findOne({ email });
+    if (existing && existing.status !== "invited") {
+      throw ApiError.conflict("A user with this email already exists");
+    }
+    if (existing && !GODOWN_ROLES.includes(existing.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    if (existing && actingUserRole === "godown_supervisor" && existing.role !== "godown_operator") {
+      throw ApiError.forbidden("This email has a pending supervisor invite — only an admin can set its password");
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const user =
+      existing ??
+      new User({ name: input.name, email, role: input.role });
+    user.name = input.name;
+    user.role = input.role;
+    user.passwordHash = passwordHash;
+    user.status = "active";
+    await user.save();
+    // An unaccepted invite for this email must not be able to set a different password later.
+    await Invite.deleteMany({ email });
+
+    return { id: user._id.toString(), name: user.name, email: user.email, role: user.role, status: user.status };
+  },
+
+  /**
+   * Replace a godown user's password — the old one isn't asked for. A supervisor may only do
+   * this for operators; admins and super admins for either godown role. An account still
+   * waiting on its invite becomes active, since it now has a password to log in with.
+   */
+  async setPassword(id: string, password: string, actingUserRole: UserRole) {
+    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid user id");
+    const user = await User.findById(id);
+    if (!user) throw ApiError.notFound("User not found");
+    if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    if (actingUserRole === "godown_supervisor" && user.role !== "godown_operator") {
+      throw ApiError.forbidden("Supervisors can only set an operator's password");
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    if (user.status === "invited") user.status = "active";
+    // A reset link already emailed must not be able to override this.
+    user.resetToken = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+    await Invite.deleteMany({ email: user.email });
+    return { id: user._id.toString(), status: user.status };
   },
 
   async invite(input: { name: string; email: string; role: UserRole }, actingUserRole: UserRole) {
@@ -134,7 +185,6 @@ export const usersService = {
       email: user.email,
       role: user.role,
       status: user.status,
-      docCount: 0,
     };
   },
 
@@ -142,7 +192,7 @@ export const usersService = {
   // self-edit unreachable (an admin's own account is role "admin", never a godown role),
   // so the old id-equality check it fed became redundant. Kept in the signature — the
   // controller still passes it — in case a future self-edit exception needs it back.
-  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, _actingUserId: string) {
+  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, actingUserRole: UserRole) {
     if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid user id");
     const user = await User.findById(id);
     if (!user) throw ApiError.notFound("User not found");
@@ -161,6 +211,10 @@ export const usersService = {
     // able to reach.
     if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
       throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    // Same rule as setPassword: a supervisor manages operators, not other supervisors.
+    if (actingUserRole === "godown_supervisor" && user.role !== "godown_operator") {
+      throw ApiError.forbidden("Supervisors can only edit operators");
     }
     if (updates.role) user.role = updates.role;
     if (updates.status) user.status = updates.status;

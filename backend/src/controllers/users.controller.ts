@@ -10,12 +10,20 @@ export const usersController = {
     res.json(await usersService.search(req.body));
   },
 
+  async create(req: Request, res: Response) {
+    res.status(201).json(await usersService.create(req.body, req.auth!.role));
+  },
+
+  async setPassword(req: Request, res: Response) {
+    res.json(await usersService.setPassword(req.params.id, req.body.password, req.auth!.role));
+  },
+
   async invite(req: Request, res: Response) {
     res.status(201).json(await usersService.invite(req.body, req.auth!.role));
   },
 
   async update(req: Request, res: Response) {
-    res.json(await usersService.update(req.params.id, req.body, req.auth!.userId));
+    res.json(await usersService.update(req.params.id, req.body, req.auth!.role));
   },
 
   async remove(req: Request, res: Response) {
