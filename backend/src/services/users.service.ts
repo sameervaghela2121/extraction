@@ -206,7 +206,7 @@ export const usersService = {
   // self-edit unreachable (an admin's own account is role "admin", never a godown role),
   // so the old id-equality check it fed became redundant. Kept in the signature — the
   // controller still passes it — in case a future self-edit exception needs it back.
-  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, _actingUserId: string) {
+  async update(id: string, updates: { role?: UserRole; status?: UserStatus }, actingUserRole: UserRole) {
     if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid user id");
     const user = await User.findById(id);
     if (!user) throw ApiError.notFound("User not found");
@@ -225,6 +225,10 @@ export const usersService = {
     // able to reach.
     if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
       throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    // Same rule as setPassword: a supervisor manages operators, not other supervisors.
+    if (actingUserRole === "godown_supervisor" && user.role !== "godown_operator") {
+      throw ApiError.forbidden("Supervisors can only edit operators");
     }
     if (updates.role) user.role = updates.role;
     if (updates.status) user.status = updates.status;

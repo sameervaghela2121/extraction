@@ -23,7 +23,7 @@ export const usersController = {
   },
 
   async update(req: Request, res: Response) {
-    res.json(await usersService.update(req.params.id, req.body, req.auth!.userId));
+    res.json(await usersService.update(req.params.id, req.body, req.auth!.role));
   },
 
   async remove(req: Request, res: Response) {

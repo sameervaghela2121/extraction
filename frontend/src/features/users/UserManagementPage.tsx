@@ -92,12 +92,16 @@ export default function UserManagementPage() {
   const [pwErrors, setPwErrors] = useState<{ password?: string; confirm?: string }>({});
   const [pwSaving, setPwSaving] = useState(false);
 
-  // Role/status edits stay admin/super_admin-only. Anyone who can open this page may add a
-  // supervisor or an operator; a supervisor may set an operator's password but not another
-  // supervisor's. The backend enforces all of it — this just hides controls that would fail.
-  const canEdit = me?.role === "admin" || me?.role === "super_admin";
-  const canSetPassword = (u: ManagedUser) => canEdit || (me?.role === "godown_supervisor" && u.role === "godown_operator");
-  const showActions = canEdit || me?.role === "godown_supervisor";
+  // Anyone who can open this page may add a supervisor or an operator. Admins and super
+  // admins edit and set passwords for every godown account; a supervisor only for operators.
+  // The backend enforces all of it — this just hides controls that would fail.
+  const isAdmin = me?.role === "admin" || me?.role === "super_admin";
+  // Admins manage every godown account; a supervisor manages operators (edit and password),
+  // not other supervisors.
+  const canManageUser = (u: ManagedUser) => isAdmin || (me?.role === "godown_supervisor" && u.role === "godown_operator");
+  const canEdit = canManageUser;
+  const canSetPassword = canManageUser;
+  const showActions = isAdmin || me?.role === "godown_supervisor";
 
   // Defensive filter on top of the backend's own — belt and suspenders against this list
   // ever showing a role it shouldn't.
@@ -256,7 +260,7 @@ export default function UserManagementPage() {
                     {showActions && (
                       <td>
                         <div className="row gap-8">
-                          {canEdit && (
+                          {canEdit(u) && (
                             <button className="btn btn-ghost btn-sm" onClick={() => openEdit(u)}>
                               Edit
                             </button>
