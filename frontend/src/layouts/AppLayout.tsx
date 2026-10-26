@@ -159,13 +159,14 @@ export default function AppLayout() {
           bottom: 0,
         }}
       >
-        {/* The client's own wordmark, as on royaletouche.com. */}
-        <div style={{ padding: "6px 8px 20px" }}>
+        <div className="row gap-8" style={{ padding: "4px 8px 18px" }}>
+          {/* The Royale Touche shield — the same logo as the mobile app's top bar. */}
           <img
-            src="/royale-touche-logo.png"
-            alt="Royale Touche"
-            style={{ display: "block", height: 22, width: "auto", maxWidth: "100%" }}
+            src="/rt-logo-shield.png"
+            alt=""
+            style={{ height: 28, width: "auto", display: "block" }}
           />
+          <strong style={{ fontSize: 16 }}>Royal Touche</strong>
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>
