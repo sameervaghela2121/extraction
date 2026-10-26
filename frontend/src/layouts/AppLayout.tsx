@@ -159,22 +159,13 @@ export default function AppLayout() {
           bottom: 0,
         }}
       >
-        <div className="row gap-8" style={{ padding: "4px 8px 18px" }}>
-          <span
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: "var(--brand)",
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-            }}
-          >
-            R
-          </span>
-          <strong style={{ fontSize: 16 }}>Royal Touche</strong>
+        {/* The client's own wordmark, as on royaletouche.com. */}
+        <div style={{ padding: "6px 8px 20px" }}>
+          <img
+            src="/royale-touche-logo.png"
+            alt="Royale Touche"
+            style={{ display: "block", height: 22, width: "auto", maxWidth: "100%" }}
+          />
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>
