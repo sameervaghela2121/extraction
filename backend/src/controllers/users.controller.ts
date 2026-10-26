@@ -10,6 +10,14 @@ export const usersController = {
     res.json(await usersService.search(req.body));
   },
 
+  async create(req: Request, res: Response) {
+    res.status(201).json(await usersService.create(req.body));
+  },
+
+  async setPassword(req: Request, res: Response) {
+    res.json(await usersService.setPassword(req.params.id, req.body.password, req.auth!.role));
+  },
+
   async invite(req: Request, res: Response) {
     res.status(201).json(await usersService.invite(req.body, req.auth!.role));
   },

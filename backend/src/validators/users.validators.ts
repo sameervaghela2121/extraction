@@ -15,6 +15,20 @@ export const inviteUserSchema = z.object({
   role: z.enum(GODOWN_ROLES),
 });
 
+/** A password an admin or supervisor sets for someone else. Same floor as the reset flow. */
+const passwordSchema = z.string().min(8, "Password must be at least 8 characters").max(128);
+
+/** Add a user with a password — created active, no invite email. */
+export const createUserSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  email: z.string().trim().email("Enter a valid email"),
+  role: z.enum(GODOWN_ROLES),
+  password: passwordSchema,
+});
+
+/** Replace a user's password. The old one isn't asked for — this is someone else's account. */
+export const setPasswordSchema = z.object({ password: passwordSchema });
+
 export const updateUserSchema = z
   .object({
     role: z.enum(GODOWN_ROLES).optional(),

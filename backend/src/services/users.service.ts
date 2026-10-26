@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { Types } from "mongoose";
 import { User, type UserRole, type UserStatus } from "../models/User.model";
 import { Invite } from "../models/Invite.model";
@@ -81,6 +82,65 @@ export const usersService = {
       status: u.status,
       docCount: countByUser.get(u._id.toString()) ?? 0,
     }));
+  },
+
+  /**
+   * Add a godown user with a password, active straight away — no invite email.
+   *
+   * Any role that can reach this panel may add either godown role (a supervisor may add
+   * another supervisor). An email already in use is refused, except an invite nobody
+   * accepted: that pending account is activated with this password instead, and its
+   * invite links stop working.
+   */
+  async create(input: { name: string; email: string; role: UserRole; password: string }) {
+    const email = input.email.toLowerCase();
+    const existing = await User.findOne({ email });
+    if (existing && existing.status !== "invited") {
+      throw ApiError.conflict("A user with this email already exists");
+    }
+    if (existing && !GODOWN_ROLES.includes(existing.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const user =
+      existing ??
+      new User({ name: input.name, email, role: input.role });
+    user.name = input.name;
+    user.role = input.role;
+    user.passwordHash = passwordHash;
+    user.status = "active";
+    await user.save();
+    // An unaccepted invite for this email must not be able to set a different password later.
+    await Invite.deleteMany({ email });
+
+    return { id: user._id.toString(), name: user.name, email: user.email, role: user.role, status: user.status, docCount: 0 };
+  },
+
+  /**
+   * Replace a godown user's password — the old one isn't asked for. A supervisor may only do
+   * this for operators; admins and super admins for either godown role. An account still
+   * waiting on its invite becomes active, since it now has a password to log in with.
+   */
+  async setPassword(id: string, password: string, actingUserRole: UserRole) {
+    if (!Types.ObjectId.isValid(id)) throw ApiError.badRequest("Invalid user id");
+    const user = await User.findById(id);
+    if (!user) throw ApiError.notFound("User not found");
+    if (!GODOWN_ROLES.includes(user.role as (typeof GODOWN_ROLES)[number])) {
+      throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    if (actingUserRole === "godown_supervisor" && user.role !== "godown_operator") {
+      throw ApiError.forbidden("Supervisors can only set an operator's password");
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    if (user.status === "invited") user.status = "active";
+    // A reset link already emailed must not be able to override this.
+    user.resetToken = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+    await Invite.deleteMany({ email: user.email });
+    return { id: user._id.toString(), status: user.status };
   },
 
   async invite(input: { name: string; email: string; role: UserRole }, actingUserRole: UserRole) {
