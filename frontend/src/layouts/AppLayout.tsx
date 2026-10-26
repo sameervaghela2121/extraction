@@ -164,9 +164,9 @@ export default function AppLayout() {
           <img
             src="/rt-logo-shield.png"
             alt=""
-            style={{ height: 40, width: "auto", display: "block" }}
+            style={{ height: 48, width: "auto", display: "block" }}
           />
-          <strong style={{ fontSize: 16 }}>Royal Touche</strong>
+          <strong style={{ fontSize: 20 }}>Royale Touche</strong>
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>
