@@ -160,21 +160,13 @@ export default function AppLayout() {
         }}
       >
         <div className="row gap-8" style={{ padding: "4px 8px 18px" }}>
-          <span
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: "var(--brand)",
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-            }}
-          >
-            R
-          </span>
-          <strong style={{ fontSize: 16 }}>Royal Touche</strong>
+          {/* The Royale Touche shield — the same logo as the mobile app's top bar. */}
+          <img
+            src="/rt-logo-shield.png"
+            alt=""
+            style={{ height: 48, width: "auto", display: "block" }}
+          />
+          <strong style={{ fontSize: 20 }}>Royale Touche</strong>
         </div>
 
         <nav className="stack" style={{ gap: 2 }}>

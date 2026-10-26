@@ -363,7 +363,7 @@ export default function RawMaterialPage() {
     <div className="list-page">
       <PageHeader
         title="Paper Codes"
-        subtitle="The Royal Touche paper codes, and the supplier each one comes from."
+        subtitle="The Royale Touche paper codes, and the supplier each one comes from."
       />
 
       <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>

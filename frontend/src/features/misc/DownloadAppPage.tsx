@@ -31,14 +31,14 @@ export default function DownloadAppPage() {
     <div>
       <PageHeader
         title="Download app"
-        subtitle="Get the Royal Touche app for Android."
+        subtitle="Get the Royale Touche app for Android."
       />
 
       <div className="card" style={{ padding: 24, maxWidth: 480 }}>
         <div className="row gap-8" style={{ alignItems: "center", marginBottom: 14 }}>
           <Smartphone size={28} />
           <div>
-            <strong style={{ fontSize: 15 }}>Royal Touche App</strong>
+            <strong style={{ fontSize: 15 }}>Royale Touche App</strong>
             <p className="faint" style={{ fontSize: 12, margin: "2px 0 0" }}>
               Android APK · scan and register rolls from the godown
             </p>
