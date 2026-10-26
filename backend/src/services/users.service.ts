@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import { Types } from "mongoose";
 import { User, type UserRole, type UserStatus } from "../models/User.model";
 import { Invite } from "../models/Invite.model";
-import { DocumentModel } from "../models/Document.model";
 import { emailService } from "./email.service";
 import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
@@ -40,11 +39,6 @@ export const usersService = {
       // Explicit: `select: false` on the schema does not apply to an aggregate.
       project: { name: 1, email: 1, role: 1, status: 1 },
     });
-    const counts = await DocumentModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-      { $match: { ownerId: { $in: items.map((u) => u._id) } } },
-      { $group: { _id: "$ownerId", count: { $sum: 1 } } },
-    ]);
-    const countByUser = new Map(counts.map((c) => [c._id.toString(), c.count]));
     return paginated(
       items.map((u) => ({
         id: u._id.toString(),
@@ -52,7 +46,6 @@ export const usersService = {
         email: u.email,
         role: u.role,
         status: u.status,
-        docCount: countByUser.get(u._id.toString()) ?? 0,
       })),
       total,
       input.page,
@@ -69,18 +62,12 @@ export const usersService = {
     const users = await User.find({ role: { $in: GODOWN_ROLES } })
       .sort({ createdAt: 1 })
       .lean();
-    const counts = await DocumentModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-      { $group: { _id: "$ownerId", count: { $sum: 1 } } },
-    ]);
-    const countByUser = new Map(counts.map((c) => [c._id.toString(), c.count]));
-
     return users.map((u) => ({
       id: u._id.toString(),
       name: u.name,
       email: u.email,
       role: u.role,
       status: u.status,
-      docCount: countByUser.get(u._id.toString()) ?? 0,
     }));
   },
 
@@ -118,7 +105,7 @@ export const usersService = {
     // An unaccepted invite for this email must not be able to set a different password later.
     await Invite.deleteMany({ email });
 
-    return { id: user._id.toString(), name: user.name, email: user.email, role: user.role, status: user.status, docCount: 0 };
+    return { id: user._id.toString(), name: user.name, email: user.email, role: user.role, status: user.status };
   },
 
   /**
@@ -198,7 +185,6 @@ export const usersService = {
       email: user.email,
       role: user.role,
       status: user.status,
-      docCount: 0,
     };
   },
 

@@ -225,7 +225,6 @@ export default function UserManagementPage() {
                 <tr>
                   <th>Name</th>
                   <th>Role</th>
-                  <th className="hide-narrow">Documents</th>
                   <th>Status</th>
                   {showActions && <th style={{ width: 200 }}></th>}
                 </tr>
@@ -249,7 +248,6 @@ export default function UserManagementPage() {
                         {ROLE_LABEL[u.role] ?? u.role}
                       </span>
                     </td>
-                    <td className="muted hide-narrow">{u.docCount}</td>
                     <td>
                       <span
                         className={`pill ${u.status === "active" ? "pill-verified" : u.status === "invited" ? "pill-pending" : "pill-archived"}`}
@@ -277,7 +275,7 @@ export default function UserManagementPage() {
                 ))}
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={showActions ? 5 : 4} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={showActions ? 4 : 3} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {query ? "Nothing matches that search." : "No godown users yet."}
                     </td>
                   </tr>
