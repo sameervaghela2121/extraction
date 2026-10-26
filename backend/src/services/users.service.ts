@@ -90,9 +90,10 @@ export const usersService = {
    * Any role that can reach this panel may add either godown role (a supervisor may add
    * another supervisor). An email already in use is refused, except an invite nobody
    * accepted: that pending account is activated with this password instead, and its
-   * invite links stop working.
+   * invite links stop working. Taking over a pending account sets its password, so it
+   * follows setPassword's rule: a supervisor may only do it for a pending operator.
    */
-  async create(input: { name: string; email: string; role: UserRole; password: string }) {
+  async create(input: { name: string; email: string; role: UserRole; password: string }, actingUserRole: UserRole) {
     const email = input.email.toLowerCase();
     const existing = await User.findOne({ email });
     if (existing && existing.status !== "invited") {
@@ -100,6 +101,9 @@ export const usersService = {
     }
     if (existing && !GODOWN_ROLES.includes(existing.role as (typeof GODOWN_ROLES)[number])) {
       throw ApiError.forbidden("This account is managed outside this panel");
+    }
+    if (existing && actingUserRole === "godown_supervisor" && existing.role !== "godown_operator") {
+      throw ApiError.forbidden("This email has a pending supervisor invite — only an admin can set its password");
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);

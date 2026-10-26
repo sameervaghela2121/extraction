@@ -11,7 +11,7 @@ export const usersController = {
   },
 
   async create(req: Request, res: Response) {
-    res.status(201).json(await usersService.create(req.body));
+    res.status(201).json(await usersService.create(req.body, req.auth!.role));
   },
 
   async setPassword(req: Request, res: Response) {
