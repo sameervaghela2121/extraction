@@ -191,6 +191,8 @@ export const barcodeBatchesService = {
       // Both codes live in the roll's papers.
       $or: [{ roll_number: rx }, { "papers.royal_touche_code": rx }, { "papers.delta_code": rx }],
       barcode: { $exists: true, $ne: "" },
+      // A removed roll no longer holds its label, same as when it was erased outright.
+      deleted_at: null,
     })
       .select("roll_number papers.royal_touche_code papers.delta_code barcode")
       .limit(MAX_SEARCH_RESULTS)

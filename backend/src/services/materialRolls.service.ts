@@ -77,6 +77,10 @@ const PATCHABLE = [
 ] as const;
 const ROLL_TAKEN = "A roll with this number already exists";
 
+/** Every read except the delta pull is of live rolls — a removed one is kept only for its
+ *  history (see remove). `null` also matches rolls saved before deleted_at existed. */
+const LIVE = { deleted_at: null } as const;
+
 /** The roll's photo slots as a plain list, for the receipt movement. Undefined rather
  *  than [] when none were taken — the ledger stores the field only when it has one. */
 function registrationPhotos(roll: Pick<IMaterialRoll, (typeof PHOTO_FIELDS)[number]>) {
@@ -134,10 +138,11 @@ type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_c
 };
 
 async function toResponse(r: PopulatedRoll) {
-  // Signing is local crypto, no network call, so four per roll is cheap.
-  const [tag, stitched, side1, side2] = await Promise.all(
-    PHOTO_FIELDS.map((field) => mediaService.signedReadUrlOrNull(r[field])),
-  );
+  // A removed roll only reaches a client through the delta pull, which drops it on sight —
+  // nothing will render its photos, so they are not signed.
+  const [tag, stitched, side1, side2] = r.deleted_at
+    ? [null, null, null, null]
+    : await Promise.all(PHOTO_FIELDS.map((field) => mediaService.signedReadUrlOrNull(r[field])));
 
   return {
     id: r._id.toString(),
@@ -177,6 +182,8 @@ async function toResponse(r: PopulatedRoll) {
     // Echoed back so a device pulling a delta can match rolls against its own outbox and
     // drop the queued copies. Absent on anything registered from the portal.
     client_id: r.client_id,
+    // Non-null only in a delta pull: the device deletes its copy of the roll when it sees one.
+    deleted_at: r.deleted_at ?? null,
     createdAt: r.createdAt,
     // The delta-pull checkpoint the client sends back as updated_after.
     updatedAt: r.updatedAt,
@@ -202,10 +209,10 @@ async function toResponse(r: PopulatedRoll) {
  */
 async function findRoll(idOrNumber: string) {
   if (Types.ObjectId.isValid(idOrNumber)) {
-    const byId = await MaterialRoll.findById(idOrNumber);
+    const byId = await MaterialRoll.findOne({ _id: idOrNumber, ...LIVE });
     if (byId) return byId;
   }
-  const byNumber = await MaterialRoll.findOne({ roll_number: idOrNumber.toUpperCase() });
+  const byNumber = await MaterialRoll.findOne({ roll_number: idOrNumber.toUpperCase(), ...LIVE });
   if (!byNumber) throw ApiError.notFound("Roll not found");
   return byNumber;
 }
@@ -363,6 +370,7 @@ export const materialRollsService = {
     location?: string;
     remark_id?: string;
     updated_after?: Date;
+    after_id?: string;
     date_from?: string;
     date_to?: string;
     sort?: "roll_number" | "date";
@@ -374,8 +382,28 @@ export const materialRollsService = {
     const pageSize = query.pageSize ?? 50;
 
     const filter: FilterQuery<IMaterialRoll> = {};
+    if (query.updated_after) {
+      // The delta pull is the one read that includes removed rolls: it is how a device
+      // learns a roll is gone, rather than guessing from what a full download left out.
+      //
+      // The checkpoint is a (updatedAt, _id) pair. With updatedAt alone, a roll saved in
+      // the same millisecond as the last one a page ended on would sit behind the
+      // checkpoint and never be sent. after_id is optional so older clients keep working.
+      const after = query.updated_after;
+      filter.$and = [
+        query.after_id
+          ? {
+              $or: [
+                { updatedAt: { $gt: after } },
+                { updatedAt: after, _id: { $gt: new Types.ObjectId(query.after_id) } },
+              ],
+            }
+          : { updatedAt: { $gt: after } },
+      ];
+    } else {
+      Object.assign(filter, LIVE);
+    }
     if (query.status) filter.status = query.status;
-    if (query.updated_after) filter.updatedAt = { $gt: query.updated_after };
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.vendor_id) filter.vendor_id = new Types.ObjectId(query.vendor_id);
     if (query.location) filter.location = new Types.ObjectId(query.location);
@@ -460,7 +488,7 @@ export const materialRollsService = {
     // Promise.all rejects on the first failure, which is the behaviour the sequential
     // version had: the caller sees whichever check failed.
     const [, material, vendor, location] = await Promise.all([
-      ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN),
+      ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN, LIVE),
       loadUsableMaterial(input.material_id),
       loadUsableVendor(input.vendor_id),
       loadUsableLocation(input.location),
@@ -542,7 +570,7 @@ export const materialRollsService = {
     if (updates.roll_number) {
       const rollNumber = updates.roll_number.toUpperCase();
       if (rollNumber !== roll.roll_number) {
-        await ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN);
+        await ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN, LIVE);
         roll.roll_number = rollNumber;
       }
     }
@@ -627,12 +655,19 @@ export const materialRollsService = {
     return toResponse(roll as unknown as PopulatedRoll);
   },
 
-  // Hard delete, unlike the masters: this is for a mis-scanned roll that never
-  // existed. Once any of it has been issued, the roll is history and must stay.
-  async remove(id: string) {
+  // Soft delete: for a mis-scanned roll that never existed, so it disappears from every
+  // list, lookup and stock total — but the roll and its movements stay in the database,
+  // marked rather than erased, so a wrong click can be traced and undone.
+  //
+  // Marking also bumps updatedAt, which is what puts the removal into every device's next
+  // delta pull. A hard delete leaves nothing behind for that pull to report.
+  async remove(id: string, actingUserId: string) {
     const roll = await findRoll(id);
-    await roll.deleteOne();
-    await StockTransaction.deleteMany({ roll_id: roll._id });
+    const now = new Date();
+    roll.deleted_at = now;
+    roll.deleted_by = new Types.ObjectId(actingUserId);
+    await roll.save();
+    await StockTransaction.updateMany({ roll_id: roll._id }, { $set: { deleted_at: now } });
     await refreshSummaries([roll.material_id]);
     return { id, deleted: true };
   },
