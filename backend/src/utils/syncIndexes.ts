@@ -31,7 +31,10 @@ import "../models/BarcodeBatch.model";
 import "../models/SyncLog.model";
 import "../models/User.model";
 
-/** A stable description of one index, so two can be compared without ordering noise. */
+/** A stable description of one index, so two can be compared without ordering noise.
+ *  Every option that changes what the index enforces has to be in here: one left out
+ *  makes an index that differs only by it read as already matching, so --apply never
+ *  runs — a unique index turned partial would keep enforcing the old rule. */
 function describe(key: Record<string, unknown>, opts: Record<string, unknown> = {}): string {
   const fields = Object.entries(key)
     .map(([k, v]) => `${k}:${v}`)
@@ -40,7 +43,11 @@ function describe(key: Record<string, unknown>, opts: Record<string, unknown> = 
     .filter((f) => opts[f])
     .map((f) => ` ${f}`)
     .join("");
-  return `{${fields}}${flags}`;
+  const partial = opts.partialFilterExpression
+    ? ` partial:${JSON.stringify(opts.partialFilterExpression)}`
+    : "";
+  const ttl = opts.expireAfterSeconds !== undefined ? ` ttl:${opts.expireAfterSeconds}s` : "";
+  return `{${fields}}${flags}${partial}${ttl}`;
 }
 
 async function main() {
@@ -67,7 +74,14 @@ async function main() {
     );
 
     // What the database actually has. _id is implicit and never declared.
-    let existing: Array<{ name: string; key: Record<string, unknown>; unique?: boolean; sparse?: boolean }>;
+    let existing: Array<{
+      name: string;
+      key: Record<string, unknown>;
+      unique?: boolean;
+      sparse?: boolean;
+      partialFilterExpression?: Record<string, unknown>;
+      expireAfterSeconds?: number;
+    }>;
     try {
       existing = (await model.collection.indexes()) as typeof existing;
     } catch {
@@ -78,7 +92,15 @@ async function main() {
     const present = new Map(
       existing
         .filter((i) => i.name !== "_id_")
-        .map((i) => [describe(i.key, { unique: i.unique, sparse: i.sparse }), i.name]),
+        .map((i) => [
+          describe(i.key, {
+            unique: i.unique,
+            sparse: i.sparse,
+            partialFilterExpression: i.partialFilterExpression,
+            expireAfterSeconds: i.expireAfterSeconds,
+          }),
+          i.name,
+        ]),
     );
 
     const missing = [...declared.keys()].filter((d) => !present.has(d));
