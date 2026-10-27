@@ -117,6 +117,9 @@ export const listRollsQuerySchema = z
     // to updatedAt ascending so the client can page through the backlog oldest-first and
     // save the last updatedAt it saw as the next checkpoint.
     updated_after: z.coerce.date().optional(),
+    // The _id of the last roll the previous page ended on, paired with updated_after so
+    // rolls sharing that exact updatedAt are not skipped. Only meaningful with it.
+    after_id: objectId.optional(),
     // A range on the roll's received date, both ends inclusive. A plain day as date_to
     // covers that whole day, not just its first instant.
     date_from: dateParam.optional(),
@@ -131,6 +134,10 @@ export const listRollsQuerySchema = z
   .refine((v) => !v.date_from || !v.date_to || new Date(v.date_from) <= new Date(v.date_to), {
     message: "date_from must be on or before date_to",
     path: ["date_from"],
+  })
+  .refine((v) => !v.after_id || v.updated_after, {
+    message: "after_id needs updated_after",
+    path: ["after_id"],
   });
 
 /** The admin panel's paged roll list, as a POST body — the same filters as the GET list,

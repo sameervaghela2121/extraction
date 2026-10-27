@@ -187,7 +187,8 @@ type RollEffect = {
  * RETURN is the only movement that draws a roll down.
  */
 async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promise<RollEffect> {
-  const roll = await MaterialRoll.findById(rollId);
+  // A removed roll answers the same as a missing one — nothing more can happen to it.
+  const roll = await MaterialRoll.findOne({ _id: rollId, deleted_at: null });
   if (!roll) throw ApiError.notFound("That roll no longer exists");
   // A CONSUME may omit material_id — there is nothing for the operator to pick, so it is
   // taken from the roll rather than demanded and then checked against itself.
@@ -363,7 +364,7 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
 /** The material a roll belongs to, for a movement that did not name one. */
 async function materialOfRoll(rollId?: string): Promise<string | undefined> {
   if (!rollId) return undefined;
-  const roll = await MaterialRoll.findById(rollId).select("material_id").lean();
+  const roll = await MaterialRoll.findOne({ _id: rollId, deleted_at: null }).select("material_id").lean();
   if (!roll) throw ApiError.notFound("That roll no longer exists");
   return roll.material_id.toString();
 }
@@ -476,7 +477,9 @@ export const stockService = {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
 
-    const filter: FilterQuery<IStockTransaction> = {};
+    // A removed roll's movements are kept but hidden, delta pull included: a device drops a
+    // removed roll's history itself when the roll pull reports the removal.
+    const filter: FilterQuery<IStockTransaction> = { deleted_at: null };
     if (query.updated_after) filter.updatedAt = { $gt: query.updated_after };
     if (query.material_id) filter.material_id = new Types.ObjectId(query.material_id);
     if (query.roll_id) filter.roll_id = query.roll_id;
@@ -485,7 +488,10 @@ export const stockService = {
     // A phone that scanned a barcode has the printed number, never an ObjectId. Resolved
     // to the id here rather than left to the client as a second round trip.
     if (query.roll_number) {
-      const roll = await MaterialRoll.findOne({ roll_number: query.roll_number.toUpperCase() })
+      const roll = await MaterialRoll.findOne({
+        roll_number: query.roll_number.toUpperCase(),
+        deleted_at: null,
+      })
         .select("_id")
         .lean();
       // An unknown number means no history, not every movement in the store — without

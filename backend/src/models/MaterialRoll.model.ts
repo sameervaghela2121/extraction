@@ -76,6 +76,13 @@ export interface IMaterialRoll {
    *  lost response gets this roll back instead of registering a second one. Absent on
    *  rolls created from the web portal, which never queues. */
   client_id?: string;
+  /** Set when the roll is removed from the portal; null while it is live. A soft delete,
+   *  not a real one: the roll and its movement history stay for the audit trail, and the
+   *  timestamp change bumps updatedAt so a device's delta pull is told about the removal
+   *  instead of having to infer it from what is missing. */
+  deleted_at?: Date | null;
+  /** Who removed it — the User id behind the portal delete. */
+  deleted_by?: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,7 +91,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
   {
     // The barcode value printed on the roll. String, not ObjectId — it comes from
     // the label, not from us.
-    roll_number: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    // Unique among live rolls only — see the partial index below.
+    roll_number: { type: String, required: true, uppercase: true, trim: true },
     // Undefined rather than [] when none were picked, same convention as remark_codes.
     papers: { type: [basePaperSchema], default: undefined },
     // The label code printed by the barcode-batch screen. Indexed because scanning a
@@ -122,6 +130,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     date: { type: Date, required: true },
     status: { type: String, enum: [...ROLL_STATUSES], default: "IN_STOCK", index: true },
     client_id: { type: String, trim: true },
+    deleted_at: { type: Date, default: null },
+    deleted_by: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true, collection: "materials_rolls" },
 );
@@ -129,9 +139,19 @@ const materialRollSchema = new Schema<IMaterialRoll>(
 // Serves refreshSummary's aggregation, which runs on every roll create and every stock
 // movement: { material_id, status: "IN_STOCK", remaining_weight: { $gt: 0 } }. The single
 // -field material_id index above makes Mongo fetch every roll of that material and filter
-// in memory; this one answers the match from the index alone. Field order follows the
-// query — equality, equality, then range.
+// in memory; this one narrows the match to the rolls that count, leaving only the
+// deleted_at check to read off each one. Field order follows the query — equality,
+// equality, then range.
 materialRollSchema.index({ material_id: 1, status: 1, remaining_weight: 1 });
+
+// A roll number is unique among live rolls. A removed roll keeps its number for the audit
+// trail, so a plain unique index would stop the same roll being registered again after a
+// mistaken entry was deleted — which a hard delete used to allow. `deleted_at: null` also
+// matches rolls saved before the field existed, so they stay covered without a backfill.
+materialRollSchema.index(
+  { roll_number: 1 },
+  { unique: true, partialFilterExpression: { deleted_at: null } },
+);
 
 // The replay guard. Sparse is not optional: every roll registered before this field
 // existed has no client_id, and a plain unique index would read them all as the same

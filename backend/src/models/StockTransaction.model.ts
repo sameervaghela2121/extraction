@@ -63,6 +63,9 @@ export interface IStockTransaction {
   /** Minted on the device when the movement was queued, so a retried flush gets this row
    *  back instead of moving the same stock twice. Absent on portal-recorded movements. */
   client_id?: string;
+  /** Set when the movement's roll is removed (materialRolls.remove) — the roll's history is
+   *  kept with it, but hidden from the ledger the same way the roll is hidden from lists. */
+  deleted_at?: Date | null;
   created_by: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -96,6 +99,7 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
     // response, same as the roll's registration photos.
     photo_paths: { type: [String], default: undefined },
     client_id: { type: String, trim: true },
+    deleted_at: { type: Date, default: null },
     created_by: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true, collection: "stock_transactions" },
