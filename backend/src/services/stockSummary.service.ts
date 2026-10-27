@@ -21,7 +21,8 @@ export async function refreshSummary(
     // On hand means on the rack: a roll that has gone out to a line is not in the store,
     // so it drops out of the total until it comes back. Weight alone is not enough —
     // an ISSUED roll still has weight, it is just somewhere else.
-    { $match: { material_id: id, status: "IN_STOCK", remaining_weight: { $gt: 0 } } },
+    // deleted_at: a removed roll keeps its status and weight, but it is not stock.
+    { $match: { material_id: id, status: "IN_STOCK", remaining_weight: { $gt: 0 }, deleted_at: null } },
     { $group: { _id: null, total: { $sum: "$remaining_weight" }, rolls: { $sum: 1 } } },
   ]);
 

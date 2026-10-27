@@ -152,8 +152,10 @@ export async function ensureCodeFree<T>(
   field: string,
   code: string,
   message: string,
+  // Narrows what counts as taken — e.g. only live rows, for a model that soft-deletes.
+  scope: Record<string, unknown> = {},
 ): Promise<void> {
-  if (await model.exists({ [field]: code } as never)) {
+  if (await model.exists({ ...scope, [field]: code } as never)) {
     throw ApiError.conflict(message);
   }
 }

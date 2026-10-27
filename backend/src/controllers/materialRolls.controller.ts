@@ -24,6 +24,6 @@ export const materialRollsController = {
   },
 
   async remove(req: Request, res: Response) {
-    res.json(await materialRollsService.remove(req.params.id));
+    res.json(await materialRollsService.remove(req.params.id, req.auth!.userId));
   },
 };
