@@ -188,7 +188,7 @@ only the roll closes.
 Consuming an **already-`CONSUMED`** roll is accepted as a no-op — a row with `weight` and
 `used_weight` of 0 — not a 409. A `RETURN` weighed at 0 already closes the roll, and a
 device that queued both that return and a consume for the same empty core would otherwise
-have its entire flush halted by the second one. The flag only ever asserts "this roll is
+have the second one rejected, and every later movement on that roll skipped with it. The flag only ever asserts "this roll is
 finished", which is already true.
 
 `weight`, `new_weight` and `returned_weight` are **rejected** on a CONSUME. A scale reading

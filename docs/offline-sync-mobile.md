@@ -306,8 +306,9 @@ device sends. A roll registered offline has its real code immediately and can be
 straight away. It is **not unique** — every roll cut from paper 639 carries 639.
 
 **`roll_number` uniqueness is only checked server-side.** Two phones can each register
-`RT-0500` offline; the second one to flush gets a **409**. That is rule 2's halt case, and
-the user has to be told which number to change. Warn locally when the number already
+`RT-0500` offline; the second one to flush gets a **409** with `reason: "duplicate"`. The
+app ignores that registration and the movements queued on it (they would double-count
+whatever the first phone recorded) and reports it, so a supervisor can reconcile it. Warn locally when the number already
 exists on the device — it catches the common case early — but it is not a guarantee.
 
 **Photos.** Never queue image bytes in the outbox. Upload the file, get a server path
@@ -450,7 +451,7 @@ items already written stay written:
 ```jsonc
 {
   "applied": 1, "failed": 1, "skipped": 1,
-  "resume_from": 1,                  // index to retry from; null when everything applied
+  "resume_from": 1,                  // first index not written; null when everything applied
   "results": [
     { "index": 0, "client_id": "...", "type": "roll", "status": "ok", "data": { } },
 
@@ -461,7 +462,8 @@ items already written stay written:
       "fields": { },                 // validation only: which inputs to highlight
       "detail": null },              // server_error only: raw cause, for your log
 
-    { "index": 2, "client_id": "...", "type": "roll", "status": "skipped" }
+    { "index": 2, "client_id": "...", "type": "movement", "status": "skipped",
+      "reason": "dependency_failed" }  // its roll (index 1) failed in this batch
   ]
 }
 ```
@@ -486,19 +488,24 @@ items already written stay written:
 | `not_found` | A referenced record is gone | Refresh the cached lists, then retry |
 | `forbidden` | This account may not do this | Read-only mode; the queue cannot drain |
 | `server_error` | Our bug | Keep the item queued and retry later. **Nothing is wrong with the item** |
+| `dependency_failed` | Only on `"skipped"`: an item it needs failed earlier in this batch | Leave it queued; it is retried, or ignored with the item it depends on |
 
 The split that matters: `server_error` is the only one where retrying unchanged is
-correct. Everything else needs a person or a refresh first, which is why the flush halts.
+correct. Everything else needs a person or a refresh first.
+
+**A failure does not stop the batch.** Only items that depend on the failed one are
+skipped: a roll whose `vendor_client_id` vendor failed, a movement whose `roll_client_id`
+roll failed, and any later movement on the same roll as a failed or skipped movement
+(a RETURN behind a rejected OUT). Everything unrelated is still applied.
 
 Handling it:
 
 1. Every `"ok"` — mark that outbox row sent, using the returned `data` exactly as you would
    the single-item response.
-2. A `"failed"` — treat `code` exactly as §8's table says for that status. The batch stops
-   there on purpose: later items may depend on it.
+2. A `"failed"` — treat `code` exactly as §8's table says for that status. Items behind it
+   that depend on it come back `"skipped"`; the rest of the batch still ran.
 3. Every `"skipped"` — untouched, still pending. Leave the rows alone.
-4. Retry from `resume_from` once the failure is resolved. Resending the whole batch is also
-   safe: the already-applied items come back as replays.
+4. Resending the whole batch is safe: the already-applied items come back as replays.
 
 **Never give the batch a single `client_id`.** A batch-level id cannot express "5 of 8
 written" — the retry would be told the work was done while three rolls had never moved.
@@ -629,7 +636,7 @@ radius stays limited to those fields.
 
 - [ ] Outbox drains sequentially, in `id` order, one request in flight at a time
 - [ ] `client_id` is minted once at enqueue and never regenerated on retry
-- [ ] Flush halts on the first 400 / 403 / 409 and surfaces the server's `error` text
+- [ ] A failed item blocks only its dependants; the server's `error` text is surfaced
 - [ ] 5xx / 429 / timeout retries with backoff, same `client_id`
 - [ ] 401 pauses and re-logins — it never clears the queue; logout is blocked while pending
 - [ ] Non-writing roles are put in read-only mode at login, before anything is captured
