@@ -44,6 +44,7 @@ const STATUS_LABEL: Record<MaterialRoll["status"], string> = {
   ISSUED: "OUT",
   CONSUMED: "CONSUMED",
   RETURNED_TO_VENDOR: "RETURNED",
+  SOLD: "SOLD",
 };
 
 /** The tablet's four status colours: in stock green, out red, used-up grey, sent-back amber. */
@@ -52,6 +53,7 @@ const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
   ISSUED: "status-out",
   CONSUMED: "status-consumed",
   RETURNED_TO_VENDOR: "status-returned",
+  SOLD: "status-sold",
 };
 
 /** A history row's type badge: where the movement left the roll, in its status colours —
@@ -63,6 +65,7 @@ const MOVEMENT_BADGE: Record<StockMovement["transaction_type"], { label: string;
   OUT: { label: "OUT", className: "status-out" },
   CONSUME: { label: "CONSUMED", className: "status-consumed" },
   RETURN_TO_VENDOR: { label: "TO VENDOR", className: "status-returned" },
+  SELL: { label: "SOLD", className: "status-sold" },
   ADJUSTMENT: { label: "ADJUSTED", className: "status-neutral" },
 };
 
@@ -403,13 +406,19 @@ export default function RollsPage() {
                         <button
                           className="btn btn-sm"
                           onClick={() => openEdit(roll)}
-                          disabled={roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR"}
+                          disabled={
+                            roll.status === "CONSUMED" ||
+                            roll.status === "RETURNED_TO_VENDOR" ||
+                            roll.status === "SOLD"
+                          }
                           title={
                             roll.status === "CONSUMED"
                               ? "This roll is consumed, so it can no longer be edited."
                               : roll.status === "RETURNED_TO_VENDOR"
                                 ? "This roll was returned to its vendor, so it can no longer be edited."
-                                : undefined
+                                : roll.status === "SOLD"
+                                  ? "This roll was sold, so it can no longer be edited."
+                                  : undefined
                           }
                         >
                           Edit

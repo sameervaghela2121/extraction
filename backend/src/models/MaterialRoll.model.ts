@@ -12,8 +12,10 @@ import { basePaperSchema, type IBasePaper } from "./Vendor.model";
  *                      as CONSUMED — no more inward/outward — but kept as its own value
  *                      rather than folded into CONSUMED, so "why did this roll stop" reads
  *                      correctly on the roll itself, not just in its transaction history.
+ * SOLD              = sold on to another company as it is (a SELL movement). Terminal,
+ *                      and its own value for the same reason as RETURNED_TO_VENDOR.
  */
-export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR"] as const;
+export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR", "SOLD"] as const;
 export type RollStatus = (typeof ROLL_STATUSES)[number];
 
 export interface IMaterialRoll {
