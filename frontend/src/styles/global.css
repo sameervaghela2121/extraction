@@ -389,6 +389,11 @@ textarea {
   background: var(--rt-returned);
   color: #ffffff;
 }
+/* Sold on to another company — terminal too, but neither used up nor faulty. */
+.status-sold {
+  background: var(--rt-primary);
+  color: #ffffff;
+}
 
 .pill-role-supervisor {
   background: var(--brand-soft);

@@ -13,6 +13,9 @@ import { Schema, model, Types } from "mongoose";
  *                     work floor to come back later), and the roll's journey ends the same
  *                     way CONSUME's does. The vendor is read off the roll itself, not
  *                     retyped — see stock.service.ts.
+ * SELL             - a roll sold on as it is, straight from stock to another company.
+ *                     Terminal like RETURN_TO_VENDOR: its whole remaining weight leaves
+ *                     on-hand and the roll ends SOLD. Needs only the date and a photo.
  */
 export const TRANSACTION_TYPES = [
   "IN",
@@ -21,6 +24,7 @@ export const TRANSACTION_TYPES = [
   "ADJUSTMENT",
   "CONSUME",
   "RETURN_TO_VENDOR",
+  "SELL",
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 

@@ -276,7 +276,7 @@ export interface Paginated<T> {
 /** Mirrors ROLL_STATUSES in the backend's MaterialRoll.model.ts. RETURNED_TO_VENDOR is
  *  terminal like CONSUMED but kept separate: it means defective and shipped back, not
  *  used up on site, and "why did this roll stop" should read correctly. */
-export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR";
+export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR" | "SOLD";
 
 /** A roll's or movement's location as the API returns it. The whole field is null when
  *  there is none (a roll returned to its vendor); code/name are null when the id no longer
@@ -350,7 +350,7 @@ export interface MaterialRoll {
   updatedAt: string;
 }
 
-export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME" | "RETURN_TO_VENDOR";
+export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME" | "RETURN_TO_VENDOR" | "SELL";
 
 /** One row of the append-only ledger. `description` is rendered server-side and is meant to
  *  be shown as-is — don't rebuild it from the numbers. */
