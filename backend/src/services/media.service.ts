@@ -44,19 +44,24 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 /**
- * Object path for a roll photo, partitioned by date.
+ * Object path for an upload — a roll photo, or a lot's challan photo under lots/ —
+ * partitioned by date.
  *
  * The filename is random, not derived from what the phone sent: two operators
  * photographing two different rolls both produce "IMG_0001.jpg", and a name-derived path
  * would have the second silently overwrite the first.
  */
-function buildObjectPath(mimetype: string, originalName: string): string {
+/** Top-level folders an upload may go to: roll and movement photos, or lot challan photos. */
+export const MEDIA_FOLDERS = ["rolls", "lots"] as const;
+export type MediaFolder = (typeof MEDIA_FOLDERS)[number];
+
+function buildObjectPath(mimetype: string, originalName: string, folder: MediaFolder): string {
   const now = new Date();
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   const extension =
     EXTENSION_BY_MIME[mimetype] ?? (path.extname(originalName).toLowerCase().slice(0, 8) || ".bin");
-  return `rolls/${year}/${month}/${crypto.randomUUID()}${extension}`;
+  return `${folder}/${year}/${month}/${crypto.randomUUID()}${extension}`;
 }
 
 /**
@@ -79,8 +84,8 @@ function logSigningFailure(objectPath: string, err: unknown): void {
 
 export const mediaService = {
   /** Uploads the buffer and returns the stored object path — not a URL. */
-  async upload(file: { buffer: Buffer; mimetype: string; originalname: string }) {
-    const objectPath = buildObjectPath(file.mimetype, file.originalname);
+  async upload(file: { buffer: Buffer; mimetype: string; originalname: string }, folder: MediaFolder = "rolls") {
+    const objectPath = buildObjectPath(file.mimetype, file.originalname, folder);
 
     try {
       await bucket.file(objectPath).save(file.buffer, {

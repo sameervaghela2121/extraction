@@ -30,6 +30,8 @@ import "../models/Remark.model";
 import "../models/BarcodeBatch.model";
 import "../models/SyncLog.model";
 import "../models/User.model";
+import "../models/Lot.model";
+import "../models/Counter.model";
 
 /** A stable description of one index, so two can be compared without ordering noise.
  *  Every option that changes what the index enforces has to be in here: one left out

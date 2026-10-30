@@ -35,6 +35,9 @@ export interface IMaterialRoll {
   barcode?: string;
   material_id: Types.ObjectId;
   vendor_id: Types.ObjectId;
+  /** The delivery (Lot) this roll arrived in — see Lot.model. Absent on rolls registered
+   *  before lots existed, and on any registered without picking one. */
+  lot_id?: Types.ObjectId;
   batch_no?: string;
   /** Weight as received — the stock figure: what gets consumed, summed and reported. */
   weight: number;
@@ -108,6 +111,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // index to write on every insert for no read it can answer alone.
     material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true },
     vendor_id: { type: Schema.Types.ObjectId, ref: "Vendor", required: true, index: true },
+    // Sparse: most rolls so far have none, and "every roll of Lot-12" only asks for set ones.
+    lot_id: { type: Schema.Types.ObjectId, ref: "Lot", index: true, sparse: true },
     batch_no: { type: String, trim: true },
     weight: { type: Number, min: 0, required: true },
     // Copied from weight on receipt, then drawn down as the roll is consumed.
