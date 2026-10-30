@@ -379,6 +379,7 @@ export default function RollsPage() {
                   />
                   <th>RT code</th>
                   <th>Delta code</th>
+                  <th>Lot</th>
                   <th>Current weight</th>
                   <th>Status</th>
                   <th style={{ width: 170 }}></th>
@@ -390,6 +391,9 @@ export default function RollsPage() {
                     <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
                     <td>{rtCodes(roll)}</td>
                     <td>{deltaCodes(roll)}</td>
+                    <td title={roll.lot?.challan_no ? `Challan ${roll.lot.challan_no}` : undefined}>
+                      {roll.lot?.lot_number ?? "—"}
+                    </td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>
                       {roll.remaining_weight ?? 0} {roll.unit}
                     </td>
@@ -436,7 +440,7 @@ export default function RollsPage() {
                 ))}
                 {rolls.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={7} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {search ? "No rolls match that search." : "No rolls yet."}
                     </td>
                   </tr>

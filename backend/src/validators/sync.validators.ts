@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createRollSchema } from "./materialRolls.validators";
 import { basePaperSchema, createVendorSchema } from "./vendors.validators";
 import { movementFieldsSchema } from "./stock.validators";
+import { createLotSchema } from "./lots.validators";
 
 /**
  * One request carrying a whole flush.
@@ -17,6 +18,13 @@ const MAX_BATCH = 50;
 // client_id is optional on the single-write schemas — the portal never sends one. In a
 // batch it is the only thing that makes a retry safe, so it is required here.
 const requiredClientId = z.string().uuid("client_id must be a UUID");
+
+/** A lot created on the device. Its number (Lot-N) is minted on arrival, never offline. */
+const lotItem = z.object({
+  type: z.literal("lot"),
+  client_id: requiredClientId,
+  body: createLotSchema.omit({ client_id: true }),
+});
 
 /** A vendor added on the device — a supplier that did not exist when it went offline. */
 const vendorItem = z.object({
@@ -57,6 +65,9 @@ const rollItem = z.object({
   // body keys otherwise, which is exactly what turned a present-but-misplaced
   // vendor_client_id into "Send either vendor_id or vendor_client_id on the roll".
   body: createRollSchema.partial({ vendor_id: true }).extend({
+    /** The client_id of a lot created on the device (this batch or an earlier one) whose
+     *  server id it does not have yet. Ignored when body.lot_id is set. */
+    lot_client_id: z.string().uuid().optional(),
     vendor_client_id: z.string().uuid().optional(),
   }),
   /**
@@ -89,7 +100,7 @@ const movementItem = z
 
 export const syncBatchSchema = z.object({
   items: z
-    .array(z.discriminatedUnion("type", [vendorItem, supplierCodeItem, rollItem, movementItem]))
+    .array(z.discriminatedUnion("type", [lotItem, vendorItem, supplierCodeItem, rollItem, movementItem]))
     .min(1, "Nothing to sync")
     .max(MAX_BATCH, `A batch cannot exceed ${MAX_BATCH} items — send the rest in the next call`)
     // Two items sharing a client_id inside one request is a client bug, and letting it
