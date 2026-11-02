@@ -104,7 +104,7 @@ type RemarkRef = { _id: Types.ObjectId; remark_code: string; label: string; stat
 const REF_POPULATE = [
   { path: "material_id", select: "name" },
   { path: "vendor_id", select: "name vendor_code" },
-  { path: "lot_id", select: "lot_number document_type document_no" },
+  { path: "lot_id", select: "document_type document_no" },
   { path: "remark_codes", select: "remark_code label status" },
   { path: "location", select: LOCATION_REF_SELECT },
 ];
@@ -134,14 +134,13 @@ function remarkRefResponse(refs?: Array<Types.ObjectId | RemarkRef>) {
 }
 
 /** What .populate leaves in place of lot_id. */
-type LotRef = { _id: Types.ObjectId; lot_number?: string; document_type?: string; document_no?: string };
+type LotRef = { _id: Types.ObjectId; document_type?: string; document_no?: string };
 
 function lotRefResponse(ref?: Types.ObjectId | LotRef | null) {
   if (!ref) return null;
-  if (ref instanceof Types.ObjectId) return { id: ref.toString(), lot_number: null, document_type: null, document_no: null };
+  if (ref instanceof Types.ObjectId) return { id: ref.toString(), document_type: null, document_no: null };
   return {
     id: ref._id.toString(),
-    lot_number: ref.lot_number ?? null,
     document_type: ref.document_type ?? null,
     document_no: ref.document_no ?? null,
   };
@@ -177,7 +176,7 @@ async function toResponse(r: PopulatedRoll) {
     remark_codes: remarkRefResponse(r.remark_codes),
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
-    // { id, lot_number, document_type, document_no } — null for a roll with no lot.
+    // { id, document_type, document_no } — null for a roll with no lot.
     lot: lotRefResponse(r.lot_id),
     batch_no: r.batch_no,
     weight: r.weight,
