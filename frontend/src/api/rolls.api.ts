@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { MaterialRoll, MaterialRollListItem, Paginated } from "../types";
+import type { MaterialRoll, MaterialRollListItem, Paginated, VendorPaper } from "../types";
 
 /** Unlike the masters, this endpoint pages server-side — rolls grow without bound, so the
  *  list is never read whole and `q` is a real query rather than an in-memory filter. */
@@ -21,6 +21,32 @@ export const rollsApi = {
     api.post<Paginated<MaterialRoll>>("/material-rolls/search", body).then((r) => r.data),
 
   get: (id: string) => api.get<MaterialRoll>(`/material-rolls/${id}`).then((r) => r.data),
+
+  /** Registers a roll; the server writes its IN movement. Refused without a lot. */
+  create: (body: {
+    lot_id: string;
+    barcode: string;
+    roll_number: string;
+    material_id: string;
+    weight: number;
+    date: string;
+    location: string;
+    vendor_id: string;
+    papers: VendorPaper[];
+    gsm: number;
+    width: number;
+    side1_photo_path?: string;
+    side2_photo_path?: string;
+  }) => api.post<MaterialRoll>("/material-rolls", body).then((r) => r.data),
+
+  /** A roll photo goes to the bucket's rolls/ folder; the returned path is what create takes. */
+  uploadPhoto: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api
+      .post<{ objectPath: string; mediaUrl: string }>("/media/upload", form)
+      .then((r) => r.data.objectPath);
+  },
 
   /** Never send remaining_weight, status or client_id — all three are refused with a 400.
    *  A stock figure changes through a movement, which leaves a ledger row behind it. */
