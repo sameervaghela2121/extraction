@@ -1,8 +1,7 @@
 import { api } from "./client";
 import type { Lot, LotDocumentType, Paginated } from "../types";
 
-/** Lots: one per delivery (its challan or invoice). Created here or on the tablet; the number is
- *  the server's. */
+/** Lots: one per delivery, known by its challan or invoice. Created here or on the tablet. */
 export const lotsApi = {
   list: (params: { q?: string; page?: number; pageSize?: number }) =>
     api.get<Paginated<Lot>>("/lots", { params }).then((r) => r.data),

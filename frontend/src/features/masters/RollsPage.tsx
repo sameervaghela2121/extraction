@@ -392,8 +392,8 @@ export default function RollsPage() {
                     <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
                     <td>{rtCodes(roll)}</td>
                     <td>{deltaCodes(roll)}</td>
-                    <td title={roll.lot?.document_no ? `${documentTypeLabel(roll.lot.document_type)} ${roll.lot.document_no}` : undefined}>
-                      {roll.lot?.lot_number ?? "—"}
+                    <td>
+                      {roll.lot?.document_no ? `${documentTypeLabel(roll.lot.document_type)} ${roll.lot.document_no}` : "—"}
                     </td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>
                       {roll.remaining_weight ?? 0} {roll.unit}

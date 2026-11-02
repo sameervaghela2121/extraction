@@ -11,8 +11,8 @@ import { documentTypeLabel } from "./lotDocument";
 /**
  * Lots — one per delivery; the rolls of that delivery point at it. A delivery comes with a
  * challan or an invoice, and the lot records which, its number and a photo of it. Created here
- * or on the tablet (offline, synced like a roll). The number ("Lot-12") is the server's, minted
- * on create, so it is never typed.
+ * or on the tablet (offline, synced like a roll). A lot is known by its document — no number of
+ * its own.
  */
 export default function LotsPage() {
   const { notify } = useToast();
@@ -78,7 +78,7 @@ export default function LotsPage() {
         document_no: documentNo.trim(),
         document_photo_path: path,
       });
-      notify(`${lot.lot_number} created for ${documentTypeLabel(lot.document_type).toLowerCase()} ${lot.document_no}`);
+      notify(`Lot created for ${documentTypeLabel(lot.document_type).toLowerCase()} ${lot.document_no}`);
       setCreating(false);
       setPage(1);
       await load();
@@ -113,7 +113,7 @@ export default function LotsPage() {
         <input
           className="input"
           style={{ flex: 1, minWidth: 200 }}
-          placeholder="Search by lot number or challan / invoice number"
+          placeholder="Search by challan / invoice number"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -127,7 +127,6 @@ export default function LotsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Lot number</th>
                   <th>Document</th>
                   <th>Number</th>
                   <th>Created</th>
@@ -137,9 +136,8 @@ export default function LotsPage() {
               <tbody>
                 {lots.map((lot) => (
                   <tr key={lot.id}>
-                    <td style={{ fontWeight: 600 }}>{lot.lot_number}</td>
                     <td>{documentTypeLabel(lot.document_type)}</td>
-                    <td>{lot.document_no}</td>
+                    <td style={{ fontWeight: 600 }}>{lot.document_no}</td>
                     <td>{new Date(lot.createdAt).toLocaleString()}</td>
                     <td>
                       <button
@@ -156,7 +154,7 @@ export default function LotsPage() {
                 ))}
                 {lots.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="muted" style={{ textAlign: "center", padding: 24 }}>
+                    <td colSpan={4} className="muted" style={{ textAlign: "center", padding: 24 }}>
                       {search.trim() ? "No lots match this search." : "No lots yet."}
                     </td>
                   </tr>
@@ -216,9 +214,6 @@ export default function LotsPage() {
               style={{ maxHeight: 240, objectFit: "contain", borderRadius: 8, border: "1px solid var(--rt-card-border)" }}
             />
           )}
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            The lot number is given automatically when you create it.
-          </p>
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn" onClick={() => setCreating(false)} disabled={saving}>
               Cancel
@@ -235,7 +230,7 @@ export default function LotsPage() {
         onClose={() => setViewing(null)}
         title={
           viewing
-            ? `${viewing.lot_number} · ${documentTypeLabel(viewing.document_type)} ${viewing.document_no}`
+            ? `${documentTypeLabel(viewing.document_type)} ${viewing.document_no}`
             : "Photo"
         }
         size="large"

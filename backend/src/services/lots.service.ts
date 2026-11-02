@@ -1,20 +1,16 @@
 import { Types, type FilterQuery, type HydratedDocument } from "mongoose";
 import { Lot, type ILot } from "../models/Lot.model";
-import { nextSequence } from "../models/Counter.model";
 import { ApiError } from "../utils/ApiError";
 import { escapeRegex, paginated } from "../utils/crud";
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import type { CreateLotInput } from "../validators/lots.validators";
 import { mediaService } from "./media.service";
 
-const LOT_SEQUENCE = "lot";
-
 /** The list carries no photo URL — signing one per row is a network call each; the detail
  *  and the create response, which show the photo, do. */
 async function toResponse(lot: ILot | HydratedDocument<ILot>, withPhotoUrl: boolean) {
   return {
     id: lot._id.toString(),
-    lot_number: lot.lot_number,
     document_type: lot.document_type,
     document_no: lot.document_no,
     document_photo_path: lot.document_photo_path ?? null,
@@ -29,16 +25,13 @@ async function toResponse(lot: ILot | HydratedDocument<ILot>, withPhotoUrl: bool
 
 export const lotsService = {
   async create(input: CreateLotInput, actingUserId: string) {
-    // A retried sync gets its lot back — and must, before a number is spent on it.
+    // A retried sync gets its lot back rather than a second copy.
     const replayed = await findReplay(Lot, input.client_id);
     if (replayed) return toResponse(replayed, true);
 
-    const seq = await nextSequence(LOT_SEQUENCE);
     let lot: HydratedDocument<ILot>;
     try {
       lot = await Lot.create({
-        lot_number: `Lot-${seq}`,
-        lot_seq: seq,
         document_type: input.document_type,
         document_no: input.document_no,
         document_photo_path: input.document_photo_path,
@@ -47,7 +40,7 @@ export const lotsService = {
       });
     } catch (err) {
       // Two flushes of the same queued lot in flight at once: one wins the client_id, the
-      // other returns it. The loser's number stays unused — a gap, never a duplicate.
+      // other returns it.
       if (!isReplayCollision(err)) throw err;
       return toResponse(await resolveReplay(Lot, input.client_id!, err), true);
     }
@@ -75,12 +68,12 @@ export const lotsService = {
     }
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ lot_number: rx }, { document_no: rx }];
+      filter.document_no = rx;
     }
     const [items, total] = await Promise.all([
       Lot.find(filter)
-        // Delta pull walks forward; otherwise newest lot first.
-        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { lot_seq: -1 })
+        // Delta pull walks forward; otherwise newest lot first (an _id grows with time).
+        .sort(query.updated_after ? { updatedAt: 1, _id: 1 } : { _id: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean<ILot[]>(),
@@ -91,7 +84,7 @@ export const lotsService = {
 
   /** For a roll naming a lot: it must exist. Returns the lot for the roll response. */
   async requireLot(id: string) {
-    const lot = await Lot.findById(id).select("lot_number document_type document_no").lean();
+    const lot = await Lot.findById(id).select("document_type document_no").lean();
     if (!lot) throw ApiError.badRequest("That lot no longer exists — pick another");
     return lot;
   },

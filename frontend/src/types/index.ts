@@ -314,11 +314,10 @@ export interface RollRef {
 /** The paper a delivery came with. */
 export type LotDocumentType = "challan" | "invoice";
 
-/** One delivery of raw material, on a challan or an invoice; rolls point at it. lot_number is
- *  the server's own ("Lot-12"), minted when the lot is created. */
+/** One delivery of raw material, on a challan or an invoice; rolls point at it. A lot is known
+ *  by its document — type and number. */
 export interface Lot {
   id: string;
-  lot_number: string;
   document_type: LotDocumentType;
   document_no: string;
   document_photo_path: string | null;
@@ -331,7 +330,6 @@ export interface Lot {
 /** A roll's lot as the roll response carries it. */
 export interface LotRef {
   id: string;
-  lot_number: string | null;
   document_type: LotDocumentType | null;
   document_no: string | null;
 }
