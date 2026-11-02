@@ -503,6 +503,12 @@ export const materialRollsService = {
       return toResponse(replayed as unknown as PopulatedRoll);
     }
 
+    // Every new roll comes in on a delivery's challan or invoice. Checked here, not in the
+    // schema: a sync item names its lot by lot_client_id until this point, and a roll failing
+    // this must fail alone, not take the rest of its batch down at validation. Rolls from
+    // before lots existed have none, so only creating a roll requires it — not updating one.
+    if (!input.lot_id) throw ApiError.badRequest("Select the lot (challan or invoice) this roll came in on");
+
     const rollNumber = input.roll_number.toUpperCase();
     // Three independent reads, so one round trip instead of three. Registration happens
     // on a phone over mobile data, where every avoidable trip to Atlas is felt.
