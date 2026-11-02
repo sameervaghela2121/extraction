@@ -311,15 +311,19 @@ export interface RollRef {
 /** The full roll. Wider than MaterialRollListItem, which stays trimmed to what the barcode
  *  screen prints. `remaining_weight` and `status` are server-owned — both only move through
  *  a stock movement, and PATCHing either is refused. */
-/** One delivery (challan) of raw material; rolls point at it. lot_number is the server's
- *  own ("Lot-12"), minted when the lot is created. */
+/** The paper a delivery came with. */
+export type LotDocumentType = "challan" | "invoice";
+
+/** One delivery of raw material, on a challan or an invoice; rolls point at it. lot_number is
+ *  the server's own ("Lot-12"), minted when the lot is created. */
 export interface Lot {
   id: string;
   lot_number: string;
-  challan_no: string;
-  challan_photo_path: string | null;
+  document_type: LotDocumentType;
+  document_no: string;
+  document_photo_path: string | null;
   /** Signed for the detail and create responses only — the list leaves it null. */
-  challan_photo_url: string | null;
+  document_photo_url: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -328,7 +332,8 @@ export interface Lot {
 export interface LotRef {
   id: string;
   lot_number: string | null;
-  challan_no: string | null;
+  document_type: LotDocumentType | null;
+  document_no: string | null;
 }
 
 export interface MaterialRoll {

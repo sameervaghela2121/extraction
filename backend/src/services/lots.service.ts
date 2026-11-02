@@ -15,9 +15,10 @@ async function toResponse(lot: ILot | HydratedDocument<ILot>, withPhotoUrl: bool
   return {
     id: lot._id.toString(),
     lot_number: lot.lot_number,
-    challan_no: lot.challan_no,
-    challan_photo_path: lot.challan_photo_path ?? null,
-    challan_photo_url: withPhotoUrl ? await mediaService.signedReadUrlOrNull(lot.challan_photo_path) : null,
+    document_type: lot.document_type,
+    document_no: lot.document_no,
+    document_photo_path: lot.document_photo_path ?? null,
+    document_photo_url: withPhotoUrl ? await mediaService.signedReadUrlOrNull(lot.document_photo_path) : null,
     // Echoed so a device pulling a delta can match the lot to the one it queued.
     client_id: lot.client_id,
     created_by: lot.created_by?.toString(),
@@ -38,8 +39,9 @@ export const lotsService = {
       lot = await Lot.create({
         lot_number: `Lot-${seq}`,
         lot_seq: seq,
-        challan_no: input.challan_no,
-        challan_photo_path: input.challan_photo_path,
+        document_type: input.document_type,
+        document_no: input.document_no,
+        document_photo_path: input.document_photo_path,
         client_id: input.client_id,
         created_by: new Types.ObjectId(actingUserId),
       });
@@ -73,7 +75,7 @@ export const lotsService = {
     }
     if (query.q) {
       const rx = new RegExp(escapeRegex(query.q), "i");
-      filter.$or = [{ lot_number: rx }, { challan_no: rx }];
+      filter.$or = [{ lot_number: rx }, { document_no: rx }];
     }
     const [items, total] = await Promise.all([
       Lot.find(filter)
@@ -89,7 +91,7 @@ export const lotsService = {
 
   /** For a roll naming a lot: it must exist. Returns the lot for the roll response. */
   async requireLot(id: string) {
-    const lot = await Lot.findById(id).select("lot_number challan_no").lean();
+    const lot = await Lot.findById(id).select("lot_number document_type document_no").lean();
     if (!lot) throw ApiError.badRequest("That lot no longer exists — pick another");
     return lot;
   },

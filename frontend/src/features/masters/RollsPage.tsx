@@ -8,6 +8,7 @@ import { locationsApi, materialTypesApi } from "../../api/masters.api";
 import { deltaCodes, rtCodes, supplierCodes } from "./rollPapers";
 import SearchSelect from "../../components/SearchSelect";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
+import { documentTypeLabel } from "./lotDocument";
 import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
   GodownLocation,
@@ -391,7 +392,7 @@ export default function RollsPage() {
                     <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
                     <td>{rtCodes(roll)}</td>
                     <td>{deltaCodes(roll)}</td>
-                    <td title={roll.lot?.challan_no ? `Challan ${roll.lot.challan_no}` : undefined}>
+                    <td title={roll.lot?.document_no ? `${documentTypeLabel(roll.lot.document_type)} ${roll.lot.document_no}` : undefined}>
                       {roll.lot?.lot_number ?? "—"}
                     </td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>

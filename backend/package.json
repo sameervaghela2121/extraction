@@ -15,6 +15,7 @@
     "seed:remarks": "tsx src/utils/seedRemarks.ts",
     "migrate:location-refs": "tsx src/utils/migrateLocationRefs.ts",
     "migrate:status-enum": "tsx src/utils/migrateIsActiveToStatus.ts",
+    "migrate:lot-document": "tsx src/utils/migrateLotDocument.ts",
     "indexes": "tsx src/utils/syncIndexes.ts"
   },
   "dependencies": {
