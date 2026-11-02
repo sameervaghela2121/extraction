@@ -44,14 +44,14 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 /**
- * Object path for an upload — a roll photo, or a lot's challan photo under lots/ —
+ * Object path for an upload — a roll photo, or a lot's challan / invoice photo under lots/ —
  * partitioned by date.
  *
  * The filename is random, not derived from what the phone sent: two operators
  * photographing two different rolls both produce "IMG_0001.jpg", and a name-derived path
  * would have the second silently overwrite the first.
  */
-/** Top-level folders an upload may go to: roll and movement photos, or lot challan photos. */
+/** Top-level folders an upload may go to: roll and movement photos, or lot challan / invoice photos. */
 export const MEDIA_FOLDERS = ["rolls", "lots"] as const;
 export type MediaFolder = (typeof MEDIA_FOLDERS)[number];
 

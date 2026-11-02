@@ -1,19 +1,21 @@
 import { api } from "./client";
-import type { Lot, Paginated } from "../types";
+import type { Lot, LotDocumentType, Paginated } from "../types";
 
-/** Lots: one per delivery challan. Created here or on the tablet; the number is the server's. */
+/** Lots: one per delivery (its challan or invoice). Created here or on the tablet; the number is
+ *  the server's. */
 export const lotsApi = {
   list: (params: { q?: string; page?: number; pageSize?: number }) =>
     api.get<Paginated<Lot>>("/lots", { params }).then((r) => r.data),
 
-  /** Carries the signed challan photo URL, which the list leaves out. */
+  /** Carries the signed document photo URL, which the list leaves out. */
   get: (id: string) => api.get<Lot>(`/lots/${id}`).then((r) => r.data),
 
-  create: (body: { challan_no: string; challan_photo_path?: string }) =>
+  create: (body: { document_type: LotDocumentType; document_no: string; document_photo_path?: string }) =>
     api.post<Lot>("/lots", body).then((r) => r.data),
 
-  /** The challan photo goes to the bucket's lots/ folder; the returned path is what create takes. */
-  uploadChallanPhoto: (file: File) => {
+  /** The challan / invoice photo goes to the bucket's lots/ folder; the returned path is what
+   *  create takes. */
+  uploadDocumentPhoto: (file: File) => {
     const form = new FormData();
     form.append("folder", "lots");
     form.append("file", file);

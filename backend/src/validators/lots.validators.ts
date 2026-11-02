@@ -1,14 +1,16 @@
 import { z } from "zod";
+import { LOT_DOCUMENT_TYPES } from "../models/Lot.model";
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid id");
-// Only paths this API minted for a challan photo: "lots/YYYY/MM/<uuid>.<ext>".
+// Only paths this API minted for a lot's document photo: "lots/YYYY/MM/<uuid>.<ext>".
 const lotPhotoPath = z
   .string()
-  .regex(/^lots\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{1,8}$/i, "Not a valid challan photo path");
+  .regex(/^lots\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{1,8}$/i, "Not a valid document photo path");
 
 export const createLotSchema = z.object({
-  challan_no: z.string().trim().min(1, "Challan number is required").max(100),
-  challan_photo_path: lotPhotoPath.optional(),
+  document_type: z.enum(LOT_DOCUMENT_TYPES, { message: "Pick challan or invoice" }),
+  document_no: z.string().trim().min(1, "Challan or invoice number is required").max(100),
+  document_photo_path: lotPhotoPath.optional(),
   client_id: z.string().uuid("client_id must be a UUID").optional(),
 });
 
