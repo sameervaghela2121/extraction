@@ -87,6 +87,12 @@ class TestRegister(IntegrationTestCase):
             with self.assertRaisesRegex(RTValidation, f"{label} must be greater than 0"):
                 register_roll(base_roll(**{field: 0}))
 
+    def test_device_times_with_a_zone_are_stored_as_india_time(self):
+        r = register_roll(base_roll(date="2026-11-02", recorded_at="2026-11-02T02:40:00Z"))
+        mv = frappe.get_all("Roll Movement", {"roll": r["name"]}, ["transaction_date", "recorded_at"])[0]
+        self.assertEqual(str(mv.recorded_at), "2026-11-02 08:10:00")
+        self.assertEqual(str(mv.transaction_date), "2026-11-02 00:00:00")
+
     def test_batch_uses_batchwise_valuation(self):
         r = register_roll(base_roll())
         self.assertEqual(frappe.db.get_value("Batch", r["name"], "use_batchwise_valuation"), 1)

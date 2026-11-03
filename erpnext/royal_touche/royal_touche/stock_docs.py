@@ -29,13 +29,32 @@ def _rate(qty: float, rate_per_roll: float | None) -> float:
 
 @contextmanager
 def as_system():
-    """Run ERPNext's own writes as Administrator; yields the real user's id."""
-    actor = frappe.session.user
+    """Run ERPNext's own writes as Administrator; yields the real user's id.
+
+    frappe.set_user() also resets the session id, session data, form_dict and the cached
+    permissions, so switching back with set_user() would leave a live request with a
+    broken session. The whole request context is saved and put back exactly instead."""
+    local = frappe.local
+    saved = {
+        "session": frappe._dict(local.session),
+        "form_dict": local.form_dict,
+        "role_permissions": getattr(local, "role_permissions", {}),
+        "user_perms": getattr(local, "user_perms", None),
+        "new_doc_templates": getattr(local, "new_doc_templates", {}),
+        "jenv": getattr(local, "jenv", None),
+    }
+    actor = local.session.user
     frappe.set_user("Administrator")
     try:
         yield actor
     finally:
-        frappe.set_user(actor)
+        local.session = saved["session"]
+        local.form_dict = saved["form_dict"]
+        local.role_permissions = saved["role_permissions"]
+        local.user_perms = saved["user_perms"]
+        local.new_doc_templates = saved["new_doc_templates"]
+        local.jenv = saved["jenv"]
+        local.cache = {}
 
 
 def _owned_by(doctype: str, name: str, actor: str) -> str:

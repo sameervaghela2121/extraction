@@ -6,6 +6,7 @@ import frappe
 from frappe.utils import flt
 
 from royal_touche import replay
+from royal_touche.dates import as_system
 from royal_touche.errors import RTDuplicate, RTNotFound, RTValidation
 from royal_touche.masters import normalise_code
 from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
@@ -75,7 +76,8 @@ def _register(data: dict) -> dict:
         # Two registrations racing past ensure_codes_free(): the unique index lets one through.
         raise RTDuplicate(BARCODE_TAKEN if "barcode" in str(e) else ROLL_TAKEN) from e
 
-    when = data.get("date") or frappe.utils.now_datetime()
+    # Device times arrive with a zone ("…Z", "+05:30"); stored as India wall-clock time.
+    when = as_system(data.get("date") or frappe.utils.now_datetime())
     receipt = purchase_receipt(batch.name, vendor.name, material.name, weight, location or UNASSIGNED_WAREHOUSE,
                                when, rate_per_roll=data.get("rate_per_roll"))
     frappe.db.set_value("Batch", batch.name, "rt_purchase_receipt", receipt, update_modified=False)
@@ -84,7 +86,7 @@ def _register(data: dict) -> dict:
         "roll": batch.name,
         "movement_type": "IN",
         "transaction_date": when,
-        "recorded_at": data.get("recorded_at") or when,
+        "recorded_at": as_system(data["recorded_at"]) if data.get("recorded_at") else when,
         "material": material.name,
         "vendor": vendor.name,
         "weight": weight,
