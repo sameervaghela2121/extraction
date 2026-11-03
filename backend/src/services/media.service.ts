@@ -119,10 +119,10 @@ export const mediaService = {
   /**
    * A time-limited read URL for a stored object. Throws if it cannot be minted.
    *
-   * Signing is local crypto only when the credentials carry a private key — which is what
-   * Cloud Run's runtime service account provides. Under user ADC there is no key, so the
-   * library falls back to the IAM signBlob API and each URL becomes a network call. That
-   * is also why this fails outright on a machine with no credentials at all.
+   * Signing is local crypto only when the credentials carry a private key. Cloud Run's runtime
+   * service account, read from the metadata server, carries none, and nor does user ADC, so the
+   * library falls back to the IAM signBlob API and each URL is a network call. Mint them only
+   * where a client will show them. With no credentials at all this fails outright.
    *
    * Left strict for the upload response: a URL that cannot be minted there means the
    * storage setup is wrong, and the caller should hear about it rather than be handed a
