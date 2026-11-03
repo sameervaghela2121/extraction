@@ -31,29 +31,31 @@ def _rate(qty: float, rate_per_roll: float | None) -> float:
 def as_system():
     """Run ERPNext's own writes as Administrator; yields the real user's id.
 
-    frappe.set_user() also resets the session id, session data, form_dict and the cached
-    permissions, so switching back with set_user() would leave a live request with a
-    broken session. The whole request context is saved and put back exactly instead."""
+    frappe.set_user() changes the session object in place, and that same object is
+    frappe.local.session_obj.data, which Frappe saves to the session cache at the end of the
+    request. So the original object is kept and its contents put back in place: restoring a
+    copy would leave the request's real session saying Administrator. set_user() also clears
+    form_dict and the cached permissions, which are put back too."""
     local = frappe.local
-    saved = {
-        "session": frappe._dict(local.session),
-        "form_dict": local.form_dict,
-        "role_permissions": getattr(local, "role_permissions", {}),
-        "user_perms": getattr(local, "user_perms", None),
-        "new_doc_templates": getattr(local, "new_doc_templates", {}),
-        "jenv": getattr(local, "jenv", None),
-    }
-    actor = local.session.user
+    session = local.session
+    saved_session = dict(session)
+    form_dict = local.form_dict
+    role_permissions = getattr(local, "role_permissions", {})
+    user_perms = getattr(local, "user_perms", None)
+    new_doc_templates = getattr(local, "new_doc_templates", {})
+    actor = session.user
     frappe.set_user("Administrator")
     try:
         yield actor
     finally:
-        local.session = saved["session"]
-        local.form_dict = saved["form_dict"]
-        local.role_permissions = saved["role_permissions"]
-        local.user_perms = saved["user_perms"]
-        local.new_doc_templates = saved["new_doc_templates"]
-        local.jenv = saved["jenv"]
+        session.clear()
+        session.update(saved_session)
+        local.session = session
+        local.form_dict = form_dict
+        local.role_permissions = role_permissions
+        local.user_perms = user_perms
+        local.new_doc_templates = new_doc_templates
+        # Holds per-user lookups made while acting as Administrator (roles among them).
         local.cache = {}
 
 
