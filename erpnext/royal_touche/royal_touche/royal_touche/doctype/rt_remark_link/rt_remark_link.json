@@ -1,0 +1,36 @@
+{
+ "doctype": "DocType",
+ "name": "RT Remark Link",
+ "module": "Royal Touche",
+ "custom": 0,
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "remark"
+ ],
+ "fields": [
+  {
+   "fieldname": "remark",
+   "fieldtype": "Link",
+   "label": "Remark",
+   "options": "RT Remark",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 0,
+ "modified": "2026-11-03 19:50:00.000000",
+ "owner": "Administrator",
+ "creation": "2026-11-03 19:50:00.000000",
+ "modified_by": "Administrator",
+ "index_web_pages_for_search": 0,
+ "states": [],
+ "links": [],
+ "actions": []
+}

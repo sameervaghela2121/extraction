@@ -1,0 +1,219 @@
+{
+ "doctype": "DocType",
+ "name": "Roll Movement",
+ "module": "Royal Touche",
+ "custom": 0,
+ "istable": 0,
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "roll",
+  "movement_type",
+  "transaction_date",
+  "recorded_at",
+  "material",
+  "vendor",
+  "weight",
+  "used_weight",
+  "roll_weight_after",
+  "issued_to",
+  "from_location",
+  "to_location",
+  "remarks",
+  "remark_code",
+  "photos",
+  "sale_section",
+  "buyer",
+  "savio_bill_no",
+  "vehicle_no",
+  "rate_per_roll",
+  "system_section",
+  "client_id",
+  "deleted",
+  "stock_doctype",
+  "stock_docname"
+ ],
+ "fields": [
+  {
+   "fieldname": "roll",
+   "fieldtype": "Link",
+   "label": "Roll",
+   "options": "Batch",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "movement_type",
+   "fieldtype": "Select",
+   "label": "Movement",
+   "options": "IN\nOUT\nRETURN\nADJUSTMENT\nCONSUME\nRETURN_TO_VENDOR\nSELL",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "transaction_date",
+   "fieldtype": "Datetime",
+   "label": "Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "recorded_at",
+   "fieldtype": "Datetime",
+   "label": "Recorded at"
+  },
+  {
+   "fieldname": "material",
+   "fieldtype": "Link",
+   "label": "Material",
+   "options": "Item",
+   "search_index": 1
+  },
+  {
+   "fieldname": "vendor",
+   "fieldtype": "Link",
+   "label": "Vendor",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "label": "Weight (kg)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "used_weight",
+   "fieldtype": "Float",
+   "label": "Used weight (kg)"
+  },
+  {
+   "fieldname": "roll_weight_after",
+   "fieldtype": "Float",
+   "label": "Roll weight after (kg)"
+  },
+  {
+   "fieldname": "issued_to",
+   "fieldtype": "Data",
+   "label": "Issued to"
+  },
+  {
+   "fieldname": "from_location",
+   "fieldtype": "Link",
+   "label": "From",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "to_location",
+   "fieldtype": "Link",
+   "label": "To",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "remark_code",
+   "fieldtype": "Data",
+   "label": "Remark code"
+  },
+  {
+   "fieldname": "photos",
+   "fieldtype": "JSON",
+   "label": "Photos"
+  },
+  {
+   "fieldname": "sale_section",
+   "fieldtype": "Section Break",
+   "label": "Sale"
+  },
+  {
+   "fieldname": "buyer",
+   "fieldtype": "Link",
+   "label": "Buyer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "savio_bill_no",
+   "fieldtype": "Data",
+   "label": "Savio bill no."
+  },
+  {
+   "fieldname": "vehicle_no",
+   "fieldtype": "Data",
+   "label": "Vehicle no."
+  },
+  {
+   "fieldname": "rate_per_roll",
+   "fieldtype": "Currency",
+   "label": "Rate per roll",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "system_section",
+   "fieldtype": "Section Break",
+   "label": "System"
+  },
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client id",
+   "unique": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "deleted",
+   "fieldtype": "Check",
+   "label": "Deleted",
+   "default": "0"
+  },
+  {
+   "fieldname": "stock_doctype",
+   "fieldtype": "Link",
+   "label": "Stock document type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_docname",
+   "fieldtype": "Dynamic Link",
+   "label": "Stock document",
+   "options": "stock_doctype",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "System Manager",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "modified": "2026-11-03 19:50:00.000000",
+ "owner": "Administrator",
+ "creation": "2026-11-03 19:50:00.000000",
+ "modified_by": "Administrator",
+ "index_web_pages_for_search": 0,
+ "states": [],
+ "links": [],
+ "actions": []
+}
