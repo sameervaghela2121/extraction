@@ -10,6 +10,7 @@ import { escapeRegex, ensureCodeFree, applyUpdates, paginated } from "../utils/c
 import { findReplay, isReplayCollision, resolveReplay } from "../utils/idempotency";
 import { refreshSummaries, refreshSummary } from "./stockSummary.service";
 import { mediaService } from "./media.service";
+import { lotsService } from "./lots.service";
 import {
   LOCATION_REF_SELECT,
   loadUsableLocation,
@@ -32,6 +33,7 @@ type RollInput = {
   remarks?: string;
   material_id: string;
   vendor_id: string;
+  lot_id?: string;
   batch_no?: string;
   weight: number;
   remaining_weight?: number;
@@ -102,6 +104,7 @@ type RemarkRef = { _id: Types.ObjectId; remark_code: string; label: string; stat
 const REF_POPULATE = [
   { path: "material_id", select: "name" },
   { path: "vendor_id", select: "name vendor_code" },
+  { path: "lot_id", select: "document_type document_no" },
   { path: "remark_codes", select: "remark_code label status" },
   { path: "location", select: LOCATION_REF_SELECT },
 ];
@@ -130,17 +133,34 @@ function remarkRefResponse(refs?: Array<Types.ObjectId | RemarkRef>) {
   );
 }
 
-type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_codes" | "location"> & {
+/** What .populate leaves in place of lot_id. */
+type LotRef = { _id: Types.ObjectId; document_type?: string; document_no?: string };
+
+function lotRefResponse(ref?: Types.ObjectId | LotRef | null) {
+  if (!ref) return null;
+  if (ref instanceof Types.ObjectId) return { id: ref.toString(), document_type: null, document_no: null };
+  return {
+    id: ref._id.toString(),
+    document_type: ref.document_type ?? null,
+    document_no: ref.document_no ?? null,
+  };
+}
+
+type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_codes" | "location" | "lot_id"> & {
+  lot_id?: Types.ObjectId | LotRef | null;
   material_id: Types.ObjectId | NamedRef;
   vendor_id?: Types.ObjectId | NamedRef;
   remark_codes?: Array<Types.ObjectId | RemarkRef>;
   location: Types.ObjectId | LocationRef | null;
 };
 
-async function toResponse(r: PopulatedRoll) {
+/** [signPhotos] false for the devices' delta pull: they fetch a roll's photos when someone opens
+ *  them, so links minted for a whole page would be thrown away — and on Cloud Run each link is a
+ *  call to the IAM signing API (see mediaService.signedReadUrl). */
+async function toResponse(r: PopulatedRoll, signPhotos = true) {
   // A removed roll only reaches a client through the delta pull, which drops it on sight —
   // nothing will render its photos, so they are not signed.
-  const [tag, stitched, side1, side2] = r.deleted_at
+  const [tag, stitched, side1, side2] = r.deleted_at || !signPhotos
     ? [null, null, null, null]
     : await Promise.all(PHOTO_FIELDS.map((field) => mediaService.signedReadUrlOrNull(r[field])));
 
@@ -159,6 +179,8 @@ async function toResponse(r: PopulatedRoll) {
     remark_codes: remarkRefResponse(r.remark_codes),
     material_id: refResponse(r.material_id),
     vendor_id: refResponse(r.vendor_id),
+    // { id, document_type, document_no } — null for a roll with no lot.
+    lot: lotRefResponse(r.lot_id),
     batch_no: r.batch_no,
     weight: r.weight,
     remaining_weight: r.remaining_weight,
@@ -369,6 +391,7 @@ export const materialRollsService = {
     status?: RollStatus;
     location?: string;
     remark_id?: string;
+    lot_id?: string;
     updated_after?: Date;
     after_id?: string;
     date_from?: string;
@@ -410,6 +433,7 @@ export const materialRollsService = {
     // remark_codes is an array field — Mongo matches a scalar against it as "array contains
     // this value" with no operator needed, same as every equality filter above.
     if (query.remark_id) filter.remark_codes = new Types.ObjectId(query.remark_id);
+    if (query.lot_id) filter.lot_id = new Types.ObjectId(query.lot_id);
     if (query.date_from || query.date_to) {
       const range: { $gte?: Date; $lt?: Date; $lte?: Date } = {};
       if (query.date_from) range.$gte = new Date(query.date_from);
@@ -459,7 +483,12 @@ export const materialRollsService = {
       MaterialRoll.countDocuments(filter),
     ]);
 
-    return paginated(await Promise.all(items.map(toResponse)), total, page, pageSize);
+    return paginated(
+      await Promise.all(items.map((r) => toResponse(r, !query.updated_after))),
+      total,
+      page,
+      pageSize,
+    );
   },
 
   async get(id: string) {
@@ -482,16 +511,23 @@ export const materialRollsService = {
       return toResponse(replayed as unknown as PopulatedRoll);
     }
 
+    // Every new roll comes in on a delivery's challan or invoice. Checked here, not in the
+    // schema: a sync item names its lot by lot_client_id until this point, and a roll failing
+    // this must fail alone, not take the rest of its batch down at validation. Rolls from
+    // before lots existed have none, so only creating a roll requires it — not updating one.
+    if (!input.lot_id) throw ApiError.badRequest("Select the lot (challan or invoice) this roll came in on");
+
     const rollNumber = input.roll_number.toUpperCase();
     // Three independent reads, so one round trip instead of three. Registration happens
     // on a phone over mobile data, where every avoidable trip to Atlas is felt.
     // Promise.all rejects on the first failure, which is the behaviour the sequential
     // version had: the caller sees whichever check failed.
-    const [, material, vendor, location] = await Promise.all([
+    const [, material, vendor, location, lot] = await Promise.all([
       ensureCodeFree(MaterialRoll, "roll_number", rollNumber, ROLL_TAKEN, LIVE),
       loadUsableMaterial(input.material_id),
       loadUsableVendor(input.vendor_id),
       loadUsableLocation(input.location),
+      input.lot_id ? lotsService.requireLot(input.lot_id) : undefined,
     ]);
 
     const papers = vendor ? resolvePapers(vendor, input.papers, input.royal_touche_code) : undefined;
@@ -556,6 +592,7 @@ export const materialRollsService = {
       material_id: material ?? roll.material_id,
       vendor_id: vendor ?? roll.vendor_id,
       location,
+      lot_id: lot ?? roll.lot_id,
     });
   },
 
@@ -591,6 +628,10 @@ export const materialRollsService = {
       changedLocation ? loadUsableLocation(changedLocation) : undefined,
     ]);
 
+    if (updates.lot_id !== undefined) {
+      await lotsService.requireLot(updates.lot_id);
+      roll.lot_id = new Types.ObjectId(updates.lot_id);
+    }
     if (updates.material_id !== undefined) roll.material_id = new Types.ObjectId(updates.material_id);
     if (updates.vendor_id !== undefined) roll.vendor_id = new Types.ObjectId(updates.vendor_id);
     if (changedLocation) roll.location = new Types.ObjectId(changedLocation);

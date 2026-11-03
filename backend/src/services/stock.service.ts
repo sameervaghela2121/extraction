@@ -111,18 +111,22 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
       return t.weight
         ? `Returned to vendor${toVendor} — ${t.weight} ${unit}`
         : `Returned to vendor${toVendor}`;
+    case "SELL":
+      return t.weight ? `Sold — ${t.weight} ${unit}` : "Sold";
     default:
       return `Corrected by ${t.weight} ${unit}`;
   }
 }
 
-async function toResponse(t: PopulatedTransaction) {
-  // Signing is local crypto, no network call, so doing it per row is cheap.
+/** [signPhotos] false for the devices' delta pull, which keeps the paths and asks for the links
+ *  only when someone opens a movement's photos. Each link is a call to the IAM signing API on
+ *  Cloud Run (see mediaService.signedReadUrl), so a page of 200 movements was hundreds of them. */
+async function toResponse(t: PopulatedTransaction, signPhotos = true) {
   const photoPaths = t.photo_paths ?? [];
   // Nulls dropped rather than passed through: photo_urls is declared as a list of usable
   // URLs, and a client mapping it straight into image sources must never be handed one.
   // Filtering keeps the type exactly as it was; photo_paths still carries every path.
-  const signed = await Promise.all(photoPaths.map((p) => mediaService.signedReadUrlOrNull(p)));
+  const signed = signPhotos ? await Promise.all(photoPaths.map((p) => mediaService.signedReadUrlOrNull(p))) : [];
   const photoUrls = signed.filter((url): url is string => url !== null);
 
   return {
@@ -194,6 +198,16 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
   // taken from the roll rather than demanded and then checked against itself.
   if (input.material_id && roll.material_id.toString() !== input.material_id) {
     throw ApiError.badRequest("This roll belongs to a different material");
+  }
+
+  // A sold roll is with its buyer: nothing more can happen to it here. CONSUME keeps its
+  // no-op below, and IN is the one correction that can bring weight back onto it.
+  if (
+    roll.status === "SOLD" &&
+    input.transaction_type !== "CONSUME" &&
+    input.transaction_type !== "IN"
+  ) {
+    throw ApiError.conflict("This roll has already been sold");
   }
 
   if (input.transaction_type === "OUT") {
@@ -303,12 +317,33 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     };
   }
 
+  if (input.transaction_type === "SELL") {
+    if (roll.status === "ISSUED") {
+      throw ApiError.conflict("This roll is out on production — receive it back before selling it");
+    }
+    if (roll.status === "CONSUMED") {
+      throw ApiError.conflict("This roll is already consumed — there is nothing left to sell");
+    }
+    if (roll.status === "RETURNED_TO_VENDOR") {
+      throw ApiError.conflict("This roll has already been returned to the vendor");
+    }
+    const from = roll.location;
+    // The whole roll goes, as it is: whatever is left on it leaves on-hand for good.
+    const sold = roll.remaining_weight ?? 0;
+    roll.remaining_weight = 0;
+    roll.status = "SOLD";
+    // With the buyer now — clients show "-" for the empty location.
+    roll.location = null;
+    await roll.save();
+    return { delta: -sold, weight: sold, roll_weight_after: 0, from_location: from, to_location: null };
+  }
+
   if (input.transaction_type === "CONSUME") {
     // Already closed — by a RETURN weighed at 0, an earlier consume, or a return to the
     // vendor. The flag only ever asserts "this roll is finished", which is already true,
     // so it is accepted as a no-op instead of a 409 — and, for a returned roll, this also
     // stops a stray CONSUME from silently overwriting RETURNED_TO_VENDOR back to CONSUMED.
-    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR") {
+    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR" || roll.status === "SOLD") {
       return { delta: 0, weight: 0, used_weight: 0, roll_weight_after: 0, from_location: roll.location };
     }
     // Whatever was still on it is what the line used up. A roll that was never weighed
@@ -338,7 +373,9 @@ async function applyToRoll(input: MovementInput, rollId: Types.ObjectId): Promis
     // Reopens from either terminal state. Without this, weight added back onto a roll
     // stuck on CONSUMED/RETURNED_TO_VENDOR would sit on remaining_weight but never count
     // toward on-hand stock — refreshSummary only sums rolls whose status is IN_STOCK.
-    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR") roll.status = "IN_STOCK";
+    if (roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR" || roll.status === "SOLD") {
+      roll.status = "IN_STOCK";
+    }
     await roll.save();
     return { delta: added, weight: added, roll_weight_after: roll.remaining_weight };
   }
@@ -512,7 +549,12 @@ export const stockService = {
       StockTransaction.countDocuments(filter),
     ]);
 
-    return paginated(await Promise.all(items.map((t) => toResponse(t))), total, page, pageSize);
+    return paginated(
+      await Promise.all(items.map((t) => toResponse(t, !query.updated_after))),
+      total,
+      page,
+      pageSize,
+    );
   },
 
   /**

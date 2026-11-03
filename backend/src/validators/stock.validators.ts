@@ -12,6 +12,28 @@ const objectPath = z
 /** Enough for a couple of angles per movement without turning the ledger into an album. */
 const MAX_MOVEMENT_PHOTOS = 4;
 
+/** The movements an operator dates by hand on the tablet: today or yesterday only. */
+const OPERATOR_DATED: ReadonlySet<TransactionType> = new Set([
+  "OUT",
+  "RETURN",
+  "CONSUME",
+  "RETURN_TO_VENDOR",
+  "SELL",
+]);
+
+/** The godown's calendar day for an instant. India has no daylight saving, so a fixed
+ *  +05:30 is exact — the server itself runs on UTC. A plain "YYYY-MM-DD" is already one. */
+const IST_OFFSET_MS = 330 * 60 * 1000;
+function istDay(value: string | Date): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export const movementFieldsSchema = z
   .object({
     // Optional only so `is_consumed` can stand in for it — the transform below fills it,
@@ -28,6 +50,14 @@ export const movementFieldsSchema = z
      */
     is_consumed: z.literal(true).optional(),
     transaction_date: z.string().datetime({ offset: true }).or(z.string().date()).optional(),
+    /**
+     * When the operator saved the movement on the tablet. The date they picked is checked
+     * against this — today or the day before it — not against when the queued movement
+     * reaches the server: a tablet that was offline for two days must not have its
+     * correctly dated movements refused on arrival. Absent from older app builds, which
+     * send the moment of saving as transaction_date itself.
+     */
+    recorded_at: z.string().datetime({ offset: true }).optional(),
     // Optional for CONSUME only, where it is read off the roll — the app marking a roll
     // finished should not have to remember which material it was.
     material_id: objectId.optional(),
@@ -73,6 +103,29 @@ export const recordMovementSchema = movementFieldsSchema
         path: ["transaction_type"],
       });
       return;
+    }
+
+    // The operator picks the movement's day: today or yesterday, never ahead. "Today" is
+    // the day the movement was saved on the tablet (recorded_at); the future check is
+    // against the server's own today, so a tablet clock running ahead cannot get past it.
+    if (OPERATOR_DATED.has(v.transaction_type) && v.transaction_date) {
+      const day = istDay(v.transaction_date);
+      if (day > istDay(new Date())) {
+        ctx.addIssue({
+          code: "custom",
+          message: "The date cannot be in the future",
+          path: ["transaction_date"],
+        });
+      } else if (v.recorded_at) {
+        const savedOn = istDay(v.recorded_at);
+        if (day !== savedOn && day !== dayBefore(savedOn)) {
+          ctx.addIssue({
+            code: "custom",
+            message: "The date must be today or yesterday",
+            path: ["transaction_date"],
+          });
+        }
+      }
     }
 
     // CONSUME is the flag path: the roll is empty, and there is nothing to weigh or place.
@@ -123,6 +176,27 @@ export const recordMovementSchema = movementFieldsSchema
           message: "The roll's own vendor is used automatically — drop vendor_id",
           path: ["vendor_id"],
         });
+      }
+      return;
+    }
+
+    // Same shape as RETURN_TO_VENDOR: the roll leaves as it is, so there is nothing to
+    // weigh or place — just the day it went and a photo of it going.
+    if (v.transaction_type === "SELL") {
+      if (!v.roll_id) {
+        ctx.addIssue({ code: "custom", message: "SELL requires roll_id", path: ["roll_id"] });
+      }
+      if (!v.photo_paths?.length) {
+        ctx.addIssue({ code: "custom", message: "SELL requires a photo", path: ["photo_paths"] });
+      }
+      for (const field of ["weight", "new_weight", "returned_weight", "location"] as const) {
+        if (v[field] !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `A sold roll leaves as it is, with nothing to measure or place — drop ${field}`,
+            path: [field],
+          });
+        }
       }
       return;
     }

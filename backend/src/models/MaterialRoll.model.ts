@@ -12,8 +12,10 @@ import { basePaperSchema, type IBasePaper } from "./Vendor.model";
  *                      as CONSUMED — no more inward/outward — but kept as its own value
  *                      rather than folded into CONSUMED, so "why did this roll stop" reads
  *                      correctly on the roll itself, not just in its transaction history.
+ * SOLD              = sold on to another company as it is (a SELL movement). Terminal,
+ *                      and its own value for the same reason as RETURNED_TO_VENDOR.
  */
-export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR"] as const;
+export const ROLL_STATUSES = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR", "SOLD"] as const;
 export type RollStatus = (typeof ROLL_STATUSES)[number];
 
 export interface IMaterialRoll {
@@ -33,6 +35,9 @@ export interface IMaterialRoll {
   barcode?: string;
   material_id: Types.ObjectId;
   vendor_id: Types.ObjectId;
+  /** The delivery (Lot) this roll arrived in — see Lot.model. Absent on rolls registered
+   *  before lots existed, and on any registered without picking one. */
+  lot_id?: Types.ObjectId;
   batch_no?: string;
   /** Weight as received — the stock figure: what gets consumed, summed and reported. */
   weight: number;
@@ -106,6 +111,8 @@ const materialRollSchema = new Schema<IMaterialRoll>(
     // index to write on every insert for no read it can answer alone.
     material_id: { type: Schema.Types.ObjectId, ref: "RawMaterial", required: true },
     vendor_id: { type: Schema.Types.ObjectId, ref: "Vendor", required: true, index: true },
+    // Sparse: most rolls so far have none, and "every roll of Lot-12" only asks for set ones.
+    lot_id: { type: Schema.Types.ObjectId, ref: "Lot", index: true, sparse: true },
     batch_no: { type: String, trim: true },
     weight: { type: Number, min: 0, required: true },
     // Copied from weight on receipt, then drawn down as the roll is consumed.

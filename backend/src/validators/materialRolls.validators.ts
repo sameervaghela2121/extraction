@@ -32,6 +32,8 @@ export const createRollSchema = z.object({
   barcode: z.string().trim().min(1).optional(),
   material_id: objectId.describe("Material"),
   vendor_id: objectId.describe("Vendor"),
+  // The lot (delivery) this roll came in. Optional — picking one is offered, not required.
+  lot_id: objectId.optional(),
   weight: z.number({ required_error: "Weight is required" }).positive("Weight must be greater than 0"),
   gsm: z.number({ required_error: "GSM is required" }).positive("GSM must be greater than 0"),
   width: z.number({ required_error: "Width is required" }).positive("Width must be greater than 0"),
@@ -112,6 +114,8 @@ export const listRollsQuerySchema = z
     // A Remark's id — matches a roll whose remark_codes array contains it, same as filtering
     // vendor_id or status matches an exact field. Renamed from the old remark_code (a code
     // string) now that the field itself stores real references.
+    // Every roll of one lot.
+    lot_id: objectId.optional(),
     remark_id: objectId.optional(),
     // Delta pull: only rolls touched since the device's last checkpoint. Switches the sort
     // to updatedAt ascending so the client can page through the backlog oldest-first and

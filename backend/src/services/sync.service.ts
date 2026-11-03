@@ -1,6 +1,7 @@
 import { ZodError, type z } from "zod";
 import { MaterialRoll } from "../models/MaterialRoll.model";
 import { Vendor } from "../models/Vendor.model";
+import { Lot } from "../models/Lot.model";
 import { zodMessage } from "../middleware/validate.middleware";
 import { ApiError } from "../utils/ApiError";
 import { findReplay } from "../utils/idempotency";
@@ -10,6 +11,7 @@ import type { syncBatchSchema } from "../validators/sync.validators";
 import { materialRollsService } from "./materialRolls.service";
 import { stockService } from "./stock.service";
 import { vendorsService } from "./vendors.service";
+import { lotsService } from "./lots.service";
 
 /**
  * Batch flush: a device sends its whole outbox in one request instead of one call per item.
@@ -130,12 +132,13 @@ function errorOf(
  * batch, whatever order they were queued in — a roll naming a supplier the phone invented
  * offline must find that supplier already in the database, not a "vendor not found".
  */
-const MASTER_TYPES = new Set<Item["type"]>(["vendor", "supplier_code"]);
+const MASTER_TYPES = new Set<Item["type"]>(["lot", "vendor", "supplier_code"]);
 
 /** Server ids for things created earlier in this same flush, keyed by their client_id. */
 type BatchIds = {
   rolls: Map<string, string>;
   vendors: Map<string, string>;
+  lots: Map<string, string>;
 };
 
 /**
@@ -181,8 +184,11 @@ function keysOf(item: Item): string[] {
 /** The keys of earlier items in the batch this one cannot succeed without. */
 function dependenciesOf(item: Item): string[] {
   if (item.type === "roll") {
+    const deps: string[] = [];
     const vendor = item.vendor_client_id ?? item.body.vendor_client_id;
-    return vendor ? [`client:${vendor}`] : [];
+    if (vendor) deps.push(`client:${vendor}`);
+    if (item.body.lot_client_id && !item.body.lot_id) deps.push(`client:${item.body.lot_client_id}`);
+    return deps;
   }
   if (item.type === "supplier_code") {
     return item.body.vendor_client_id ? [`client:${item.body.vendor_client_id}`] : [];
@@ -197,7 +203,28 @@ function dependenciesOf(item: Item): string[] {
   return [];
 }
 
+/** A device's client_id for a lot → its server id: this batch first, then earlier flushes. */
+async function resolveLotId(clientId: string, ids: BatchIds): Promise<string> {
+  const fromBatch = ids.lots.get(clientId);
+  if (fromBatch) return fromBatch;
+  const earlier = await findReplay(Lot, clientId);
+  if (!earlier) {
+    throw ApiError.badRequest(
+      "lot_client_id does not match any lot — send the lot's own item before the roll that uses it",
+    );
+  }
+  return earlier._id.toString();
+}
+
 async function runItem(item: Item, actingUserId: string, ids: BatchIds): Promise<unknown> {
+  if (item.type === "lot") {
+    const lot = await lotsService.create({ ...item.body, client_id: item.client_id }, actingUserId);
+    // Remembered so a roll later in this batch can point at a lot that had no server id
+    // when the device queued it.
+    ids.lots.set(item.client_id, lot.id);
+    return lot;
+  }
+
   if (item.type === "vendor") {
     const vendor = await vendorsService.create({ ...item.body, client_id: item.client_id });
     // Remembered so a roll or a supplier-code item later in this batch can point at a
@@ -222,7 +249,8 @@ async function runItem(item: Item, actingUserId: string, ids: BatchIds): Promise
     // Accepted from either spot — the item's own sibling field (the documented shape) or
     // inside body (what a client mirroring supplier_code's shape sends instead). See the
     // comment on rollItem in sync.validators.ts.
-    const { vendor_client_id: bodyVendorClientId, ...body } = item.body;
+    const { vendor_client_id: bodyVendorClientId, lot_client_id: lotClientId, ...body } = item.body;
+    if (!body.lot_id && lotClientId) body.lot_id = await resolveLotId(lotClientId, ids);
     const vendorClientId = item.vendor_client_id ?? bodyVendorClientId;
     const vendorId = body.vendor_id ?? (vendorClientId ? await resolveVendorId(vendorClientId, ids) : undefined);
     if (!vendorId) {
@@ -271,7 +299,7 @@ export const syncService = {
    */
   async flush(input: BatchInput, actingUserId: string) {
     const results: ItemResult[] = [];
-    const ids: BatchIds = { rolls: new Map(), vendors: new Map() };
+    const ids: BatchIds = { rolls: new Map(), vendors: new Map(), lots: new Map() };
     // Keys (see keysOf) of every item that failed or was skipped so far in this batch.
     const blocked = new Set<string>();
 

@@ -27,4 +27,7 @@ const locationSchema = new Schema<ILocation>(
   { timestamps: true },
 );
 
+// The devices' delta pull: what changed since their last sync (see list's updated_after).
+locationSchema.index({ updatedAt: 1 });
+
 export const Location = model<ILocation>("Location", locationSchema);

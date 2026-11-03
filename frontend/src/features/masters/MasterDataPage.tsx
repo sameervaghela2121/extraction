@@ -2,6 +2,7 @@ import { Navigate, useParams } from "react-router-dom";
 import MasterSection from "./MasterSection";
 import RawMaterialPage from "./RawMaterialPage";
 import RollsPage from "./RollsPage";
+import LotsPage from "./LotsPage";
 import { MASTER_SPECS } from "./specs";
 
 /** One master per route (/masters/vendors, …) so each gets its own sidebar entry. */
@@ -15,6 +16,9 @@ export default function MasterDataPage() {
   // Also not a MasterSpec: this endpoint pages server-side, has read-only server-owned
   // fields, and corrects its stock figure through a movement rather than a PATCH.
   if (section === "rolls") return <RollsPage />;
+
+  // Not a MasterSpec either: the number is the server's, and each lot carries a photo.
+  if (section === "lots") return <LotsPage />;
 
   const spec = MASTER_SPECS.find((s) => s.key === section);
   if (!spec) return <Navigate to={`/masters/${MASTER_SPECS[0].key}`} replace />;

@@ -276,7 +276,7 @@ export interface Paginated<T> {
 /** Mirrors ROLL_STATUSES in the backend's MaterialRoll.model.ts. RETURNED_TO_VENDOR is
  *  terminal like CONSUMED but kept separate: it means defective and shipped back, not
  *  used up on site, and "why did this roll stop" should read correctly. */
-export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR";
+export type RollStatus = "IN_STOCK" | "ISSUED" | "CONSUMED" | "RETURNED_TO_VENDOR" | "SOLD";
 
 /** A roll's or movement's location as the API returns it. The whole field is null when
  *  there is none (a roll returned to its vendor); code/name are null when the id no longer
@@ -311,9 +311,34 @@ export interface RollRef {
 /** The full roll. Wider than MaterialRollListItem, which stays trimmed to what the barcode
  *  screen prints. `remaining_weight` and `status` are server-owned — both only move through
  *  a stock movement, and PATCHing either is refused. */
+/** The paper a delivery came with. */
+export type LotDocumentType = "challan" | "invoice";
+
+/** One delivery of raw material, on a challan or an invoice; rolls point at it. A lot is known
+ *  by its document — type and number. */
+export interface Lot {
+  id: string;
+  document_type: LotDocumentType;
+  document_no: string;
+  document_photo_path: string | null;
+  /** Signed for the detail and create responses only — the list leaves it null. */
+  document_photo_url: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A roll's lot as the roll response carries it. */
+export interface LotRef {
+  id: string;
+  document_type: LotDocumentType | null;
+  document_no: string | null;
+}
+
 export interface MaterialRoll {
   id: string;
   roll_number: string;
+  /** The delivery it came in, or null. */
+  lot?: LotRef | null;
   royal_touche_code?: string;
   /** The vendor paper(s) this roll was booked against: RT code, Delta code, supplier code.
    *  Copied at registration, so later edits to the vendor's list don't change it. */
@@ -350,7 +375,7 @@ export interface MaterialRoll {
   updatedAt: string;
 }
 
-export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME" | "RETURN_TO_VENDOR";
+export type TransactionType = "IN" | "OUT" | "RETURN" | "ADJUSTMENT" | "CONSUME" | "RETURN_TO_VENDOR" | "SELL";
 
 /** One row of the append-only ledger. `description` is rendered server-side and is meant to
  *  be shown as-is — don't rebuild it from the numbers. */

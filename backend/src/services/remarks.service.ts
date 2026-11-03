@@ -39,9 +39,10 @@ function toResponse(r: IRemark) {
 }
 
 /** Shared by the GET list (the app's picker) and the admin panel's paged search. */
-function filterOf(query: { q?: string; status?: MasterStatus }): FilterQuery<IRemark> {
+function filterOf(query: { q?: string; status?: MasterStatus; updated_after?: Date }): FilterQuery<IRemark> {
   const filter: FilterQuery<IRemark> = {};
   if (query.status) filter.status = query.status;
+  if (query.updated_after) filter.updatedAt = { $gte: query.updated_after };
   if (query.q) {
     const rx = new RegExp(escapeRegex(query.q), "i");
     filter.$or = [{ label: rx }, { remark_code: rx }];
@@ -59,7 +60,7 @@ const SORTS: Record<NonNullable<z.infer<typeof searchRemarksSchema>["sort"]>, So
 
 export const remarksService = {
   // No pagination, same reasoning as the other masters: a picker reads the whole list.
-  async list(query: { q?: string; status?: MasterStatus }) {
+  async list(query: { q?: string; status?: MasterStatus; updated_after?: Date }) {
     const filter = filterOf(query);
     // sort_order first so the common remarks sit at the top of the picker; label breaks
     // ties and covers rows nobody has ordered yet.

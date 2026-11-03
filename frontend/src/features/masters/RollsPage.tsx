@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { rollsApi } from "../../api/rolls.api";
@@ -8,6 +8,8 @@ import { locationsApi, materialTypesApi } from "../../api/masters.api";
 import { deltaCodes, rtCodes, supplierCodes } from "./rollPapers";
 import SearchSelect from "../../components/SearchSelect";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
+import { documentTypeLabel } from "./lotDocument";
+import NewRollModal from "./NewRollModal";
 import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
   GodownLocation,
@@ -17,8 +19,8 @@ import type {
 } from "../../types";
 
 /**
- * Rolls — edit and delete only. Registration happens on the phone, where the camera and the
- * physical roll are; this screen exists to correct what was typed there.
+ * Rolls — register, edit and delete. Most registration happens on the app, where the camera and
+ * the physical roll are; this screen can register one too, and corrects what was typed there.
  *
  * Two rules from the API shape the whole form:
  *
@@ -44,6 +46,7 @@ const STATUS_LABEL: Record<MaterialRoll["status"], string> = {
   ISSUED: "OUT",
   CONSUMED: "CONSUMED",
   RETURNED_TO_VENDOR: "RETURNED",
+  SOLD: "SOLD",
 };
 
 /** The tablet's four status colours: in stock green, out red, used-up grey, sent-back amber. */
@@ -52,6 +55,7 @@ const STATUS_CLASS: Record<MaterialRoll["status"], string> = {
   ISSUED: "status-out",
   CONSUMED: "status-consumed",
   RETURNED_TO_VENDOR: "status-returned",
+  SOLD: "status-sold",
 };
 
 /** A history row's type badge: where the movement left the roll, in its status colours —
@@ -63,6 +67,7 @@ const MOVEMENT_BADGE: Record<StockMovement["transaction_type"], { label: string;
   OUT: { label: "OUT", className: "status-out" },
   CONSUME: { label: "CONSUMED", className: "status-consumed" },
   RETURN_TO_VENDOR: { label: "TO VENDOR", className: "status-returned" },
+  SELL: { label: "SOLD", className: "status-sold" },
   ADJUSTMENT: { label: "ADJUSTED", className: "status-neutral" },
 };
 
@@ -123,6 +128,7 @@ export default function RollsPage() {
    */
   const [sort, setSort] = useState<Sort>({ key: "date", dir: "desc" });
 
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MaterialRoll | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -346,7 +352,12 @@ export default function RollsPage() {
     <div className="list-page">
       <PageHeader
         title="Rolls"
-        subtitle="Rolls received into the godown. Registration happens on the app — this is for correcting it."
+        subtitle="Rolls received into the godown. Register one here or on the app, and correct what was entered."
+        actions={
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Plus size={16} /> New roll
+          </button>
+        }
       />
 
       <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
@@ -376,6 +387,7 @@ export default function RollsPage() {
                   />
                   <th>RT code</th>
                   <th>Delta code</th>
+                  <th>Lot</th>
                   <th>Current weight</th>
                   <th>Status</th>
                   <th style={{ width: 170 }}></th>
@@ -387,6 +399,9 @@ export default function RollsPage() {
                     <td style={{ fontWeight: 600 }}>{roll.roll_number}</td>
                     <td>{rtCodes(roll)}</td>
                     <td>{deltaCodes(roll)}</td>
+                    <td>
+                      {roll.lot?.document_no ? `${documentTypeLabel(roll.lot.document_type)} ${roll.lot.document_no}` : "—"}
+                    </td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>
                       {roll.remaining_weight ?? 0} {roll.unit}
                     </td>
@@ -403,13 +418,19 @@ export default function RollsPage() {
                         <button
                           className="btn btn-sm"
                           onClick={() => openEdit(roll)}
-                          disabled={roll.status === "CONSUMED" || roll.status === "RETURNED_TO_VENDOR"}
+                          disabled={
+                            roll.status === "CONSUMED" ||
+                            roll.status === "RETURNED_TO_VENDOR" ||
+                            roll.status === "SOLD"
+                          }
                           title={
                             roll.status === "CONSUMED"
                               ? "This roll is consumed, so it can no longer be edited."
                               : roll.status === "RETURNED_TO_VENDOR"
                                 ? "This roll was returned to its vendor, so it can no longer be edited."
-                                : undefined
+                                : roll.status === "SOLD"
+                                  ? "This roll was sold, so it can no longer be edited."
+                                  : undefined
                           }
                         >
                           Edit
@@ -427,7 +448,7 @@ export default function RollsPage() {
                 ))}
                 {rolls.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="faint" style={{ textAlign: "center", padding: 20 }}>
+                    <td colSpan={7} className="faint" style={{ textAlign: "center", padding: 20 }}>
                       {search ? "No rolls match that search." : "No rolls yet."}
                     </td>
                   </tr>
@@ -799,6 +820,21 @@ export default function RollsPage() {
         }
         .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
+
+      {creating && (
+        <NewRollModal
+          materials={materials}
+          locations={locations}
+          onClose={() => setCreating(false)}
+          onCreated={(roll) => {
+            setCreating(false);
+            notify(`Roll ${roll.roll_number} created`);
+            // Newest first, so it heads the first page unless a search hides it.
+            setPage(1);
+            load(1, search);
+          }}
+        />
+      )}
     </div>
   );
 }
