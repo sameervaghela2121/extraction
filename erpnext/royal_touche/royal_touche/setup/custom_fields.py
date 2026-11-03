@@ -8,6 +8,9 @@ CUSTOM_FIELDS = {
          "insert_after": "supplier_name", "in_standard_filter": 1},
         {"fieldname": "rt_papers", "label": "Papers", "fieldtype": "Table", "options": "Vendor Paper",
          "insert_after": "rt_vendor_code"},
+        # A vendor added on a tablet while offline: its retry must find this one again.
+        {"fieldname": "rt_client_id", "label": "Client id", "fieldtype": "Data", "unique": 1, "read_only": 1,
+         "insert_after": "rt_papers"},
     ],
     "Item": [
         {"fieldname": "rt_material_code", "label": "Material code", "fieldtype": "Data", "unique": 1,

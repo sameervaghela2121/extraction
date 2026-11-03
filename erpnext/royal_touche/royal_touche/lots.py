@@ -11,6 +11,10 @@ def create_lot(data: dict) -> dict:
     existing = replay.find("Roll Lot", "client_id", data.get("client_id"))
     if existing:
         return lot_dict(existing)
+    return replay.guarded("Roll Lot", "client_id", data.get("client_id"), lambda: _create(data), lot_dict)
+
+
+def _create(data: dict) -> dict:
     doc = frappe.get_doc(
         {
             "doctype": "Roll Lot",

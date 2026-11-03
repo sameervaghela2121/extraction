@@ -36,9 +36,16 @@ def kg(value: float) -> str:
 def record_movement(data: dict) -> dict:
     existing = replay.find("Roll Movement", "client_id", data.get("client_id"))
     if existing:
-        mv = movement_dict(existing)
-        return {"movement": mv, "roll": roll_dict(mv["roll"])}
+        return _replayed(existing)
+    return replay.guarded("Roll Movement", "client_id", data.get("client_id"), lambda: _record(data), _replayed)
 
+
+def _replayed(name: str) -> dict:
+    mv = movement_dict(name)
+    return {"movement": mv, "roll": roll_dict(mv["roll"])}
+
+
+def _record(data: dict) -> dict:
     mtype = (data.get("movement_type") or "").strip().upper()
     if mtype not in MOVEMENT_TYPES:
         raise RTValidation("transaction_type is required")

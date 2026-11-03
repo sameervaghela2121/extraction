@@ -21,7 +21,10 @@ def register_roll(data: dict) -> dict:
     existing = replay.find("Batch", "rt_client_id", data.get("client_id"))
     if existing:
         return roll_dict(existing)
+    return replay.guarded("Batch", "rt_client_id", data.get("client_id"), lambda: _register(data), roll_dict)
 
+
+def _register(data: dict) -> dict:
     if not data.get("lot"):
         raise RTValidation("Select the lot (challan or invoice) this roll came in on")
     for field, label in (("weight", "Weight"), ("gsm", "GSM"), ("width", "Width")):
