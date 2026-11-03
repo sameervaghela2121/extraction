@@ -130,11 +130,13 @@ behaviour (rules, arithmetic, outcomes), not the old API shape.
 11. Roll registration: lot required; vendor, paper code, material, GSM, width; weight
     (scale, or typed if the role allows); barcode unique ignoring case; roll number;
     photos; offline; saved once however often it is retried.
-12. Edit a roll; set its remark flags; delete a roll (soft; only an untouched roll).
+12. Edit a roll; set its remark flags; delete a roll (soft; any roll, its movements are
+    marked deleted with it, as `materialRolls.service.ts` `remove` does today).
 13. Photo upload to GCS and short-lived read links.
 
 **D. Movements**
-14. OUT: the roll's whole available weight goes to the floor (location or person);
+14. OUT: the roll's whole available weight goes to a location (e.g. Running Godown) or
+    person;
     dated today or yesterday; scale photo.
 15. IN (return): the remainder comes back, never more than went out; 0 kg back means
     consumed.
@@ -171,7 +173,7 @@ behaviour (rules, arithmetic, outcomes), not the old API shape.
 | `raw_materials` | **Item** (stock UOM kg, *Has Batch No* on) | one Item per raw material |
 | `vendors` | **Supplier** | `vendor_code`, GST no., contact as fields |
 | `vendors.papers[]` | child table **Vendor Paper** on Supplier | RT, Delta, paper code, `is_common`, `found_in` |
-| `locations` | **Warehouse** | plus one warehouse **Production Floor** |
+| `locations` | **Warehouse** | plus one warehouse **Unassigned** for rolls registered without a location |
 | `remarks` | custom DocType **RT Remark** | code, label, sort order |
 | buyers (new) | **Customer** | |
 | `lots` | custom DocType **Roll Lot** | type, number, photo (File attachment), `client_id` |
@@ -202,9 +204,9 @@ the stock:
 | Movement | ERPNext document |
 |---|---|
 | IN (registration) | Purchase Receipt (above) |
-| OUT | Stock Entry — Material Transfer, location → Production Floor |
-| RETURN (IN back) | Stock Entry — Material Transfer, Production Floor → location, for the returned weight; plus Material Issue for the used weight |
-| CONSUME | Stock Entry — Material Issue from Production Floor |
+| OUT | Stock Entry — Material Transfer, roll's warehouse → the OUT's location |
+| RETURN (IN back) | Stock Entry — Material Transfer back to the warehouse it went out from, for the returned weight (none if it had no home); plus Material Issue for the used weight |
+| CONSUME | Stock Entry — Material Issue from the roll's current warehouse |
 | RETURN_TO_VENDOR | Purchase Return against the roll's Purchase Receipt |
 | SELL | Delivery Note to the buyer (Customer) from the roll's location |
 | ADJUSTMENT | Stock Reconciliation for that batch |
