@@ -83,8 +83,10 @@ def make_buyer(name: str | None = None) -> str:
     existing = frappe.db.get_value("Customer", {"customer_name": name})
     if existing:
         return existing
+    group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+    territory = frappe.db.get_value("Territory", {"is_group": 0}, "name") or "All Territories"
     doc = frappe.get_doc(
-        {"doctype": "Customer", "customer_name": name, "customer_group": "All Customer Groups", "territory": "All Territories"}
+        {"doctype": "Customer", "customer_name": name, "customer_group": group, "territory": territory}
     ).insert()
     return doc.name
 

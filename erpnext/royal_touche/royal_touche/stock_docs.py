@@ -41,3 +41,47 @@ def purchase_receipt(batch: str, supplier: str, item: str, qty: float, warehouse
             "batch_no": batch, "use_serial_batch_fields": 1, "allow_zero_valuation_rate": 1,
         }],
     }, when))
+
+
+def _line(item: str, qty: float, batch: str, **extra) -> dict:
+    return {"item_code": item, "qty": qty, "uom": "Kg", "stock_uom": "Kg", "conversion_factor": 1,
+            "batch_no": batch, "use_serial_batch_fields": 1, "allow_zero_valuation_rate": 1, **extra}
+
+
+def stock_entry(purpose: str, item: str, batch: str, qty: float, when, source: str | None = None,
+                target: str | None = None) -> str:
+    """purpose: Material Transfer (source → target), Material Issue (from source),
+    Material Receipt (into target)."""
+    return _submit(_posting({
+        "doctype": "Stock Entry",
+        "stock_entry_type": purpose,
+        "purpose": purpose,
+        "company": COMPANY,
+        "items": [_line(item, qty, batch, transfer_qty=qty, basic_rate=0, s_warehouse=source, t_warehouse=target)],
+    }, when))
+
+
+def purchase_return(receipt: str, batch: str, qty: float, warehouse: str, when) -> str:
+    from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+    ret = make_return_doc("Purchase Receipt", receipt)
+    row = ret.items[0]
+    row.update({"qty": -qty, "received_qty": -qty, "rejected_qty": 0, "stock_qty": -qty, "warehouse": warehouse,
+                "batch_no": batch, "use_serial_batch_fields": 1, "serial_and_batch_bundle": None,
+                "allow_zero_valuation_rate": 1})
+    when = get_datetime(when)
+    ret.update({"posting_date": when.date(), "posting_time": when.strftime("%H:%M:%S"), "set_posting_time": 1})
+    ret.flags.ignore_permissions = True
+    ret.insert()
+    ret.submit()
+    return ret.name
+
+
+def delivery_note(customer: str, item: str, batch: str, qty: float, warehouse: str, when,
+                  rate_per_roll: float | None = None) -> str:
+    return _submit(_posting({
+        "doctype": "Delivery Note",
+        "company": COMPANY,
+        "customer": customer,
+        "items": [_line(item, qty, batch, rate=_rate(qty, rate_per_roll), warehouse=warehouse)],
+    }, when))
