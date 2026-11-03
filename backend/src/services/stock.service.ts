@@ -118,13 +118,15 @@ function describe(t: PopulatedTransaction, unit = "kg"): string {
   }
 }
 
-async function toResponse(t: PopulatedTransaction) {
-  // Signing is local crypto, no network call, so doing it per row is cheap.
+/** [signPhotos] false for the devices' delta pull, which keeps the paths and asks for the links
+ *  only when someone opens a movement's photos. Each link is a call to the IAM signing API on
+ *  Cloud Run (see mediaService.signedReadUrl), so a page of 200 movements was hundreds of them. */
+async function toResponse(t: PopulatedTransaction, signPhotos = true) {
   const photoPaths = t.photo_paths ?? [];
   // Nulls dropped rather than passed through: photo_urls is declared as a list of usable
   // URLs, and a client mapping it straight into image sources must never be handed one.
   // Filtering keeps the type exactly as it was; photo_paths still carries every path.
-  const signed = await Promise.all(photoPaths.map((p) => mediaService.signedReadUrlOrNull(p)));
+  const signed = signPhotos ? await Promise.all(photoPaths.map((p) => mediaService.signedReadUrlOrNull(p))) : [];
   const photoUrls = signed.filter((url): url is string => url !== null);
 
   return {
@@ -547,7 +549,12 @@ export const stockService = {
       StockTransaction.countDocuments(filter),
     ]);
 
-    return paginated(await Promise.all(items.map((t) => toResponse(t))), total, page, pageSize);
+    return paginated(
+      await Promise.all(items.map((t) => toResponse(t, !query.updated_after))),
+      total,
+      page,
+      pageSize,
+    );
   },
 
   /**

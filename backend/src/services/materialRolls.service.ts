@@ -154,10 +154,13 @@ type PopulatedRoll = Omit<IMaterialRoll, "material_id" | "vendor_id" | "remark_c
   location: Types.ObjectId | LocationRef | null;
 };
 
-async function toResponse(r: PopulatedRoll) {
+/** [signPhotos] false for the devices' delta pull: they fetch a roll's photos when someone opens
+ *  them, so links minted for a whole page would be thrown away — and on Cloud Run each link is a
+ *  call to the IAM signing API (see mediaService.signedReadUrl). */
+async function toResponse(r: PopulatedRoll, signPhotos = true) {
   // A removed roll only reaches a client through the delta pull, which drops it on sight —
   // nothing will render its photos, so they are not signed.
-  const [tag, stitched, side1, side2] = r.deleted_at
+  const [tag, stitched, side1, side2] = r.deleted_at || !signPhotos
     ? [null, null, null, null]
     : await Promise.all(PHOTO_FIELDS.map((field) => mediaService.signedReadUrlOrNull(r[field])));
 
@@ -480,7 +483,12 @@ export const materialRollsService = {
       MaterialRoll.countDocuments(filter),
     ]);
 
-    return paginated(await Promise.all(items.map(toResponse)), total, page, pageSize);
+    return paginated(
+      await Promise.all(items.map((r) => toResponse(r, !query.updated_after))),
+      total,
+      page,
+      pageSize,
+    );
   },
 
   async get(id: string) {
