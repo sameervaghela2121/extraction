@@ -14,6 +14,7 @@
     "seed:locations": "tsx src/utils/seedLocations.ts",
     "seed:remarks": "tsx src/utils/seedRemarks.ts",
     "seed:month": "tsx src/utils/seedMonth.ts",
+    "seed:export": "tsx src/utils/exportSeedScenario.ts",
     "migrate:location-refs": "tsx src/utils/migrateLocationRefs.ts",
     "migrate:status-enum": "tsx src/utils/migrateIsActiveToStatus.ts",
     "indexes": "tsx src/utils/syncIndexes.ts"

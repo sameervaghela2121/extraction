@@ -1,0 +1,1795 @@
+{
+  "scenario": "october",
+  "source": "backend/src/utils/seedMonth.ts (ROLLS, MOVEMENTS, LOTS, EXPECTED, OCTOBER_BY_ROLL, DAILY)",
+  "figure_fields": [
+    "opening",
+    "received",
+    "consumed",
+    "returned_to_vendor",
+    "sold",
+    "adjusted",
+    "closing",
+    "out_at_close"
+  ],
+  "masters": {
+    "materials": [
+      {
+        "key": "A",
+        "material_code": "BASE-PAPER"
+      },
+      {
+        "key": "B",
+        "material_code": "TISSUE"
+      },
+      {
+        "key": "C",
+        "material_code": "BARRIER"
+      }
+    ],
+    "vendors": [
+      {
+        "vendor_code": "SEED-V01",
+        "name": "Seed Vendor 1",
+        "papers": [
+          {
+            "paper_code": "SV1-P1",
+            "rt_code": "SRT600",
+            "delta_code": "SD700"
+          },
+          {
+            "paper_code": "SV1-P2",
+            "rt_code": "SRT601",
+            "delta_code": "SD701"
+          },
+          {
+            "paper_code": "SV1-P3",
+            "rt_code": "SRT602",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P4",
+            "rt_code": "SRT603",
+            "delta_code": "SD703"
+          },
+          {
+            "paper_code": "SV1-P5",
+            "rt_code": "",
+            "delta_code": "SD704"
+          },
+          {
+            "paper_code": "SV1-P6",
+            "rt_code": "SRT605",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P7",
+            "rt_code": "SRT606",
+            "delta_code": "SD706"
+          },
+          {
+            "paper_code": "SV1-P8",
+            "rt_code": "SRT607",
+            "delta_code": "SD707"
+          },
+          {
+            "paper_code": "SV1-P9",
+            "rt_code": "SRT608",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P10",
+            "rt_code": "",
+            "delta_code": "SD709"
+          },
+          {
+            "paper_code": "SV1-P11",
+            "rt_code": "SRT610",
+            "delta_code": "SD710"
+          },
+          {
+            "paper_code": "SV1-P12",
+            "rt_code": "SRT611",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P13",
+            "rt_code": "SRT612",
+            "delta_code": "SD712"
+          },
+          {
+            "paper_code": "SV1-P14",
+            "rt_code": "SRT613",
+            "delta_code": "SD713"
+          },
+          {
+            "paper_code": "SV1-P15",
+            "rt_code": "",
+            "delta_code": "SD714"
+          },
+          {
+            "paper_code": "SV1-P16",
+            "rt_code": "SRT615",
+            "delta_code": "SD715"
+          },
+          {
+            "paper_code": "SV1-P17",
+            "rt_code": "SRT616",
+            "delta_code": "SD716"
+          },
+          {
+            "paper_code": "SV1-P18",
+            "rt_code": "SRT617",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P19",
+            "rt_code": "SRT618",
+            "delta_code": "SD718"
+          },
+          {
+            "paper_code": "SV1-P20",
+            "rt_code": "",
+            "delta_code": "SD719"
+          },
+          {
+            "paper_code": "SV1-P21",
+            "rt_code": "SRT620",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P22",
+            "rt_code": "SRT621",
+            "delta_code": "SD721"
+          },
+          {
+            "paper_code": "SV1-P23",
+            "rt_code": "SRT622",
+            "delta_code": "SD722"
+          },
+          {
+            "paper_code": "SV1-P24",
+            "rt_code": "SRT623",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV1-P25",
+            "rt_code": "",
+            "delta_code": "SD724"
+          }
+        ]
+      },
+      {
+        "vendor_code": "SEED-V02",
+        "name": "Seed Vendor 2",
+        "papers": [
+          {
+            "paper_code": "SV2-P1",
+            "rt_code": "SRT600",
+            "delta_code": "sd700"
+          },
+          {
+            "paper_code": "SV2-P2",
+            "rt_code": "SRT601",
+            "delta_code": "sd701"
+          },
+          {
+            "paper_code": "SV2-P3",
+            "rt_code": "SRT602",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P4",
+            "rt_code": "SRT603",
+            "delta_code": "sd703"
+          },
+          {
+            "paper_code": "SV2-P5",
+            "rt_code": "",
+            "delta_code": "sd704"
+          },
+          {
+            "paper_code": "SV2-P6",
+            "rt_code": "SRT605",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P7",
+            "rt_code": "SRT606",
+            "delta_code": "sd706"
+          },
+          {
+            "paper_code": "SV2-P8",
+            "rt_code": "SRT607",
+            "delta_code": "sd707"
+          },
+          {
+            "paper_code": "SV2-P9",
+            "rt_code": "SRT608",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P10",
+            "rt_code": "",
+            "delta_code": "sd709"
+          },
+          {
+            "paper_code": "SV2-P11",
+            "rt_code": "SRT610",
+            "delta_code": "sd710"
+          },
+          {
+            "paper_code": "SV2-P12",
+            "rt_code": "SRT611",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P13",
+            "rt_code": "SRT612",
+            "delta_code": "sd712"
+          },
+          {
+            "paper_code": "SV2-P14",
+            "rt_code": "SRT613",
+            "delta_code": "sd713"
+          },
+          {
+            "paper_code": "SV2-P15",
+            "rt_code": "",
+            "delta_code": "sd714"
+          },
+          {
+            "paper_code": "SV2-P16",
+            "rt_code": "SRT615",
+            "delta_code": "sd715"
+          },
+          {
+            "paper_code": "SV2-P17",
+            "rt_code": "SRT616",
+            "delta_code": "sd716"
+          },
+          {
+            "paper_code": "SV2-P18",
+            "rt_code": "SRT617",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P19",
+            "rt_code": "SRT618",
+            "delta_code": "sd718"
+          },
+          {
+            "paper_code": "SV2-P20",
+            "rt_code": "",
+            "delta_code": "sd719"
+          },
+          {
+            "paper_code": "SV2-P21",
+            "rt_code": "SRT620",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P22",
+            "rt_code": "SRT621",
+            "delta_code": "sd721"
+          },
+          {
+            "paper_code": "SV2-P23",
+            "rt_code": "SRT622",
+            "delta_code": "sd722"
+          },
+          {
+            "paper_code": "SV2-P24",
+            "rt_code": "SRT623",
+            "delta_code": ""
+          },
+          {
+            "paper_code": "SV2-P25",
+            "rt_code": "",
+            "delta_code": "sd724"
+          }
+        ]
+      }
+    ],
+    "locations": [
+      {
+        "name": "SEED-LOC-1"
+      },
+      {
+        "name": "SEED-LOC-2"
+      }
+    ],
+    "remarks": [
+      {
+        "remark_code": "COLOR-VAR",
+        "label": "Color variant / shade variation"
+      },
+      {
+        "remark_code": "MISPRINT",
+        "label": "Misprint"
+      },
+      {
+        "remark_code": "DESIGN-MISMATCH",
+        "label": "Design mismatch (wrong design)"
+      },
+      {
+        "remark_code": "DEFECT",
+        "label": "This is Defect"
+      }
+    ]
+  },
+  "lots": [
+    {
+      "key": "L1",
+      "document_type": "challan",
+      "document_no": "SEED-CH-1001"
+    },
+    {
+      "key": "L2",
+      "document_type": "invoice",
+      "document_no": "SEED-INV-2001"
+    },
+    {
+      "key": "L3",
+      "document_type": "challan",
+      "document_no": "SEED-CH-1002"
+    },
+    {
+      "key": "L4",
+      "document_type": "invoice",
+      "document_no": "SEED-INV-2002"
+    }
+  ],
+  "rolls": [
+    {
+      "seq": 1,
+      "key": "R13",
+      "roll_number": "SEED-R13",
+      "barcode": "SEED-BC-R13",
+      "material": "BASE-PAPER",
+      "weight": 100,
+      "unit": "kg",
+      "gsm": 60,
+      "width": 900,
+      "received": "2026-09-28",
+      "saved": "2026-09-28T08:00:00+05:30",
+      "lot": "L1",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P1",
+        "rt_code": "SRT600",
+        "delta_code": "SD700"
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 2,
+      "key": "R01",
+      "roll_number": "SEED-R01",
+      "barcode": "SEED-BC-R01",
+      "material": "BASE-PAPER",
+      "weight": 500,
+      "unit": "kg",
+      "gsm": 61,
+      "width": 910,
+      "received": "2026-10-01",
+      "saved": "2026-10-01T08:00:00+05:30",
+      "lot": "L1",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P2",
+        "rt_code": "SRT601",
+        "delta_code": "sd701"
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 3,
+      "key": "R02",
+      "roll_number": "SEED-R02",
+      "barcode": "SEED-BC-R02",
+      "material": "BASE-PAPER",
+      "weight": 400,
+      "unit": "kg",
+      "gsm": 62,
+      "width": 920,
+      "received": "2026-10-01",
+      "saved": "2026-10-01T08:00:00+05:30",
+      "lot": "L1",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P3",
+        "rt_code": "SRT602",
+        "delta_code": ""
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 5,
+      "key": "R03",
+      "roll_number": "SEED-R03",
+      "barcode": "SEED-BC-R03",
+      "material": "BASE-PAPER",
+      "weight": 600,
+      "unit": "kg",
+      "gsm": 63,
+      "width": 930,
+      "received": "2026-10-02",
+      "saved": "2026-10-02T08:00:00+05:30",
+      "lot": "L1",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P4",
+        "rt_code": "SRT603",
+        "delta_code": "sd703"
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 6,
+      "key": "R04",
+      "roll_number": "SEED-R04",
+      "barcode": "SEED-BC-R04",
+      "material": "BASE-PAPER",
+      "weight": 300,
+      "unit": "kg",
+      "gsm": 64,
+      "width": 940,
+      "received": "2026-10-02",
+      "saved": "2026-10-02T08:00:00+05:30",
+      "lot": "L2",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P5",
+        "rt_code": "",
+        "delta_code": "SD704"
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 8,
+      "key": "R15",
+      "roll_number": "SEED-R15",
+      "barcode": "SEED-BC-R15",
+      "material": "BASE-PAPER",
+      "weight": 120,
+      "unit": "kg",
+      "gsm": 65,
+      "width": 950,
+      "received": "2026-10-03",
+      "saved": "2026-10-03T08:00:00+05:30",
+      "lot": null,
+      "lot_removed_after_create": true,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P6",
+        "rt_code": "SRT605",
+        "delta_code": ""
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 9,
+      "key": "R05",
+      "roll_number": "SEED-R05",
+      "barcode": "SEED-BC-R05",
+      "material": "TISSUE",
+      "weight": 250,
+      "unit": "kg",
+      "gsm": 66,
+      "width": 960,
+      "received": "2026-10-03",
+      "saved": "2026-10-03T08:00:00+05:30",
+      "lot": "L2",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P7",
+        "rt_code": "SRT606",
+        "delta_code": "SD706"
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 10,
+      "key": "R06",
+      "roll_number": "SEED-R06",
+      "barcode": "SEED-BC-R06",
+      "material": "TISSUE",
+      "weight": 350,
+      "unit": "kg",
+      "gsm": 67,
+      "width": 970,
+      "received": "2026-10-05",
+      "saved": "2026-10-05T08:00:00+05:30",
+      "lot": "L2",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P8",
+        "rt_code": "SRT607",
+        "delta_code": "sd707"
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 13,
+      "key": "R14",
+      "roll_number": "SEED-R14",
+      "barcode": "SEED-BC-R14",
+      "material": "BASE-PAPER",
+      "weight": 999,
+      "unit": "kg",
+      "gsm": 68,
+      "width": 980,
+      "received": "2026-10-06",
+      "saved": "2026-10-06T08:00:00+05:30",
+      "lot": "L1",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P9",
+        "rt_code": "SRT608",
+        "delta_code": ""
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 28,
+      "key": "R07",
+      "roll_number": "SEED-R07",
+      "barcode": "SEED-BC-R07",
+      "material": "TISSUE",
+      "weight": 200,
+      "unit": "kg",
+      "gsm": 69,
+      "width": 990,
+      "received": "2026-10-16",
+      "saved": "2026-10-16T08:00:00+05:30",
+      "lot": "L3",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P10",
+        "rt_code": "",
+        "delta_code": "sd709"
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 32,
+      "key": "R08",
+      "roll_number": "SEED-R08",
+      "barcode": "SEED-BC-R08",
+      "material": "TISSUE",
+      "weight": 450,
+      "unit": "kg",
+      "gsm": 70,
+      "width": 1000,
+      "received": "2026-10-19",
+      "saved": "2026-10-19T08:00:00+05:30",
+      "lot": "L3",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P11",
+        "rt_code": "SRT610",
+        "delta_code": "SD710"
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 33,
+      "key": "R09",
+      "roll_number": "SEED-R09",
+      "barcode": "SEED-BC-R09",
+      "material": "BARRIER",
+      "weight": 300,
+      "unit": "kg",
+      "gsm": 71,
+      "width": 1010,
+      "received": "2026-10-20",
+      "saved": "2026-10-20T08:00:00+05:30",
+      "lot": "L4",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P12",
+        "rt_code": "SRT611",
+        "delta_code": ""
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 38,
+      "key": "R10",
+      "roll_number": "SEED-R10",
+      "barcode": "SEED-BC-R10",
+      "material": "BARRIER",
+      "weight": 180,
+      "unit": "kg",
+      "gsm": 72,
+      "width": 1020,
+      "received": "2026-10-22",
+      "saved": "2026-10-22T08:00:00+05:30",
+      "lot": "L4",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P13",
+        "rt_code": "SRT612",
+        "delta_code": "SD712"
+      },
+      "location": "SEED-LOC-1"
+    },
+    {
+      "seq": 40,
+      "key": "R11",
+      "roll_number": "SEED-R11",
+      "barcode": "SEED-BC-R11",
+      "material": "BARRIER",
+      "weight": 220,
+      "unit": "kg",
+      "gsm": 73,
+      "width": 1030,
+      "received": "2026-10-26",
+      "saved": "2026-10-26T08:00:00+05:30",
+      "lot": "L4",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V02",
+      "paper": {
+        "paper_code": "SV2-P14",
+        "rt_code": "SRT613",
+        "delta_code": "sd713"
+      },
+      "location": "SEED-LOC-2"
+    },
+    {
+      "seq": 44,
+      "key": "R12",
+      "roll_number": "SEED-R12",
+      "barcode": "SEED-BC-R12",
+      "material": "BARRIER",
+      "weight": 150,
+      "unit": "kg",
+      "gsm": 74,
+      "width": 1040,
+      "received": "2026-10-29",
+      "saved": "2026-10-29T08:00:00+05:30",
+      "lot": "L4",
+      "lot_removed_after_create": false,
+      "vendor": "SEED-V01",
+      "paper": {
+        "paper_code": "SV1-P15",
+        "rt_code": "",
+        "delta_code": "SD714"
+      },
+      "location": "SEED-LOC-1"
+    }
+  ],
+  "movements": [
+    {
+      "seq": 4,
+      "roll": "R13",
+      "type": "OUT",
+      "date": "2026-10-01T10:00:00+05:30",
+      "saved": "2026-10-01T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 7,
+      "roll": "R13",
+      "type": "RETURN",
+      "date": "2026-10-02T16:00:00+05:30",
+      "saved": "2026-10-02T16:00:00+05:30",
+      "returned_weight": 40,
+      "photo": true
+    },
+    {
+      "seq": 11,
+      "roll": "R01",
+      "type": "OUT",
+      "date": "2026-10-05T09:00:00+05:30",
+      "saved": "2026-10-05T09:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 12,
+      "roll": "R01",
+      "type": "RETURN",
+      "date": "2026-10-05T17:00:00+05:30",
+      "saved": "2026-10-05T17:00:00+05:30",
+      "returned_weight": 300,
+      "photo": true
+    },
+    {
+      "seq": 14,
+      "roll": "R02",
+      "type": "OUT",
+      "date": "2026-10-06T10:00:00+05:30",
+      "saved": "2026-10-06T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 15,
+      "roll": "R14",
+      "type": "DELETE",
+      "date": "2026-10-07T09:00:00+05:30",
+      "saved": "2026-10-07T09:00:00+05:30",
+      "photo": false
+    },
+    {
+      "seq": 16,
+      "roll": "R02",
+      "type": "CONSUME",
+      "date": "2026-10-07T15:00:00+05:30",
+      "saved": "2026-10-07T15:00:00+05:30",
+      "photo": true
+    },
+    {
+      "seq": 17,
+      "roll": "R03",
+      "type": "OUT",
+      "date": "2026-10-08T09:00:00+05:30",
+      "saved": "2026-10-08T09:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 18,
+      "roll": "R03",
+      "type": "RETURN",
+      "date": "2026-10-08T13:00:00+05:30",
+      "saved": "2026-10-08T13:00:00+05:30",
+      "returned_weight": 450,
+      "photo": true
+    },
+    {
+      "seq": 19,
+      "roll": "R03",
+      "type": "OUT",
+      "date": "2026-10-08T15:00:00+05:30",
+      "saved": "2026-10-08T15:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 20,
+      "roll": "R03",
+      "type": "RETURN",
+      "date": "2026-10-09T11:00:00+05:30",
+      "saved": "2026-10-09T11:00:00+05:30",
+      "returned_weight": 400,
+      "photo": true
+    },
+    {
+      "seq": 21,
+      "roll": "R15",
+      "type": "OUT",
+      "date": "2026-10-09T12:00:00+05:30",
+      "saved": "2026-10-09T12:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 22,
+      "roll": "R15",
+      "type": "RETURN",
+      "date": "2026-10-10T12:00:00+05:30",
+      "saved": "2026-10-10T12:00:00+05:30",
+      "returned_weight": 0,
+      "photo": true
+    },
+    {
+      "seq": 23,
+      "roll": "R01",
+      "type": "OUT",
+      "date": "2026-10-12T09:00:00+05:30",
+      "saved": "2026-10-12T09:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 24,
+      "roll": "R01",
+      "type": "RETURN",
+      "date": "2026-10-12T18:00:00+05:30",
+      "saved": "2026-10-12T18:00:00+05:30",
+      "returned_weight": 0,
+      "photo": true
+    },
+    {
+      "seq": 25,
+      "roll": "R04",
+      "type": "RETURN_TO_VENDOR",
+      "date": "2026-10-13T11:00:00+05:30",
+      "saved": "2026-10-13T11:00:00+05:30",
+      "remarks": "Shade off, edges damaged",
+      "roll_remark_codes": [
+        "COLOR-VAR",
+        "MISPRINT"
+      ],
+      "photo": true
+    },
+    {
+      "seq": 26,
+      "roll": "R05",
+      "type": "SELL",
+      "date": "2026-10-14T11:00:00+05:30",
+      "saved": "2026-10-14T11:00:00+05:30",
+      "photo": true
+    },
+    {
+      "seq": 27,
+      "roll": "R06",
+      "type": "OUT",
+      "date": "2026-10-15T10:00:00+05:30",
+      "saved": "2026-10-15T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 30,
+      "roll": "R06",
+      "type": "RETURN",
+      "date": "2026-10-15T18:00:00+05:30",
+      "saved": "2026-10-16T12:00:00+05:30",
+      "returned_weight": 250,
+      "photo": true
+    },
+    {
+      "seq": 29,
+      "roll": "R07",
+      "type": "OUT",
+      "date": "2026-10-16T10:00:00+05:30",
+      "saved": "2026-10-16T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 31,
+      "roll": "R07",
+      "type": "RETURN",
+      "date": "2026-10-16T17:00:00+05:30",
+      "saved": "2026-10-16T17:00:00+05:30",
+      "returned_weight": 200,
+      "photo": true
+    },
+    {
+      "seq": 34,
+      "roll": "R08",
+      "type": "ADJUSTMENT",
+      "date": "2026-10-20T09:00:00+05:30",
+      "saved": "2026-10-20T09:00:00+05:30",
+      "new_weight": 430,
+      "remarks": "Stock count: 20 kg short",
+      "photo": false
+    },
+    {
+      "seq": 35,
+      "roll": "R08",
+      "type": "OUT",
+      "date": "2026-10-21T09:00:00+05:30",
+      "saved": "2026-10-21T09:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 36,
+      "roll": "R09",
+      "type": "OUT",
+      "date": "2026-10-21T10:00:00+05:30",
+      "saved": "2026-10-21T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 37,
+      "roll": "R09",
+      "type": "RETURN",
+      "date": "2026-10-21T18:00:00+05:30",
+      "saved": "2026-10-21T18:00:00+05:30",
+      "returned_weight": 250,
+      "photo": true
+    },
+    {
+      "seq": 39,
+      "roll": "R09",
+      "type": "ADJUSTMENT",
+      "date": "2026-10-23T09:00:00+05:30",
+      "saved": "2026-10-23T09:00:00+05:30",
+      "new_weight": 260,
+      "remarks": "Stock count: 10 kg over",
+      "photo": false
+    },
+    {
+      "seq": 41,
+      "roll": "R11",
+      "type": "OUT",
+      "date": "2026-10-27T10:00:00+05:30",
+      "saved": "2026-10-27T10:00:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 42,
+      "roll": "R11",
+      "type": "RETURN",
+      "date": "2026-10-27T18:00:00+05:30",
+      "saved": "2026-10-27T18:00:00+05:30",
+      "returned_weight": 170,
+      "photo": true
+    },
+    {
+      "seq": 43,
+      "roll": "R11",
+      "type": "RETURN_TO_VENDOR",
+      "date": "2026-10-28T11:00:00+05:30",
+      "saved": "2026-10-28T11:00:00+05:30",
+      "remarks": "किनारा फटा हुआ",
+      "roll_remark_codes": [
+        "DEFECT"
+      ],
+      "photo": true
+    },
+    {
+      "seq": 45,
+      "roll": "R10",
+      "type": "OUT",
+      "date": "2026-10-31T23:59:00+05:30",
+      "saved": "2026-10-31T23:59:00+05:30",
+      "location": "SEED-LOC-2",
+      "issued_to": "Line 1",
+      "photo": true
+    },
+    {
+      "seq": 46,
+      "roll": "R10",
+      "type": "RETURN",
+      "date": "2026-11-01T00:01:00+05:30",
+      "saved": "2026-11-01T00:01:00+05:30",
+      "returned_weight": 130,
+      "photo": true
+    }
+  ],
+  "expected": {
+    "periods": [
+      {
+        "label": "October",
+        "from": "2026-10-01",
+        "to": "2026-10-31",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 100,
+            "received": 1920,
+            "consumed": 1280,
+            "returned_to_vendor": 300,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 0,
+            "received": 1250,
+            "consumed": 100,
+            "returned_to_vendor": 0,
+            "sold": 250,
+            "adjusted": -20,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 0,
+            "received": 850,
+            "consumed": 100,
+            "returned_to_vendor": 170,
+            "sold": 0,
+            "adjusted": 10,
+            "closing": 590,
+            "out_at_close": 180
+          }
+        }
+      },
+      {
+        "label": "Week 28 Sep to 4 Oct",
+        "from": "2026-09-28",
+        "to": "2026-10-04",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 0,
+            "received": 2020,
+            "consumed": 60,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 1960,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 0,
+            "received": 250,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 250,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "Week 5 to 11 Oct",
+        "from": "2026-10-05",
+        "to": "2026-10-11",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 1960,
+            "received": 0,
+            "consumed": 920,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 1040,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 250,
+            "received": 350,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 600,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "Week 12 to 18 Oct",
+        "from": "2026-10-12",
+        "to": "2026-10-18",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 1040,
+            "received": 0,
+            "consumed": 300,
+            "returned_to_vendor": 300,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 600,
+            "received": 200,
+            "consumed": 100,
+            "returned_to_vendor": 0,
+            "sold": 250,
+            "adjusted": 0,
+            "closing": 450,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "Week 19 to 25 Oct",
+        "from": "2026-10-19",
+        "to": "2026-10-25",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 450,
+            "received": 450,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": -20,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 0,
+            "received": 480,
+            "consumed": 50,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 10,
+            "closing": 440,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "Week 26 Oct to 1 Nov",
+        "from": "2026-10-26",
+        "to": "2026-11-01",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 880,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 440,
+            "received": 370,
+            "consumed": 100,
+            "returned_to_vendor": 170,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 540,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "8 Oct: three movements on one roll",
+        "from": "2026-10-08",
+        "to": "2026-10-08",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 1360,
+            "received": 0,
+            "consumed": 150,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 1210,
+            "out_at_close": 450
+          },
+          "TISSUE": {
+            "opening": 600,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 600,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "15 Oct: inward entered a day late",
+        "from": "2026-10-15",
+        "to": "2026-10-15",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 350,
+            "received": 0,
+            "consumed": 100,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 250,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "16 Oct: out and back, nothing used",
+        "from": "2026-10-16",
+        "to": "2026-10-16",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 250,
+            "received": 200,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 450,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "30 Oct: nothing moved",
+        "from": "2026-10-30",
+        "to": "2026-10-30",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 880,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 590,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 590,
+            "out_at_close": 0
+          }
+        }
+      },
+      {
+        "label": "31 Oct: out at 23:59",
+        "from": "2026-10-31",
+        "to": "2026-10-31",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 880,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 590,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 590,
+            "out_at_close": 180
+          }
+        }
+      },
+      {
+        "label": "1 Nov: back at 00:01",
+        "from": "2026-11-01",
+        "to": "2026-11-01",
+        "figures": {
+          "BASE-PAPER": {
+            "opening": 440,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 440,
+            "out_at_close": 0
+          },
+          "TISSUE": {
+            "opening": 880,
+            "received": 0,
+            "consumed": 0,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 880,
+            "out_at_close": 430
+          },
+          "BARRIER": {
+            "opening": 590,
+            "received": 0,
+            "consumed": 50,
+            "returned_to_vendor": 0,
+            "sold": 0,
+            "adjusted": 0,
+            "closing": 540,
+            "out_at_close": 0
+          }
+        }
+      }
+    ],
+    "by_roll": {
+      "R13": {
+        "opening": 100,
+        "received": 0,
+        "consumed": 60,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 40,
+        "out_at_close": 0
+      },
+      "R01": {
+        "opening": 0,
+        "received": 500,
+        "consumed": 500,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R02": {
+        "opening": 0,
+        "received": 400,
+        "consumed": 400,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R03": {
+        "opening": 0,
+        "received": 600,
+        "consumed": 200,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 400,
+        "out_at_close": 0
+      },
+      "R04": {
+        "opening": 0,
+        "received": 300,
+        "consumed": 0,
+        "returned_to_vendor": 300,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R15": {
+        "opening": 0,
+        "received": 120,
+        "consumed": 120,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R05": {
+        "opening": 0,
+        "received": 250,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 250,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R06": {
+        "opening": 0,
+        "received": 350,
+        "consumed": 100,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 250,
+        "out_at_close": 0
+      },
+      "R07": {
+        "opening": 0,
+        "received": 200,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 200,
+        "out_at_close": 0
+      },
+      "R08": {
+        "opening": 0,
+        "received": 450,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": -20,
+        "closing": 430,
+        "out_at_close": 430
+      },
+      "R09": {
+        "opening": 0,
+        "received": 300,
+        "consumed": 50,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 10,
+        "closing": 260,
+        "out_at_close": 0
+      },
+      "R10": {
+        "opening": 0,
+        "received": 180,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 180,
+        "out_at_close": 180
+      },
+      "R11": {
+        "opening": 0,
+        "received": 220,
+        "consumed": 50,
+        "returned_to_vendor": 170,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "R12": {
+        "opening": 0,
+        "received": 150,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 150,
+        "out_at_close": 0
+      }
+    },
+    "october_by_design": {
+      "SRT600|SD700": {
+        "opening": 100,
+        "received": 0,
+        "consumed": 60,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 40,
+        "out_at_close": 0
+      },
+      "SRT601|SD701": {
+        "opening": 0,
+        "received": 500,
+        "consumed": 500,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "SRT602|": {
+        "opening": 0,
+        "received": 400,
+        "consumed": 400,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "SRT603|SD703": {
+        "opening": 0,
+        "received": 600,
+        "consumed": 200,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 400,
+        "out_at_close": 0
+      },
+      "|SD704": {
+        "opening": 0,
+        "received": 300,
+        "consumed": 0,
+        "returned_to_vendor": 300,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "SRT605|": {
+        "opening": 0,
+        "received": 120,
+        "consumed": 120,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "SRT606|SD706": {
+        "opening": 0,
+        "received": 250,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 250,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "SRT607|SD707": {
+        "opening": 0,
+        "received": 350,
+        "consumed": 100,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 250,
+        "out_at_close": 0
+      },
+      "|SD709": {
+        "opening": 0,
+        "received": 200,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 200,
+        "out_at_close": 0
+      },
+      "SRT610|SD710": {
+        "opening": 0,
+        "received": 450,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": -20,
+        "closing": 430,
+        "out_at_close": 430
+      },
+      "SRT611|": {
+        "opening": 0,
+        "received": 300,
+        "consumed": 50,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 10,
+        "closing": 260,
+        "out_at_close": 0
+      },
+      "SRT612|SD712": {
+        "opening": 0,
+        "received": 180,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 180,
+        "out_at_close": 180
+      },
+      "SRT613|SD713": {
+        "opening": 0,
+        "received": 220,
+        "consumed": 50,
+        "returned_to_vendor": 170,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 0,
+        "out_at_close": 0
+      },
+      "|SD714": {
+        "opening": 0,
+        "received": 150,
+        "consumed": 0,
+        "returned_to_vendor": 0,
+        "sold": 0,
+        "adjusted": 0,
+        "closing": 150,
+        "out_at_close": 0
+      }
+    },
+    "detail": [
+      {
+        "from": "2026-10-01",
+        "to": "2026-10-31",
+        "total_used": 1480,
+        "excludes_roll": "R14"
+      },
+      {
+        "from": "2026-10-08",
+        "to": "2026-10-08",
+        "rows": [
+          {
+            "roll": "R03",
+            "used": 150
+          }
+        ]
+      }
+    ],
+    "rolls_remaining_total": 1860,
+    "daily": [
+      {
+        "date": "2026-10-08",
+        "roll": "R03",
+        "expect": {
+          "Final weight": 450,
+          "Final status": "Out",
+          "Last movement": "Outward",
+          "Movements that day": 3
+        }
+      },
+      {
+        "date": "2026-10-09",
+        "roll": "R03",
+        "expect": {
+          "Final weight": 400,
+          "Final status": "In stock",
+          "Weight used": 50
+        }
+      },
+      {
+        "date": "2026-10-13",
+        "roll": "R04",
+        "expect": {
+          "Final weight": 0,
+          "Final status": "Returned to vendor",
+          "Lot type": "Invoice",
+          "Remarks": "Color variant / shade variation, Misprint",
+          "Movement note": "Shade off, edges damaged"
+        }
+      },
+      {
+        "date": "2026-10-14",
+        "roll": "R05",
+        "expect": {
+          "Final weight": 0,
+          "Final status": "Sold",
+          "Remarks": ""
+        }
+      },
+      {
+        "date": "2026-10-15",
+        "roll": "R06",
+        "expect": {
+          "Final weight": 250,
+          "Final status": "In stock",
+          "Weight used": 100
+        }
+      },
+      {
+        "date": "2026-10-16",
+        "roll": "R06",
+        "expect": null
+      },
+      {
+        "date": "2026-10-16",
+        "roll": "R07",
+        "expect": {
+          "Final weight": 200,
+          "Final status": "In stock",
+          "Weight used": 0,
+          "Movements that day": 3
+        }
+      },
+      {
+        "date": "2026-10-20",
+        "roll": "R08",
+        "expect": {
+          "Final weight": 430,
+          "Final status": "In stock",
+          "Last movement": "Adjusted",
+          "Movement note": "Stock count: 20 kg short"
+        }
+      },
+      {
+        "date": "2026-10-10",
+        "roll": "R15",
+        "expect": {
+          "Final weight": 0,
+          "Final status": "Consumed",
+          "Lot type": ""
+        }
+      },
+      {
+        "date": "2026-10-28",
+        "roll": "R11",
+        "expect": {
+          "Final status": "Returned to vendor",
+          "Movement note": "किनारा फटा हुआ",
+          "Remarks": "This is Defect"
+        }
+      },
+      {
+        "date": "2026-10-29",
+        "roll": "R12",
+        "expect": {
+          "Final weight": 150,
+          "Final status": "In stock",
+          "Last movement": "Received",
+          "Lot type": "Invoice"
+        }
+      },
+      {
+        "date": "2026-10-30",
+        "roll": "R12",
+        "expect": null
+      },
+      {
+        "date": "2026-10-31",
+        "roll": "R10",
+        "expect": {
+          "Final weight": 180,
+          "Final status": "Out"
+        }
+      },
+      {
+        "date": "2026-11-01",
+        "roll": "R10",
+        "expect": {
+          "Final weight": 130,
+          "Final status": "In stock",
+          "Weight used": 50
+        }
+      },
+      {
+        "date": "2026-10-06",
+        "roll": "R14",
+        "expect": null
+      }
+    ]
+  }
+}

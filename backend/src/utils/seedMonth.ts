@@ -54,12 +54,12 @@ const ROLL_PHOTO = "rolls/2026/10/00000000-0000-4000-8000-000000000001.jpg";
 const LOT_PHOTO = "lots/2026/10/00000000-0000-4000-8000-000000000002.jpg";
 
 type MaterialKey = "A" | "B" | "C";
-const MATERIALS: Record<MaterialKey, string> = { A: "BASE-PAPER", B: "TISSUE", C: "BARRIER" };
+export const MATERIALS: Record<MaterialKey, string> = { A: "BASE-PAPER", B: "TISSUE", C: "BARRIER" };
 
 /** An India-time moment, "MM-DD HH:mm" in 2026. */
 const at = (when: string) => `2026-${when.replace(" ", "T")}:00+05:30`;
 
-const LOTS: Record<string, { document_type: "challan" | "invoice"; document_no: string }> = {
+export const LOTS: Record<string, { document_type: "challan" | "invoice"; document_no: string }> = {
   L1: { document_type: "challan", document_no: `${PREFIX}CH-1001` },
   L2: { document_type: "invoice", document_no: `${PREFIX}INV-2001` },
   L3: { document_type: "challan", document_no: `${PREFIX}CH-1002` },
@@ -77,7 +77,7 @@ interface RollPlan {
 }
 
 /** The rolls, and what each one is for. */
-const ROLLS: RollPlan[] = [
+export const ROLLS: RollPlan[] = [
   // Received before the month: October's opening stock.
   { name: "R13", material: "A", weight: 100, received: "09-28", lot: "L1" },
   // Part used, then finished on a later trip.
@@ -124,7 +124,7 @@ interface Movement {
   remarkCodes?: string[];
 }
 
-const MOVEMENTS: Movement[] = [
+export const MOVEMENTS: Movement[] = [
   { roll: "R13", type: "OUT", date: "10-01 10:00" },
   { roll: "R13", type: "RETURN", date: "10-02 16:00", back: 40 },
   { roll: "R01", type: "OUT", date: "10-05 09:00" },
@@ -174,7 +174,7 @@ const MOVEMENTS: Movement[] = [
 /** opening, received, consumed, returned to vendor, sold, adjusted, closing, out at close.
  *  A material left out is expected to have nothing at all in that period. */
 type Expected = [number, number, number, number, number, number, number, number];
-const EXPECTED: Array<{ label: string; from: string; to: string; figures: Partial<Record<MaterialKey, Expected>> }> = [
+export const EXPECTED: Array<{ label: string; from: string; to: string; figures: Partial<Record<MaterialKey, Expected>> }> = [
   {
     label: "October",
     from: "2026-10-01",
@@ -274,7 +274,7 @@ const EXPECTED: Array<{ label: string; from: string; to: string; figures: Partia
 ];
 
 /** Each roll's own October, in the same order as above. R14 is removed, so it has none. */
-const OCTOBER_BY_ROLL: Record<string, Expected> = {
+export const OCTOBER_BY_ROLL: Record<string, Expected> = {
   R13: [100, 0, 60, 0, 0, 0, 40, 0],
   R01: [0, 500, 500, 0, 0, 0, 0, 0],
   R02: [0, 400, 400, 0, 0, 0, 0, 0],
@@ -292,7 +292,7 @@ const OCTOBER_BY_ROLL: Record<string, Expected> = {
 };
 
 /** What the daily roll report should say about a roll on a day. */
-const DAILY: Array<{ date: string; roll: string; expect: Record<string, string | number> | null }> = [
+export const DAILY: Array<{ date: string; roll: string; expect: Record<string, string | number> | null }> = [
   { date: "2026-10-08", roll: "R03", expect: { "Final weight": 450, "Final status": "Out", "Last movement": "Outward", "Movements that day": 3 } },
   { date: "2026-10-09", roll: "R03", expect: { "Final weight": 400, "Final status": "In stock", "Weight used": 50 } },
   { date: "2026-10-13", roll: "R04", expect: { "Final weight": 0, "Final status": "Returned to vendor", "Lot type": "Invoice", Remarks: "Color variant / shade variation, Misprint", "Movement note": "Shade off, edges damaged" } },
@@ -600,7 +600,7 @@ const BULK_VENDORS = 6;
 /** Papers are picked from the first few of each vendor's, so designs repeat across rolls. */
 const BULK_PAPERS_PER_VENDOR = 25;
 const BULK_REMARKS = ["COLOR-VAR", "MISPRINT", "DEFECT", "DESIGN-MISMATCH"];
-const BULK_LOTS: Plan["lots"] = Object.fromEntries(
+export const BULK_LOTS: Plan["lots"] = Object.fromEntries(
   Array.from({ length: 8 }, (_, i) => {
     const invoice = i % 2 === 1;
     return [
@@ -630,7 +630,7 @@ let cachedBulkPlan: { rolls: RollPlan[]; movements: Movement[]; picks: Array<{ v
 /** Each roll arrives on a day from the 1st to the 22nd, then walks through up to five movements,
  *  each on the same day or a few days later, never past the 27th. Which movement comes next
  *  depends on where the roll is, as on the floor. */
-function bulkPlan() {
+export function bulkPlan() {
   if (cachedBulkPlan) return cachedBulkPlan;
   const rnd = seededRandom(20260901);
   const int = (lo: number, hi: number) => lo + Math.floor(rnd() * (hi - lo + 1));
@@ -733,7 +733,7 @@ const bulkTally = () => (cachedTally ??= computeBulkTally());
 /** The bulk replayed from its own plan, not from the database: each day's flows by material,
  *  each roll's state at the end of each day, and what is left at the end. The verify compares
  *  the reports with this. */
-function computeBulkTally() {
+export function computeBulkTally() {
   const { rolls, movements } = bulkPlan();
   const flows = new Map<string, Record<MaterialKey, Flows>>(); // day -> material -> flows
   const dayEnd = new Map<number, Map<string, RollState>>(); // day -> roll -> state after its last movement that day
@@ -965,7 +965,10 @@ async function main() {
   process.exit(failures ? 1 : 0);
 }
 
-main().catch((err) => {
-  logger.error("seed:month failed:", err);
-  process.exit(1);
-});
+// Only when run as a script: exportSeedScenario imports the plan above without a database.
+if (require.main === module) {
+  main().catch((err) => {
+    logger.error("seed:month failed:", err);
+    process.exit(1);
+  });
+}
