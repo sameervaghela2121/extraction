@@ -18,9 +18,10 @@ class TestRegister(IntegrationTestCase):
         self.assertEqual(pr.docstatus, 1)
         self.assertEqual(pr.items[0].qty, 150)
         self.assertEqual(pr.supplier, r["vendor"])
-        mv = frappe.get_all("Roll Movement", {"roll": r["name"]}, ["movement_type", "weight", "stock_docname"])
+        mv = frappe.get_all("Roll Movement", {"roll": r["name"]}, ["movement_type", "weight", "stock_docname", "stock_documents"])
         self.assertEqual(len(mv), 1)
         self.assertEqual((mv[0].movement_type, mv[0].weight, mv[0].stock_docname), ("IN", 150, pr.name))
+        self.assertEqual(frappe.parse_json(mv[0].stock_documents), [["Purchase Receipt", pr.name]])
         self.assertEqual(batch_qty(r["name"], r["location"]), 150)
 
     def test_lot_is_required(self):

@@ -89,6 +89,7 @@ def register_roll(data: dict) -> dict:
         "remarks": f"Roll {roll_number} received",
         "stock_doctype": "Purchase Receipt",
         "stock_docname": receipt,
+        "stock_documents": frappe.as_json([["Purchase Receipt", receipt]]),
     }).insert(ignore_permissions=True)
     return roll_dict(batch.name)
 
@@ -188,3 +189,90 @@ def _resolve_paper(vendor, rt_code: str | None, delta_code: str | None) -> dict 
     if not match:
         raise RTValidation(f"Paper {label} is not one of {vendor.supplier_name}'s papers")
     return dict(match)
+
+
+EDITABLE = {"roll_number", "barcode", "rt_code", "delta_code", "gsm", "width", "lot", "tag_photo", "barcode_photo"}
+MAX_REMARK_CODES = 20
+
+
+def _live_roll(name: str):
+    batch = frappe.get_doc("Batch", name) if frappe.db.exists("Batch", name) else None
+    if not batch or batch.rt_deleted or not batch.rt_status:
+        raise RTNotFound("Roll not found")
+    return batch
+
+
+def update_roll(name: str, changes: dict) -> dict:
+    """Correct what was read off the label. Status, weights and location only ever change
+    through movements, so a figure never changes without a ledger entry behind it."""
+    if not changes:
+        raise RTValidation("Provide at least one field to update")
+    if "status" in changes:
+        raise RTValidation("A roll's status follows its movements — issue or consume it instead")
+    if "client_id" in changes:
+        raise RTValidation("client_id is set when the roll is created and cannot be changed")
+    for key in changes:
+        if key not in EDITABLE:
+            raise RTValidation(f"{key} cannot be changed here — record a movement instead")
+    batch = _live_roll(name)
+
+    roll_number = normalise_code(changes["roll_number"]) if "roll_number" in changes else batch.rt_roll_number
+    if not roll_number:
+        raise RTValidation("Roll number is required")
+    barcode = normalise_code(changes["barcode"]) if "barcode" in changes else batch.rt_barcode
+    ensure_codes_free(roll_number, barcode, except_roll=batch.name)
+    batch.update({"rt_roll_number": roll_number, "rt_roll_key": roll_number,
+                  "rt_barcode": barcode, "rt_barcode_key": barcode})
+
+    if "rt_code" in changes or "delta_code" in changes:
+        vendor = frappe.db.get_value("Supplier", batch.rt_vendor, ["name", "supplier_name"], as_dict=True)
+        paper = _resolve_paper(vendor, changes.get("rt_code"), changes.get("delta_code"))
+        batch.update({"rt_paper_code": paper.get("paper_code") if paper else None,
+                      "rt_rt_code": paper.get("rt_code") if paper else None,
+                      "rt_delta_code": paper.get("delta_code") if paper else None})
+    for field, label in (("gsm", "GSM"), ("width", "Width")):
+        if field in changes:
+            if flt(changes[field]) <= 0:
+                raise RTValidation(f"{label} must be greater than 0")
+            batch.set(f"rt_{field}", flt(changes[field]))
+    if "lot" in changes:
+        if not changes["lot"] or not frappe.db.exists("Roll Lot", changes["lot"]):
+            raise RTValidation("That lot no longer exists — pick another")
+        batch.rt_lot = changes["lot"]
+    for field in ("tag_photo", "barcode_photo"):
+        if field in changes:
+            batch.set(f"rt_{field}", changes[field])
+    batch.flags.ignore_permissions = True
+    batch.save()
+    return roll_dict(batch.name)
+
+
+def set_remark_codes(name: str, codes: list[str]) -> dict:
+    codes = list(dict.fromkeys(codes or []))
+    if len(codes) > MAX_REMARK_CODES:
+        raise RTValidation("Too many remark codes")
+    if codes and frappe.db.count("RT Remark", {"name": ["in", codes]}) != len(codes):
+        raise RTValidation("One or more remarks don't exist")
+    batch = _live_roll(name)
+    batch.set("rt_remark_codes", [{"remark": c} for c in codes])
+    batch.flags.ignore_permissions = True
+    batch.save()
+    return roll_dict(batch.name)
+
+
+def delete_roll(name: str) -> dict:
+    """Mark the roll and its movements deleted and cancel every stock document they made,
+    newest first, so the batch is back to 0. Nothing is erased: a wrong click can be traced
+    and undone, and the change reaches every device's next delta pull (modified moves)."""
+    batch = _live_roll(name)
+    movements = frappe.get_all("Roll Movement", filters={"roll": batch.name, "deleted": 0},
+                               fields=["name", "stock_documents"], order_by="creation desc, name desc")
+    for mv in movements:
+        for doctype, docname in reversed(frappe.parse_json(mv.stock_documents) or []):
+            doc = frappe.get_doc(doctype, docname)
+            if doc.docstatus == 1:
+                doc.flags.ignore_permissions = True
+                doc.cancel()
+        frappe.db.set_value("Roll Movement", mv.name, "deleted", 1)
+    frappe.db.set_value("Batch", batch.name, {"rt_deleted": 1, "rt_roll_key": None, "rt_barcode_key": None})
+    return {"name": batch.name, "deleted": True}
