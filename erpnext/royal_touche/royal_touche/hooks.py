@@ -9,3 +9,9 @@ required_apps = ["erpnext"]
 
 after_install = "royal_touche.setup.install.after_install"
 after_migrate = "royal_touche.setup.install.ensure_setup"
+
+doc_events = {
+    "Supplier": {"validate": "royal_touche.masters.supplier_validate"},
+    "Item": {"before_validate": "royal_touche.masters.item_before_validate"},
+    "Warehouse": {"validate": "royal_touche.masters.warehouse_validate"},
+}

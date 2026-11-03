@@ -13,6 +13,9 @@ def after_install():
 
 
 def ensure_setup():
+    from royal_touche.setup.custom_fields import ensure_custom_fields
+
+    ensure_custom_fields()
     _ensure_roles()
     _ensure_stock_settings()
     _ensure_company()
@@ -28,6 +31,9 @@ def _ensure_roles():
 def _ensure_stock_settings():
     settings = frappe.get_single("Stock Settings")
     settings.allow_negative_stock = 0
+    settings.allow_negative_stock_for_batch = 0
+    # Every roll is a batch; ERPNext 16 refuses batch-tracked items until this is on.
+    settings.enable_serial_and_batch_no_for_item = 1
     # Each roll is its own batch and keeps its own cost (spec §7). Older sites carry this
     # switch; new ones are batch-wise already.
     if settings.meta.has_field("do_not_use_batchwise_valuation"):

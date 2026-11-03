@@ -1,0 +1,68 @@
+{
+ "doctype": "DocType",
+ "name": "RT Remark",
+ "module": "Royal Touche",
+ "custom": 0,
+ "istable": 0,
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "remark_code",
+  "label",
+  "sort_order",
+  "disabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "remark_code",
+   "fieldtype": "Data",
+   "label": "Remark code",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort order"
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "default": "0",
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "modified": "2026-11-03 19:30:00.000000",
+ "owner": "Administrator",
+ "creation": "2026-11-03 19:30:00.000000",
+ "modified_by": "Administrator",
+ "index_web_pages_for_search": 0,
+ "states": [],
+ "links": [],
+ "actions": [],
+ "title_field": "label"
+}

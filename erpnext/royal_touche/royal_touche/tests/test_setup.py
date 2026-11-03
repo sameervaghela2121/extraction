@@ -11,6 +11,8 @@ class TestSetup(IntegrationTestCase):
         ensure_setup()
         ensure_setup()
         self.assertEqual(frappe.db.get_single_value("Stock Settings", "allow_negative_stock"), 0)
+        self.assertEqual(frappe.db.get_single_value("Stock Settings", "enable_serial_and_batch_no_for_item"), 1)
+        self.assertEqual(frappe.db.get_single_value("Stock Settings", "allow_negative_stock_for_batch"), 0)
         self.assertEqual(frappe.db.get_value("Company", "Royale Touche", "abbr"), "RT")
         self.assertTrue(frappe.db.get_value("Company", "Royale Touche", "enable_perpetual_inventory"))
         self.assertEqual(UNASSIGNED_WAREHOUSE, "Unassigned - RT")
