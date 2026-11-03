@@ -114,10 +114,15 @@ const stockTransactionSchema = new Schema<IStockTransaction>(
 // predates the field. See utils/idempotency.ts.
 stockTransactionSchema.index({ client_id: 1 }, { unique: true, sparse: true });
 
-// Serves the delta pull, same as the roll's.
-// _id too: the pull sorts { updatedAt, _id }, and without it Mongo sorts the tie-breaker
-// in memory on every page.
-stockTransactionSchema.index({ updatedAt: 1, _id: 1 });
+// Serves the delta pull, same as the roll's. _id too: the pull sorts { updatedAt, _id }, and
+// without it Mongo sorts the tie-breaker in memory on every page. deleted_at first because the
+// pull always asks for deleted_at: null, so its per-page count reads only this index; without it
+// each count fetched every movement, which a new device's first sync does once a page.
+stockTransactionSchema.index({ deleted_at: 1, updatedAt: 1, _id: 1 });
+
+// The consumption report walks every roll's movements in the order they were written. In that
+// order here, it streams them from the index instead of sorting the whole ledger in memory.
+stockTransactionSchema.index({ roll_id: 1, createdAt: 1, _id: 1 });
 
 // A roll's history, newest first — the history screens, the app, the RETURN's lookup of its
 // own OUT, and the weight correction's "last two rows". Answered from the index, sort

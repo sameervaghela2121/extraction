@@ -65,9 +65,10 @@ export async function loadUsableLocation(id: string): Promise<LocationRef> {
 }
 
 /** Shared by the GET list (the app's picker) and the admin panel's paged search. */
-function filterOf(query: { q?: string; godown?: string; status?: MasterStatus }): FilterQuery<ILocation> {
+function filterOf(query: { q?: string; godown?: string; status?: MasterStatus; updated_after?: Date }): FilterQuery<ILocation> {
   const filter: FilterQuery<ILocation> = {};
   if (query.status) filter.status = query.status;
+  if (query.updated_after) filter.updatedAt = { $gte: query.updated_after };
   if (query.godown) filter.godown = query.godown;
   if (query.q) {
     const rx = new RegExp(escapeRegex(query.q), "i");
@@ -87,7 +88,7 @@ const SORTS: Record<NonNullable<z.infer<typeof searchLocationsSchema>["sort"]>, 
 export const locationsService = {
   // No pagination, same reasoning as vendors and materials: master data, read whole into
   // a picker. There will be a handful of bays, not thousands.
-  async list(query: { q?: string; godown?: string; status?: MasterStatus }) {
+  async list(query: { q?: string; godown?: string; status?: MasterStatus; updated_after?: Date }) {
     const filter = filterOf(query);
     // sort_order first: a picker should follow the walk through the warehouse, not the
     // alphabet. Name breaks ties and covers rows nobody has ordered yet.
