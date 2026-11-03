@@ -298,8 +298,11 @@ no photos yet, so nothing needs moving.)
 
 - Local: a native `bench` install on the developer machine (no Docker), with local
   MariaDB and Redis.
-- Dev and prod: separate GCE VMs in `asia-south1`, Docker-based, nginx + HTTPS on a
-  subdomain each. Daily backups (database + files) to GCS.
+- Dev and prod: separate GCE VMs in `asia-south1`, **no Docker**: a native Frappe bench on
+  each, set up for production with `bench setup production` (nginx in front, supervisor
+  keeping the web server, workers and scheduler running), MariaDB and Redis installed on
+  the VM, HTTPS on a subdomain each (Let's Encrypt via bench). Daily backups (database +
+  files) to GCS.
 - Data to move from prod MongoDB: 75 vendors with 1,532 paper codes, 6 locations,
   3 raw materials, 3 remarks, 5 users. Rolls, lots and movements are 0 today; if that
   changes before cut-over, the import must carry them too.
