@@ -112,6 +112,14 @@ def as_user(user: str):
 PAPER = {"paper_code": "55036-29", "rt_code": "868", "delta_code": "D1"}
 
 
+def today_ist(days_ago: int = 0) -> str:
+    from datetime import datetime, timedelta
+
+    from royal_touche.dates import IST
+
+    return (datetime.now(IST) - timedelta(days=days_ago)).date().isoformat()
+
+
 def make_lot(document_type: str = "challan", document_no: str | None = None, client_id: str | None = None) -> str:
     from royal_touche.lots import create_lot
 
@@ -133,13 +141,13 @@ def base_roll(**over) -> dict:
         "width": 1250,
         "weight": 150,
         "location": make_location("GODOWN-A-1", "Godown A side 1", "Godown A", 10),
-        "date": "2026-11-03",
+        "date": today_ist(),
     }
     data.update(over)
     return data
 
 
 def batch_qty(batch: str, warehouse: str | None = None) -> float:
-    from erpnext.stock.doctype.batch.batch import get_batch_qty
+    from royal_touche.checks import batch_kg
 
-    return float(get_batch_qty(batch_no=batch, warehouse=warehouse) or 0)
+    return batch_kg(batch, warehouse)
