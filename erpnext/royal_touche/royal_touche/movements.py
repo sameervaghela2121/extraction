@@ -9,7 +9,7 @@ import frappe
 from frappe.utils import flt, now_datetime
 
 from royal_touche import replay
-from royal_touche.dates import as_system, check_operator_date
+from royal_touche.dates import as_system, check_not_future, check_operator_date
 from royal_touche.errors import RTConflict, RTValidation
 from royal_touche.rolls import find_roll, roll_dict, usable_location
 from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
@@ -49,6 +49,8 @@ def record_movement(data: dict) -> dict:
     when = data.get("transaction_date") or now_datetime()
     if mtype in OPERATOR_DATED:
         check_operator_date(when, data.get("recorded_at"))
+    else:
+        check_not_future(when)
 
     roll = frappe.get_doc("Batch", find_roll(data.get("roll") or ""))
     if roll.rt_status == "SOLD" and mtype not in ("CONSUME", "IN"):

@@ -31,5 +31,12 @@ class TestDates(IntegrationTestCase):
         with self.assertRaisesRegex(RTValidation, "The date cannot be in the future"):
             check_operator_date("2026-11-04T10:00:00+05:30", "2026-11-04T10:00:00+05:30", now=ist("2026-11-03 23:00"))
 
-    def test_without_recorded_at_only_the_future_rule_applies(self):
-        check_operator_date("2026-10-01T10:00:00+05:30", None, now=ist("2026-11-03 11:00"))
+    def test_without_recorded_at_the_server_time_is_the_reference(self):
+        check_operator_date("2026-11-02T10:00:00+05:30", None, now=ist("2026-11-03 11:00"))
+        with self.assertRaisesRegex(RTValidation, "The date must be today or yesterday"):
+            check_operator_date("2026-10-01T10:00:00+05:30", None, now=ist("2026-11-03 11:00"))
+
+    def test_recorded_at_cannot_be_after_server_today(self):
+        # A tablet cannot widen the window by claiming it saved the movement in the future.
+        with self.assertRaisesRegex(RTValidation, "The saved-on time cannot be in the future"):
+            check_operator_date("2026-11-04T10:00:00+05:30", "2026-11-05T10:00:00+05:30", now=ist("2026-11-04 01:00"))

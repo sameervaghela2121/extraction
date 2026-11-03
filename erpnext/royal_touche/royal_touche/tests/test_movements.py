@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -167,6 +167,15 @@ class TestMovements(IntegrationTestCase):
     def test_operator_date_rule_applies(self):
         with self.assertRaisesRegex(RTValidation, "The date must be today or yesterday"):
             move(self.roll, "OUT", location=self.running, transaction_date="2026-01-01T10:00:00+05:30")
+
+    def test_no_movement_type_can_be_dated_in_the_future(self):
+        tomorrow = (datetime.now(IST) + timedelta(days=1)).isoformat(timespec="seconds")
+        with self.assertRaisesRegex(RTValidation, "The date cannot be in the future"):
+            move(self.roll, "ADJUSTMENT", new_weight=100, remarks="x", transaction_date=tomorrow, recorded_at=tomorrow)
+        self.out()
+        move(self.roll, "RETURN", returned_weight=100)
+        with self.assertRaisesRegex(RTValidation, "The date cannot be in the future"):
+            move(self.roll, "IN", weight=10, transaction_date=tomorrow, recorded_at=tomorrow)
 
     def test_same_client_id_returns_the_first_movement(self):
         cid = frappe.generate_hash(length=16)
