@@ -58,9 +58,10 @@ function toResponse(m: IRawMaterial) {
 }
 
 /** Shared by the GET list (the app's picker) and the admin panel's paged search. */
-function filterOf(query: { q?: string; status?: MasterStatus; category?: string }): FilterQuery<IRawMaterial> {
+function filterOf(query: { q?: string; status?: MasterStatus; category?: string; updated_after?: Date }): FilterQuery<IRawMaterial> {
   const filter: FilterQuery<IRawMaterial> = {};
   if (query.status) filter.status = query.status;
+  if (query.updated_after) filter.updatedAt = { $gte: query.updated_after };
   if (query.category) filter.category = query.category;
   if (query.q) {
     const rx = new RegExp(escapeRegex(query.q), "i");
@@ -79,7 +80,7 @@ const SORTS: Record<NonNullable<z.infer<typeof searchRawMaterialsSchema>["sort"]
 
 export const rawMaterialsService = {
   // No pagination, same reasoning as vendors: master data, read whole into pickers.
-  async list(query: { q?: string; status?: MasterStatus; category?: string }) {
+  async list(query: { q?: string; status?: MasterStatus; category?: string; updated_after?: Date }) {
     const filter = filterOf(query);
     const materials = await RawMaterial.find(filter).lean<IRawMaterial[]>();
     /**

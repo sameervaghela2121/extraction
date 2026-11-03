@@ -42,6 +42,10 @@ export const updateVendorSchema = createVendorSchema
 export const listVendorsQuerySchema = z.object({
   q: z.string().trim().optional(),
   status: z.enum(MASTER_STATUSES).optional(),
+  // A device's delta pull: everything saved at or after its last checkpoint, every status, so a
+  // master switched to inactive reaches it too. Inclusive, so a save in the same millisecond as
+  // the checkpoint is never missed; the device writes the rows over what it has.
+  updated_after: z.coerce.date().optional(),
 });
 
 /** One page of the admin panel's vendor list — see search.validators.ts. */

@@ -96,4 +96,7 @@ const vendorSchema = new Schema<IVendor>(
 // the same null and refuse to build.
 vendorSchema.index({ client_id: 1 }, { unique: true, sparse: true });
 
+// The devices' delta pull: what changed since their last sync (see list's updated_after).
+vendorSchema.index({ updatedAt: 1 });
+
 export const Vendor = model<IVendor>("Vendor", vendorSchema);

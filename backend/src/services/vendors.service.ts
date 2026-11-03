@@ -68,9 +68,10 @@ function toRowResponse(v: Omit<IVendor, "papers">) {
 }
 
 /** Shared by the GET list (the app's picker) and the admin panel's paged search. */
-function filterOf(query: { q?: string; status?: MasterStatus }): FilterQuery<IVendor> {
+function filterOf(query: { q?: string; status?: MasterStatus; updated_after?: Date }): FilterQuery<IVendor> {
   const filter: FilterQuery<IVendor> = {};
   if (query.status) filter.status = query.status;
+  if (query.updated_after) filter.updatedAt = { $gte: query.updated_after };
   if (query.q) {
     const rx = new RegExp(escapeRegex(query.q), "i");
     filter.$or = [{ name: rx }, { vendor_code: rx }, { gst_number: rx }];
@@ -100,7 +101,7 @@ type PaperRow = {
 export const vendorsService = {
   // No pagination: a vendor master is a few hundred rows at most, and every caller
   // (pickers, dropdowns) wants the whole list anyway.
-  async list(query: { q?: string; status?: MasterStatus }) {
+  async list(query: { q?: string; status?: MasterStatus; updated_after?: Date }) {
     const filter = filterOf(query);
     const vendors = await Vendor.find(filter).sort({ name: 1 }).lean<IVendor[]>();
     return vendors.map(toResponse);

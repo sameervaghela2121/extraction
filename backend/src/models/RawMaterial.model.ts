@@ -37,4 +37,7 @@ const rawMaterialSchema = new Schema<IRawMaterial>(
   { timestamps: true, collection: "raw_materials" },
 );
 
+// The devices' delta pull: what changed since their last sync (see list's updated_after).
+rawMaterialSchema.index({ updatedAt: 1 });
+
 export const RawMaterial = model<IRawMaterial>("RawMaterial", rawMaterialSchema);

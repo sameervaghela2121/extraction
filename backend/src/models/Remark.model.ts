@@ -32,4 +32,7 @@ const remarkSchema = new Schema<IRemark>(
   { timestamps: true },
 );
 
+// The devices' delta pull: what changed since their last sync (see list's updated_after).
+remarkSchema.index({ updatedAt: 1 });
+
 export const Remark = model<IRemark>("Remark", remarkSchema);
