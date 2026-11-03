@@ -122,3 +122,29 @@ class TestApiPermissions(IntegrationTestCase):
             res = movements_api.record(movement_type="SELL", roll=roll2, buyer=buyer, rate_per_roll=2500,
                                        transaction_date=now_iso(), recorded_at=now_iso())
         self.assertEqual(res["movement"]["rate_per_roll"], 2500)
+
+    def test_report_csvs_are_for_supervisors_and_up(self):
+        from royal_touche.api import reports as reports_api
+
+        calls = [
+            (reports_api.consumption_summary_csv, {"from_date": "2026-10-01", "to_date": "2026-10-31", "group": "material"}),
+            (reports_api.consumption_detail_csv, {"from_date": "2026-10-01", "to_date": "2026-10-31"}),
+            (reports_api.daily_rolls_csv, {"date": "2026-10-08"}),
+        ]
+        for fn, args in calls:
+            with as_user(self.operator), self.assertRaises(frappe.PermissionError):
+                fn(**args)
+            with as_user(self.supervisor):
+                fn(**args)
+                self.assertEqual(frappe.response["type"], "download")
+                self.assertTrue(frappe.response["filecontent"].startswith("﻿"), fn.__name__)
+                self.assertTrue(frappe.response["filename"].endswith(".csv"), fn.__name__)
+
+    def test_consumption_group_and_dates_are_checked(self):
+        from royal_touche.api import reports as reports_api
+
+        with as_user(self.supervisor):
+            with self.assertRaisesRegex(frappe.ValidationError, "from must be on or before to"):
+                reports_api.consumption_summary_csv(from_date="2026-10-31", to_date="2026-10-01")
+            with self.assertRaisesRegex(frappe.ValidationError, "Group by material or design"):
+                reports_api.consumption_summary_csv(from_date="2026-10-01", to_date="2026-10-31", group="vendor")

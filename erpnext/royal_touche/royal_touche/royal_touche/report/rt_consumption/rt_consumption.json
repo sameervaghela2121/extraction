@@ -1,0 +1,31 @@
+{
+ "doctype": "Report",
+ "name": "RT Consumption",
+ "report_name": "RT Consumption",
+ "report_type": "Script Report",
+ "ref_doctype": "Roll Movement",
+ "module": "Royal Touche",
+ "is_standard": "Yes",
+ "disabled": 0,
+ "add_total_row": 0,
+ "prepared_report": 0,
+ "roles": [
+  {
+   "role": "Godown Supervisor"
+  },
+  {
+   "role": "RT Super Admin"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "filters": [],
+ "columns": [],
+ "json": "{}",
+ "letter_head": null,
+ "creation": "2026-11-03 21:00:00.000000",
+ "modified": "2026-11-03 21:00:00.000000",
+ "owner": "Administrator",
+ "modified_by": "Administrator"
+}
