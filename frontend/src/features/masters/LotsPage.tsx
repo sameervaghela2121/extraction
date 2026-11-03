@@ -3,6 +3,8 @@ import { Image as ImageIcon, Plus } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { lotsApi } from "../../api/lots.api";
+import ImageDropzone from "../../components/ImageDropzone";
+import SearchSelect from "../../components/SearchSelect";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Pager, { PAGE_SIZE } from "./Pager";
 import type { Lot, LotDocumentType } from "../../types";
@@ -27,7 +29,6 @@ export default function LotsPage() {
   const [documentType, setDocumentType] = useState<LotDocumentType | "">("");
   const [documentNo, setDocumentNo] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // The photo needs the detail response — the list does not sign one URL per row.
@@ -53,12 +54,7 @@ export default function LotsPage() {
   }, [load]);
   useEffect(() => setPage(1), [search]);
 
-  useEffect(() => {
-    if (!photo) return setPreview(null);
-    const url = URL.createObjectURL(photo);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photo]);
+  const photoLabel = documentType ? `${documentTypeLabel(documentType)} photo` : "Challan / invoice photo";
 
   const openCreate = () => {
     setDocumentType("");
@@ -168,21 +164,21 @@ export default function LotsPage() {
 
       <Modal isOpen={creating} onClose={() => !saving && setCreating(false)} title="New lot" size="medium">
         <form onSubmit={submit} style={{ display: "grid", gap: 14, padding: 16 }}>
-          <label style={{ display: "grid", gap: 6 }}>
+          {/* Divs rather than labels: a label would hand clicks on the list back to its input. */}
+          <div style={{ display: "grid", gap: 6 }}>
             <span>
               Document type <span style={{ color: "var(--rt-error)" }}>*</span>
             </span>
-            <select
-              className="select"
+            <SearchSelect
+              placeholder="Select challan or invoice"
               value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as LotDocumentType | "")}
-              autoFocus
-            >
-              <option value="">Select challan or invoice</option>
-              <option value="challan">Challan</option>
-              <option value="invoice">Invoice</option>
-            </select>
-          </label>
+              onChange={(value) => setDocumentType(value as LotDocumentType)}
+              options={[
+                { value: "challan", label: "Challan" },
+                { value: "invoice", label: "Invoice" },
+              ]}
+            />
+          </div>
           <label style={{ display: "grid", gap: 6 }}>
             <span>
               {documentType ? `${documentTypeLabel(documentType)} number` : "Challan / invoice number"}{" "}
@@ -195,25 +191,12 @@ export default function LotsPage() {
               maxLength={100}
             />
           </label>
-          <label style={{ display: "grid", gap: 6 }}>
+          <div style={{ display: "grid", gap: 6 }}>
             <span>
-              {documentType ? `${documentTypeLabel(documentType)} photo` : "Challan / invoice photo"}{" "}
-              <span style={{ color: "var(--rt-error)" }}>*</span>
+              {photoLabel} <span style={{ color: "var(--rt-error)" }}>*</span>
             </span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            />
-          </label>
-          {preview && (
-            <img
-              src={preview}
-              alt={documentType ? documentTypeLabel(documentType) : "Document"}
-              style={{ maxHeight: 240, objectFit: "contain", borderRadius: 8, border: "1px solid var(--rt-card-border)" }}
-            />
-          )}
+            <ImageDropzone file={photo} onChange={setPhoto} label={photoLabel} disabled={saving} />
+          </div>
           <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn" onClick={() => setCreating(false)} disabled={saving}>
               Cancel

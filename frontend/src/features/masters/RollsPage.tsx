@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiErrorMessage } from "../../api/client";
 import { rollsApi } from "../../api/rolls.api";
@@ -9,6 +9,7 @@ import { deltaCodes, rtCodes, supplierCodes } from "./rollPapers";
 import SearchSelect from "../../components/SearchSelect";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import { documentTypeLabel } from "./lotDocument";
+import NewRollModal from "./NewRollModal";
 import { nextSort, SortHeader, type Sort } from "./sorting";
 import type {
   GodownLocation,
@@ -18,8 +19,8 @@ import type {
 } from "../../types";
 
 /**
- * Rolls — edit and delete only. Registration happens on the phone, where the camera and the
- * physical roll are; this screen exists to correct what was typed there.
+ * Rolls — register, edit and delete. Most registration happens on the app, where the camera and
+ * the physical roll are; this screen can register one too, and corrects what was typed there.
  *
  * Two rules from the API shape the whole form:
  *
@@ -127,6 +128,7 @@ export default function RollsPage() {
    */
   const [sort, setSort] = useState<Sort>({ key: "date", dir: "desc" });
 
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MaterialRoll | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -350,7 +352,12 @@ export default function RollsPage() {
     <div className="list-page">
       <PageHeader
         title="Rolls"
-        subtitle="Rolls received into the godown. Registration happens on the app — this is for correcting it."
+        subtitle="Rolls received into the godown. Register one here or on the app, and correct what was entered."
+        actions={
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Plus size={16} /> New roll
+          </button>
+        }
       />
 
       <div className="row gap-8" style={{ marginBottom: 12, flexWrap: "wrap" }}>
@@ -813,6 +820,21 @@ export default function RollsPage() {
         }
         .roll-history-balance { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
       `}</style>
+
+      {creating && (
+        <NewRollModal
+          materials={materials}
+          locations={locations}
+          onClose={() => setCreating(false)}
+          onCreated={(roll) => {
+            setCreating(false);
+            notify(`Roll ${roll.roll_number} created`);
+            // Newest first, so it heads the first page unless a search hides it.
+            setPage(1);
+            load(1, search);
+          }}
+        />
+      )}
     </div>
   );
 }

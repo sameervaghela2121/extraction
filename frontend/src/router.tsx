@@ -20,6 +20,7 @@ import GeneralVoucherDetailPage from "./features/generalVouchers/GeneralVoucherD
 import UserManagementPage from "./features/users/UserManagementPage";
 import MasterDataPage from "./features/masters/MasterDataPage";
 import BarcodeGeneratorPage from "./features/barcodes/BarcodeGeneratorPage";
+import ReportsPage from "./features/reports/ReportsPage";
 import DownloadAppPage from "./features/misc/DownloadAppPage";
 import NoAccessPage from "./features/misc/NoAccessPage";
 
@@ -58,6 +59,8 @@ export const router = createRouter([
               { path: "/masters", element: <Navigate to="/masters/vendors" replace /> },
               { path: "/masters/:section", element: <MasterDataPage /> },
               { path: "/barcodes", element: <BarcodeGeneratorPage /> },
+              { path: "/reports", element: <ReportsPage /> },
+              { path: "/reports/:report", element: <ReportsPage /> },
               { path: "/download-app", element: <DownloadAppPage /> },
             ],
           },

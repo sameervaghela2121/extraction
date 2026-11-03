@@ -13,6 +13,7 @@ import {
   Database,
   ScanBarcode,
   Smartphone,
+  BarChart3,
   ChevronDown,
   LogOut,
   type LucideIcon,
@@ -79,6 +80,7 @@ const NAV: NavItem[] = [
       { to: "/masters/rolls", label: "Rolls" },
     ],
   },
+  { to: "/reports", label: "Reports", icon: BarChart3, supervisorVisible: true },
   { to: "/users", label: "User management", icon: Users, adminOnly: true },
   { to: "/download-app", label: "Download app", icon: Smartphone, supervisorVisible: true },
 
