@@ -1,6 +1,12 @@
-"""Builders for the ERPNext documents that move a roll's stock. Every one is submitted with
-ignore_permissions — godown roles may not create these directly (Global Constraints); our
-business actions decide, these only write. Rates are 0 unless a rate per roll is given."""
+"""Builders for the ERPNext documents that move a roll's stock.
+
+Godown roles have no rights on stock documents (Global Constraints): our business actions
+check every rule and role first, then post these as the system user — ERPNext checks the
+session user's permissions on its own internal records (accounts, serial/batch bundles)
+even when a document skips its own check. The person who acted is recorded as the owner.
+Rates are 0 unless a rate per roll is given."""
+
+from contextlib import contextmanager
 
 import frappe
 from frappe.utils import flt, get_datetime
@@ -21,12 +27,35 @@ def _rate(qty: float, rate_per_roll: float | None) -> float:
     return flt(rate_per_roll) / flt(qty)
 
 
+@contextmanager
+def as_system():
+    """Run ERPNext's own writes as Administrator; yields the real user's id."""
+    actor = frappe.session.user
+    frappe.set_user("Administrator")
+    try:
+        yield actor
+    finally:
+        frappe.set_user(actor)
+
+
+def _owned_by(doctype: str, name: str, actor: str) -> str:
+    frappe.db.set_value(doctype, name, "owner", actor, update_modified=False)
+    return name
+
+
 def _submit(doc: dict) -> str:
-    d = frappe.get_doc(doc)
-    d.flags.ignore_permissions = True
-    d.insert()
-    d.submit()
-    return d.name
+    with as_system() as actor:
+        d = frappe.get_doc(doc)
+        d.insert()
+        d.submit()
+    return _owned_by(d.doctype, d.name, actor)
+
+
+def cancel(doctype: str, name: str) -> None:
+    with as_system():
+        d = frappe.get_doc(doctype, name)
+        if d.docstatus == 1:
+            d.cancel()
 
 
 def purchase_receipt(batch: str, supplier: str, item: str, qty: float, warehouse: str, when,
@@ -64,14 +93,18 @@ def stock_entry(purpose: str, item: str, batch: str, qty: float, when, source: s
 def purchase_return(receipt: str, batch: str, qty: float, warehouse: str, when) -> str:
     from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
-    ret = make_return_doc("Purchase Receipt", receipt)
+    with as_system() as actor:
+        name = _purchase_return(make_return_doc("Purchase Receipt", receipt), batch, qty, warehouse, when)
+    return _owned_by("Purchase Receipt", name, actor)
+
+
+def _purchase_return(ret, batch: str, qty: float, warehouse: str, when) -> str:
     row = ret.items[0]
     row.update({"qty": -qty, "received_qty": -qty, "rejected_qty": 0, "stock_qty": -qty, "warehouse": warehouse,
                 "batch_no": batch, "use_serial_batch_fields": 1, "serial_and_batch_bundle": None,
                 "allow_zero_valuation_rate": 1})
     when = get_datetime(when)
     ret.update({"posting_date": when.date(), "posting_time": when.strftime("%H:%M:%S"), "set_posting_time": 1})
-    ret.flags.ignore_permissions = True
     ret.insert()
     ret.submit()
     return ret.name

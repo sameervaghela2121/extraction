@@ -17,9 +17,23 @@ def ensure_setup():
 
     ensure_custom_fields()
     _ensure_roles()
+    from royal_touche.setup.permissions import ensure_permissions
+
+    ensure_permissions()
     _ensure_stock_settings()
     _ensure_company()
     _ensure_unassigned_warehouse()
+    _ensure_delta_indexes()
+
+
+# The tablet pulls these by "changed since" (modified, name); ERPNext's own tables have no
+# index on modified, ours get one from their sort field.
+DELTA_SYNCED = ("Batch", "Supplier", "Item", "Warehouse", "Customer")
+
+
+def _ensure_delta_indexes():
+    for doctype in DELTA_SYNCED:
+        frappe.db.add_index(doctype, ["modified", "name"], index_name="rt_modified_name")
 
 
 def _ensure_roles():

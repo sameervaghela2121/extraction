@@ -9,6 +9,7 @@ from royal_touche import replay
 from royal_touche.errors import RTDuplicate, RTNotFound, RTValidation
 from royal_touche.masters import normalise_code
 from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
+from royal_touche.stock_docs import cancel as cancel_stock_document
 from royal_touche.stock_docs import purchase_receipt
 
 ROLL_TAKEN = "A roll with this number already exists"
@@ -272,10 +273,7 @@ def delete_roll(name: str) -> dict:
                                fields=["name", "stock_documents"], order_by="creation desc, name desc")
     for mv in movements:
         for doctype, docname in reversed(frappe.parse_json(mv.stock_documents) or []):
-            doc = frappe.get_doc(doctype, docname)
-            if doc.docstatus == 1:
-                doc.flags.ignore_permissions = True
-                doc.cancel()
+            cancel_stock_document(doctype, docname)
         frappe.db.set_value("Roll Movement", mv.name, "deleted", 1)
     frappe.db.set_value("Batch", batch.name, {"rt_deleted": 1, "rt_roll_key": None, "rt_barcode_key": None})
     return {"name": batch.name, "deleted": True}

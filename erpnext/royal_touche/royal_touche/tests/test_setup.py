@@ -21,3 +21,13 @@ class TestSetup(IntegrationTestCase):
         for role in RT_ROLES:
             self.assertTrue(frappe.db.exists("Role", role), role)
         self.assertTrue(frappe.db.exists("UOM", "Kg"))
+
+    def test_delta_synced_tables_have_a_modified_index(self):
+        ensure_setup()
+        for doctype in ("Batch", "Supplier", "Item", "Warehouse", "Customer", "Roll Movement", "Roll Lot", "RT Remark"):
+            indexed = frappe.db.sql(
+                "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() "
+                "AND table_name = %s AND column_name = 'modified' AND seq_in_index = 1",
+                f"tab{doctype}",
+            )
+            self.assertTrue(indexed, doctype)
