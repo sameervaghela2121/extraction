@@ -1,0 +1,83 @@
+{
+ "doctype": "DocType",
+ "name": "Barcode Batch",
+ "module": "Royal Touche",
+ "custom": 0,
+ "istable": 0,
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "prefix",
+  "date",
+  "from_number",
+  "to_number",
+  "kind",
+  "deleted"
+ ],
+ "fields": [
+  {
+   "fieldname": "prefix",
+   "fieldtype": "Data",
+   "label": "Prefix",
+   "reqd": 1,
+   "in_list_view": 1,
+   "length": 12
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "from_number",
+   "fieldtype": "Int",
+   "label": "From",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "to_number",
+   "fieldtype": "Int",
+   "label": "To",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "barcode\nqr",
+   "default": "barcode"
+  },
+  {
+   "fieldname": "deleted",
+   "fieldtype": "Check",
+   "label": "Deleted",
+   "default": "0"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "modified": "2026-11-03 19:40:00.000000",
+ "owner": "Administrator",
+ "creation": "2026-11-03 19:40:00.000000",
+ "modified_by": "Administrator",
+ "index_web_pages_for_search": 0,
+ "states": [],
+ "links": [],
+ "actions": []
+}
