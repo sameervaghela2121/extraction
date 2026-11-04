@@ -110,6 +110,21 @@ export async function uploadFile(file: File): Promise<string> {
   return (res.data.message as { file_url: string }).file_url;
 }
 
+/**
+ * A private file as an address an <img> or a link can use. Private files need the login token,
+ * which an <img> tag can't send, so the file is fetched with it and handed over as a local blob
+ * URL. Returns null for no path, or when the file can't be read (shown as "no photo").
+ */
+export async function fileObjectUrl(path: string | null | undefined): Promise<string | null> {
+  if (!path) return null;
+  try {
+    const res = await api.get(path.replace(/^\/?/, "/"), { baseURL: BASE_URL.replace(/\/api\/?$/, ""), responseType: "blob" });
+    return URL.createObjectURL(res.data as Blob);
+  } catch {
+    return null;
+  }
+}
+
 /** The address the browser loads a stored file from (same origin as the API). */
 export function fileUrl(path: string | null | undefined): string | null {
   if (!path) return null;
