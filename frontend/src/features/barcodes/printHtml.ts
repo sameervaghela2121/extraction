@@ -5,7 +5,7 @@ import type { LabelKind } from "./labelSizes";
 
 /**
  * A print-only HTML document for a run, handed to `window.print()` via a hidden iframe
- * (see printBatch in BarcodeGeneratorPage.tsx) instead of a downloaded PDF.
+ * (see printLabels in BarcodeGeneratorPage.tsx) instead of a downloaded PDF.
  *
  * This exists because a PDF's own page size gets reinterpreted by whichever PDF viewer
  * prints it — Chromium's built-in viewer in particular has a known habit of auto-rotating a
@@ -15,14 +15,13 @@ import type { LabelKind } from "./labelSizes";
  * printed directly by the browser's own layout engine instead of through that translation
  * layer, so there's no PDF page geometry for a viewer to reinterpret in the first place.
  *
- * Same margins/bar-height math as pdf.ts and tspl.ts (computeLabelLayoutMm /
- * computeQrLabelLayoutMm), just expressed in CSS mm instead of PDF points or printer dots, so
- * this looks like the same label regardless of which of the three you end up using.
+ * Margins and bar height come from labelLayout.ts (computeLabelLayoutMm /
+ * computeQrLabelLayoutMm), expressed in CSS mm.
  */
 
 /** Barcode/QR rendered once per label onto an offscreen canvas, same encoders the on-screen
  *  preview uses, then embedded as a plain image — an HTML print page has no way to draw a
- *  barcode itself the way pdf.ts's vector rectangles or tspl.ts's `^BC`/`BARCODE` do. */
+ *  barcode itself. */
 async function codeImageDataUrl(code: string, kind: LabelKind): Promise<string> {
   const canvas = document.createElement("canvas");
   if (kind === "qr") {

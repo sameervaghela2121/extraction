@@ -1,10 +1,9 @@
 /**
  * Margins and bar height for a label, as a function of its physical size.
  *
- * The PDF and ZPL renderers used to hardcode these at fixed millimetre values for the one
- * label size the app supported (100 x 50mm). Now that the sticker size is a setting, both
- * need the same physical margins and bar height for any size — otherwise the same batch
- * would lay out differently depending which file you downloaded.
+ * These used to be hardcoded at fixed millimetre values for the one label size the app
+ * supported (100 x 50mm). Now that the sticker size is a setting, the printed label
+ * (printHtml.ts) needs the same physical margins and bar height worked out for any size.
  *
  * Bar height is tuned so that at exactly 100 x 50mm it reproduces the original fixed value
  * (24mm), rather than growing bars there too. Side margins were later trimmed further than
@@ -25,9 +24,8 @@ export interface LabelLayoutMm {
 }
 
 export function computeLabelLayoutMm(widthMm: number, heightMm: number): LabelLayoutMm {
-  // Purely cosmetic breathing room, not the barcode's own quiet zone (that's a separate,
-  // larger reservation made in pdf.ts/zpl.ts — see QUIET_MODULES — because it's a scanning
-  // requirement, not a margin, and isn't safe to shrink). Floored at 1.5mm rather than let
+  // Purely cosmetic breathing room, not the barcode's own quiet zone (a scanning
+  // requirement, not a margin, and not safe to shrink). Floored at 1.5mm rather than let
   // percentage growth eat further into bar width on a small label: most thermal printers
   // have roughly that much unprintable edge anyway, so going narrower risks the outer bars
   // getting clipped by the printer itself rather than actually gaining any usable width.
@@ -70,8 +68,7 @@ export function computeQrLabelLayoutMm(widthMm: number, heightMm: number): QrLab
   const topMarginMm = clamp(heightMm * 0.06, 1.5, 4);
   const bottomMarginMm = clamp(heightMm * 0.06, 1.5, 4);
   const usableWidthMm = widthMm - sideMarginMm * 2;
-  // Reserve ~40% of the label height for the code text and detail lines below the QR,
-  // same proportions as a barcode's font sizing in pdf.ts/zpl.ts.
+  // Reserve ~40% of the label height for the code text and detail lines below the QR.
   const usableHeightMm = heightMm - topMarginMm - bottomMarginMm * 0.4 - heightMm * 0.28;
   return {
     sideMarginMm,

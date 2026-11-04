@@ -25,23 +25,10 @@ const BARCODE_OPTIONS = {
   margin: 0,
 } as const;
 
-/** Draw a code onto a canvas — the on-screen preview only. The PDF does not go through a
- *  canvas at all; it draws the pattern below as vector rectangles. */
+/** Draw a code onto a canvas — the on-screen preview, and the image printHtml.ts embeds in
+ *  the print page. */
 export function drawBarcode(canvas: HTMLCanvasElement, value: string): void {
   JsBarcode(canvas, value, BARCODE_OPTIONS);
-}
-
-/**
- * The CODE128 module pattern for a code: "1" is a bar, "0" a space.
- *
- * JsBarcode fills `encodings` on any object handed to it, so the encoder can be used
- * without rendering anything — which is what lets the PDF draw real vectors instead of
- * photographing a canvas. Same encoder as the preview, so the two cannot disagree.
- */
-export function barPattern(value: string): string {
-  const out: { encodings?: Array<{ data: string }> } = {};
-  JsBarcode(out, value, BARCODE_OPTIONS);
-  return out.encodings?.[0]?.data ?? "";
 }
 
 export default function Label({ item, kind = "barcode" }: { item: LabelItem; kind?: LabelKind }) {
