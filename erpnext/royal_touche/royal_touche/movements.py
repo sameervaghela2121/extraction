@@ -93,6 +93,7 @@ def _record(data: dict) -> dict:
         "stock_documents": frappe.as_json(docs) if docs else None,
         **effect,
     }).insert(ignore_permissions=True)
+    photo_files.attach(photos, "Roll Movement", mv.name)
     return {"movement": movement_dict(mv.name), "roll": roll_dict(roll.name)}
 
 
@@ -100,7 +101,33 @@ def movement_dict(name: str, fresh: bool = False) -> dict:
     mv = frappe.db.get_value("Roll Movement", name, MOVEMENT_FIELDS, as_dict=True, for_update=fresh)
     for field in ("photos", "stock_documents"):
         mv[field] = frappe.parse_json(mv[field]) if mv[field] else []
+    mv["description"] = _describe(mv)
+    # Stored as 0 when unset; only a return or a consume used any weight.
+    if mv["movement_type"] not in ("RETURN", "CONSUME"):
+        mv["used_weight"] = None
     return mv
+
+
+def _describe(mv: dict) -> str:
+    """One line of plain English per movement (describe() in backend/src/services/stock.service.ts)."""
+    kind, weight = mv["movement_type"], flt(mv["weight"])
+    place = frappe.db.get_value("Warehouse", mv["to_location"], "warehouse_name") if mv["to_location"] else None
+    to = f" to {place}" if place else ""
+    if kind == "IN":
+        return f"Received {kg(weight)} kg"
+    if kind == "OUT":
+        return f"Issued out {kg(weight)} kg{to}"
+    if kind == "RETURN":
+        return f"Returned {kg(weight)} kg{to} · {kg(mv['used_weight'])} kg used"
+    if kind == "CONSUME":
+        return f"Consumed — {kg(weight)} kg used up" if weight else "Consumed"
+    if kind == "RETURN_TO_VENDOR":
+        name = frappe.db.get_value("Supplier", mv["vendor"], "supplier_name") if mv["vendor"] else None
+        vendor = f" {name}" if name else ""
+        return f"Returned to vendor{vendor} — {kg(weight)} kg" if weight else f"Returned to vendor{vendor}"
+    if kind == "SELL":
+        return f"Sold — {kg(weight)} kg" if weight else "Sold"
+    return f"Corrected by {kg(weight)} kg"
 
 
 def _check_fields(mtype: str, data: dict) -> None:

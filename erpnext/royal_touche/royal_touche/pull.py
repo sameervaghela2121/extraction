@@ -6,7 +6,7 @@ boundary. Disabled masters and deleted rolls/movements come back flagged: the ta
 greys them out itself."""
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import add_to_date, cint, now_datetime
 
 from royal_touche.dates import as_system
 from royal_touche.errors import RTValidation
@@ -33,7 +33,10 @@ SOURCES = {
 }
 
 
-def changes(kind: str, after: str | None, after_name: str | None, limit: int = 200) -> dict:
+def changes(kind: str, after: str | None, after_name: str | None, limit: int = 200, hold_seconds: int = 0) -> dict:
+    """[hold_seconds] leaves out the newest rows. A write commits a moment after it stamps its
+    modified time, so a quicker write could commit first with a later time; a tablet whose
+    checkpoint passed the slower one would never get it."""
     if kind not in SOURCES:
         raise RTValidation(f"Unknown kind: {kind}")
     doctype, condition = SOURCES[kind]
@@ -44,10 +47,12 @@ def changes(kind: str, after: str | None, after_name: str | None, limit: int = 2
     keyset = ""
     if after:
         keyset = "AND (`modified` > %(after)s OR (`modified` = %(after)s AND `name` > %(after_name)s))"
+    held = "AND `modified` < %(cutoff)s" if hold_seconds else ""
     rows = frappe.db.sql(
-        f"SELECT `name`, `modified` FROM `tab{doctype}` WHERE {condition} {keyset} "
+        f"SELECT `name`, `modified` FROM `tab{doctype}` WHERE {condition} {keyset} {held} "
         f"ORDER BY `modified` ASC, `name` ASC LIMIT %(limit)s",
-        {"after": after, "after_name": after_name or "", "limit": limit, "company": COMPANY},
+        {"after": after, "after_name": after_name or "", "limit": limit, "company": COMPANY,
+         "cutoff": add_to_date(now_datetime(), seconds=-hold_seconds)},
         as_dict=True,
     )
     items = [_shape(kind, r.name) for r in rows]

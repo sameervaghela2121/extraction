@@ -155,5 +155,7 @@ def batch_qty(batch: str, warehouse: str | None = None) -> float:
 
 def make_file(name: str | None = None) -> str:
     """A file really uploaded to this site; its path is what photo fields hold."""
-    return frappe.get_doc({"doctype": "File", "file_name": name or unique("photo") + ".txt", "is_private": 1,
-                           "content": b"photo"}).insert(ignore_permissions=True).file_url
+    # Unique content: ERPNext gives files with equal content one shared path.
+    file_name = name or unique("photo") + ".txt"
+    return frappe.get_doc({"doctype": "File", "file_name": file_name, "is_private": 1,
+                           "content": file_name.encode()}).insert(ignore_permissions=True).file_url

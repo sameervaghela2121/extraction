@@ -106,7 +106,9 @@ class TestPull(IntegrationTestCase):
         roll = register_roll(base_roll())["name"]
         move(roll, "SELL", rate_per_roll=3000)
         operator = make_user("Godown Operator")
-        with as_user(operator):
+        from unittest.mock import patch
+
+        with as_user(operator), patch("royal_touche.api.pull.HOLD_SECONDS", 0):
             rows = pull_api.changes(kind="movements", after=self.since)["items"]
         sale = next(r for r in rows if r["roll"] == roll and r["movement_type"] == "SELL")
         self.assertNotIn("rate_per_roll", sale)
@@ -141,3 +143,21 @@ class TestPullForTheApp(IntegrationTestCase):
         row = next(r for r in everything("rolls", "1970-01-01T00:00:00.000Z") if r["name"] == roll["name"])
         self.assertEqual(str(row["received_date"])[:10], "2026-11-02")
         self.assertTrue(row["creation"])
+
+    def test_the_newest_seconds_are_held_back_so_a_slower_write_is_never_passed(self):
+        """A write still in progress commits with an older modified time than a quicker one. If
+        the tablet's checkpoint passed it, the tablet would never get it."""
+        remark = make_remark()
+        args = ("remarks", "1970-01-01T00:00:00.000Z", None, 500)
+        self.assertNotIn(remark, [r["name"] for r in changes(*args, hold_seconds=5)["items"]])
+        frappe.db.set_value("RT Remark", remark, "modified", add_to_date(now_datetime(), seconds=-6), update_modified=False)
+        self.assertIn(remark, [r["name"] for r in changes(*args, hold_seconds=5)["items"]])
+
+    def test_the_api_holds_back(self):
+        from unittest.mock import patch
+
+        from royal_touche.api import pull as pull_api
+
+        with patch("royal_touche.pull.changes", return_value={"items": [], "next": None}) as real:
+            pull_api.changes(kind="remarks")
+        self.assertEqual(real.call_args.kwargs["hold_seconds"], 5)

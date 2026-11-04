@@ -195,6 +195,31 @@ class TestMovements(IntegrationTestCase):
         with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
             self.out(photos=["/api/method/frappe.client.get_list?doctype=User"])
 
+    def test_descriptions_read_as_on_the_old_server(self):
+        vendor = frappe.db.get_value("Batch", self.roll, "rt_vendor")
+        vendor_name = frappe.db.get_value("Supplier", vendor, "supplier_name")
+        running, home = (frappe.db.get_value("Warehouse", w, "warehouse_name") for w in (self.running, self.home))
+        mv = lambda r: r["movement"]["description"]  # noqa: E731
+        self.assertEqual(mv(self.out()), f"Issued out 150 kg to {running}")
+        self.assertEqual(mv(move(self.roll, "RETURN", returned_weight=80)), f"Returned 80 kg to {home} · 70 kg used")
+        self.assertEqual(mv(move(self.roll, "ADJUSTMENT", new_weight=70, remarks="x")), "Corrected by 10 kg")
+        self.assertEqual(mv(move(self.roll, "RETURN_TO_VENDOR")), f"Returned to vendor {vendor_name} — 70 kg")
+        other = register_roll(base_roll(location=self.home, weight=150))["name"]
+        self.assertEqual(mv(move(other, "SELL")), "Sold — 150 kg")
+        third = register_roll(base_roll(location=self.home, weight=150))["name"]
+        self.assertEqual(mv(move(third, "CONSUME")), "Consumed — 150 kg used up")
+        from royal_touche.movements import movement_dict
+
+        name = frappe.db.get_value("Roll Movement", {"roll": third, "movement_type": "IN"})
+        self.assertEqual(movement_dict(name)["description"], "Received 150 kg")
+
+    def test_used_weight_is_empty_except_where_weight_was_used(self):
+        out = self.out()["movement"]
+        self.assertIsNone(out["used_weight"])
+        self.assertEqual(move(self.roll, "RETURN", returned_weight=150)["movement"]["used_weight"], 0)
+        other = register_roll(base_roll(location=self.home))["name"]
+        self.assertEqual(move(other, "CONSUME")["movement"]["used_weight"], 150)
+
     def test_more_than_four_photos_rejected(self):
         with self.assertRaisesRegex(RTValidation, "At most 4 photos per movement"):
             from royal_touche.tests.factories import make_file

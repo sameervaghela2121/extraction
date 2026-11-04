@@ -8,7 +8,7 @@ from royal_touche.api._access import require_godown_role, without_prices
 def batch(items: list | str) -> dict:
     require_godown_role()
     items = frappe.parse_json(items) if isinstance(items, str) else items
-    result = sync_engine.run_batch(items, ip=getattr(frappe.local, "request_ip", None))
+    result = sync_engine.run_batch(items, ip=getattr(frappe.local, "request_ip", None), commit_each=True)
     for r in result["results"]:
         if r["type"] == "movement" and r.get("data"):
             r["data"] = {**r["data"], "movement": without_prices(r["data"]["movement"])}

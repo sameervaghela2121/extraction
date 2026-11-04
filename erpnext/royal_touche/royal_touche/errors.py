@@ -10,6 +10,13 @@ class RTError(frappe.ValidationError):
     http_status_code = 400
     reason = "validation"
 
+    def __init__(self, *args):
+        super().__init__(*args)
+        # Without developer mode ERPNext sends the client only its message log, never the
+        # exception's own text. The sync batch clears this and reports the error per item.
+        if args:
+            frappe.msgprint(str(args[0]))
+
 
 class RTValidation(RTError):
     http_status_code = 400

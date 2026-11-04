@@ -52,10 +52,10 @@ class TestAppLogin(IntegrationTestCase):
 
     def test_wrong_password_or_disabled_user_is_refused(self):
         before = frappe.db.count("OAuth Bearer Token")
-        with self.assertRaisesRegex(frappe.AuthenticationError, "Invalid login credentials"):
+        with self.assertRaisesRegex(frappe.AuthenticationError, "Invalid email or password"):
             self.login(pwd="wrong")
         frappe.db.set_value("User", self.user, "enabled", 0)
-        with self.assertRaisesRegex(frappe.AuthenticationError, "Invalid login credentials"):
+        with self.assertRaises(frappe.AuthenticationError):
             self.login()
         self.assertEqual(frappe.db.count("OAuth Bearer Token"), before)
 
@@ -65,14 +65,22 @@ class TestAppLogin(IntegrationTestCase):
         with self.assertRaisesRegex(frappe.AuthenticationError, "You do not have access to the Royale Touche app"):
             self.login(usr=outsider)
 
-    def test_refresh_gives_a_new_pair_and_retires_the_old_access(self):
+    def test_refresh_gives_a_new_access_token_and_retires_the_old(self):
         first = self.login()
         second = auth.refresh(refresh_token=first["refresh_token"])
         self.assertNotEqual(second["access_token"], first["access_token"])
         self.assertEqual(authenticated_as(second["access_token"]), self.user)
         self.assertEqual(authenticated_as(first["access_token"]), "Guest")
-        with self.assertRaises(frappe.AuthenticationError):
-            auth.refresh(refresh_token=first["refresh_token"])
+
+    def test_a_refresh_whose_reply_was_lost_can_be_repeated(self):
+        """The server has answered, the network dropped the reply, the app still holds the same
+        refresh token. It must not be logged out for that."""
+        first = self.login()
+        auth.refresh(refresh_token=first["refresh_token"])
+        again = auth.refresh(refresh_token=first["refresh_token"])
+        self.assertEqual(again["refresh_token"], first["refresh_token"])
+        self.assertEqual(authenticated_as(again["access_token"]), self.user)
+        self.assertEqual(frappe.db.count("OAuth Bearer Token", {"refresh_token": first["refresh_token"], "status": "Active"}), 1)
 
     def test_refresh_is_refused_when_unknown_unused_for_30_days_or_user_disabled(self):
         with self.assertRaises(frappe.AuthenticationError):
@@ -93,13 +101,30 @@ class TestAppLogin(IntegrationTestCase):
         frappe.db.set_value("OAuth Bearer Token", token, "expiration_time", now_datetime() - timedelta(seconds=1))
         self.assertEqual(authenticated_as(token), "Guest")
 
-    def test_logout_revokes_the_callers_tokens(self):
-        res = self.login()
+    def test_logout_ends_this_tablets_session_only(self):
+        from frappe.utils import set_request
+
+        tablet1, tablet2 = self.login(), self.login()
+        set_request(path="/api/method/royal_touche.api.auth.logout", method="POST",
+                    headers={"Authorization": f"Bearer {tablet1['access_token']}"})
         frappe.set_user(self.user)
         auth.logout()
-        self.assertEqual(authenticated_as(res["access_token"]), "Guest")
+        self.assertEqual(authenticated_as(tablet1["access_token"]), "Guest")
         with self.assertRaises(frappe.AuthenticationError):
-            auth.refresh(refresh_token=res["refresh_token"])
+            auth.refresh(refresh_token=tablet1["refresh_token"])
+        self.assertEqual(authenticated_as(tablet2["access_token"]), self.user)
+
+    def test_messages_reach_the_client_in_production(self):
+        """Without developer mode ERPNext sends only _server_messages, never the exception text."""
+        frappe.clear_messages()
+        with self.assertRaises(frappe.AuthenticationError):
+            self.login(pwd="wrong")
+        self.assertEqual([m["message"] for m in frappe.get_message_log()], ["Invalid email or password"])
+
+    def test_a_disabled_user_is_told_so(self):
+        frappe.db.set_value("User", self.user, "enabled", 0)
+        with self.assertRaisesRegex(frappe.AuthenticationError, "Your account has been suspended"):
+            self.login()
 
     def test_login_and_refresh_are_open_to_guests(self):
         for fn in (auth.login, auth.refresh):

@@ -195,3 +195,67 @@ class TestRacingRetries(IntegrationTestCase):
             res = run_batch([{"type": "lot", "client_id": key, "body": {"document_type": "invoice", "document_no": "RACE-BATCH"}}])
         self.assertEqual(res["results"][0]["status"], "ok")
         self.assertEqual(res["results"][0]["data"]["name"], winner["name"])
+
+
+class TestBatchItemsStandAlone(TestRacingRetries):
+    """Each item commits on its own, as on the old server: visible at once, and a failure or a
+    deadlock costs that item only."""
+
+    def lot(self, key=None, no="ALONE-1"):
+        return {"type": "lot", "client_id": key or cid(), "body": {"document_type": "challan", "document_no": no}}
+
+    def test_an_item_is_visible_to_others_before_the_batch_ends(self):
+        from unittest.mock import patch
+
+        from royal_touche import sync
+
+        first, seen = cid(), []
+        real = sync._run_item
+
+        def spy(item, *args):
+            if item["client_id"] != first:
+                with self.secondary_connection():
+                    frappe.db.rollback()  # a fresh read
+                    seen.append(frappe.db.exists("Roll Lot", {"client_id": first}))
+            return real(item, *args)
+
+        with self.primary_connection(), patch("royal_touche.sync._run_item", side_effect=spy):
+            run_batch([self.lot(first), self.lot(no="ALONE-2")], commit_each=True)
+        self.assertTrue(seen and seen[0])
+
+    def test_a_deadlock_is_retried_and_the_batch_carries_on(self):
+        from unittest.mock import patch
+
+        from royal_touche import sync
+
+        real, calls = sync._run_item, []
+
+        def flaky(item, *args):
+            calls.append(item["client_id"])
+            if len(calls) == 1:
+                frappe.db.rollback()  # a real deadlock ends the transaction, savepoint included
+                raise frappe.QueryDeadlockError("Deadlock found")
+            return real(item, *args)
+
+        with patch("royal_touche.sync._run_item", side_effect=flaky):
+            res = run_batch([self.lot(no="ALONE-3")], commit_each=True)
+        self.assertEqual((len(calls), res["results"][0]["status"]), (2, "ok"))
+
+    def test_a_deadlock_twice_fails_that_item_only_and_can_be_retried(self):
+        from unittest.mock import patch
+
+        from royal_touche import sync
+
+        real = sync._run_item
+        stuck = cid()
+
+        def always(item, *args):
+            if item["client_id"] == stuck:
+                frappe.db.rollback()
+                raise frappe.QueryDeadlockError("Deadlock found")
+            return real(item, *args)
+
+        with patch("royal_touche.sync._run_item", side_effect=always):
+            res = run_batch([self.lot(stuck, "ALONE-4"), self.lot(no="ALONE-5")], commit_each=True)
+        self.assertEqual([r["status"] for r in res["results"]], ["failed", "ok"])
+        self.assertEqual(res["results"][0]["reason"], "server_error")

@@ -6,7 +6,9 @@ Ported from backend/src/services/sync.service.ts:
 - every item has its own client_id, so a retry of a half-applied batch replays what was
   written and writes only the rest;
 - each item runs in its own savepoint: a failure undoes that item only. Items that depend on
-  a failed one are "skipped" with reason dependency_failed; everything else goes through."""
+  a failed one are "skipped" with reason dependency_failed; everything else goes through;
+- from the API each item also commits on its own, as on the old server: visible to other
+  tablets at once, and a deadlock costs one item, which is retried once."""
 
 import time
 import uuid
@@ -28,7 +30,7 @@ class _Skip(Exception):
     pass
 
 
-def run_batch(items: list[dict], ip: str | None = None) -> dict:
+def run_batch(items: list[dict], ip: str | None = None, commit_each: bool = False) -> dict:
     _check_batch(items)
     started = time.monotonic()
     ids = {"lot": {}, "vendor": {}, "roll": {}}
@@ -40,23 +42,44 @@ def run_batch(items: list[dict], ip: str | None = None) -> dict:
     for index in order:
         item = items[index]
         base = {"index": index, "type": item["type"], "client_id": item["client_id"]}
-        savepoint = f"rt_sync_{index}"
-        frappe.db.savepoint(savepoint)
-        try:
-            data = _run_item(item, ids, failed, failed_rolls)
-            results[index] = {**base, "status": "ok", "data": data}
-        except _Skip:
-            frappe.db.rollback(save_point=savepoint)
-            results[index] = {**base, "status": "skipped", "reason": "dependency_failed"}
-            _mark_failed(item, failed, failed_rolls, ids)
-        except Exception as e:
-            frappe.db.rollback(save_point=savepoint)
-            frappe.local.message_log = []
-            results[index] = {**base, "status": "failed", **_error_of(e)}
-            _mark_failed(item, failed, failed_rolls, ids)
+        for attempt in (1, 2):
+            savepoint = f"rt_sync_{index}"
+            frappe.db.savepoint(savepoint)
+            try:
+                data = _run_item(item, ids, failed, failed_rolls)
+                results[index] = {**base, "status": "ok", "data": data}
+            except _Skip:
+                _undo(savepoint, commit_each)
+                results[index] = {**base, "status": "skipped", "reason": "dependency_failed"}
+                _mark_failed(item, failed, failed_rolls, ids)
+            except (frappe.QueryDeadlockError, frappe.QueryTimeoutError) as e:
+                _undo(savepoint, commit_each)
+                if attempt == 1:
+                    continue
+                results[index] = {**base, "status": "failed", **_error_of(e)}
+                _mark_failed(item, failed, failed_rolls, ids)
+            except Exception as e:
+                _undo(savepoint, commit_each)
+                results[index] = {**base, "status": "failed", **_error_of(e)}
+                _mark_failed(item, failed, failed_rolls, ids)
+            break
+        if commit_each:
+            frappe.db.commit()
     ordered = [results[i] for i in range(len(items))]
     _log(items, ordered, started, ip)
     return {"results": ordered}
+
+
+def _undo(savepoint: str, commit_each: bool) -> None:
+    frappe.local.message_log = []
+    try:
+        frappe.db.rollback(save_point=savepoint)
+    except Exception:
+        # A deadlock ended the whole transaction, savepoint included. With each item committed
+        # that lost this item only; otherwise earlier items went too, and the caller must know.
+        if not commit_each:
+            raise
+        frappe.db.rollback()
 
 
 def _check_batch(items: list[dict]) -> None:

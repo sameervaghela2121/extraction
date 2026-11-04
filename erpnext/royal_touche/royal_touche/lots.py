@@ -2,7 +2,7 @@
 
 import frappe
 
-from royal_touche import replay
+from royal_touche import photos, replay
 
 LOT_FIELDS = ("name", "document_type", "document_no", "document_photo", "client_id", "creation", "modified")
 
@@ -24,6 +24,7 @@ def _create(data: dict) -> dict:
             "client_id": data.get("client_id") or None,
         }
     ).insert(ignore_permissions=True)
+    photos.attach([doc.document_photo], "Roll Lot", doc.name)
     return lot_dict(doc.name)
 
 

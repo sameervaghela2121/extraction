@@ -13,7 +13,8 @@ from royal_touche.api._access import rt_role
 APP_CLIENT = "Royal Touche App"
 ACCESS_SECONDS = 3600
 REFRESH_DAYS = 30
-BAD_LOGIN = "Invalid login credentials"
+BAD_LOGIN = "Invalid email or password"
+SUSPENDED = "Your account has been suspended"
 
 
 def app_client() -> str:
@@ -24,8 +25,13 @@ def app_client() -> str:
     return name
 
 
-def _issue(user: str) -> dict:
-    access, refresh_token = frappe.generate_hash(length=40), frappe.generate_hash(length=40)
+def _refuse(message: str):
+    # frappe.throw so the message reaches the client in production (see errors.RTError).
+    frappe.throw(message, frappe.AuthenticationError)
+
+
+def _issue(user: str, refresh_token: str | None = None) -> dict:
+    access, refresh_token = frappe.generate_hash(length=40), refresh_token or frappe.generate_hash(length=40)
     frappe.get_doc({
         "doctype": "OAuth Bearer Token",
         "client": app_client(),
@@ -55,14 +61,17 @@ def login(usr: str, pwd: str) -> dict:
 
     user = frappe.db.get_value("User", {"name": (usr or "").strip()}, ["name", "enabled"], as_dict=True) or \
         frappe.db.get_value("User", {"email": (usr or "").strip()}, ["name", "enabled"], as_dict=True)
-    if not user or not user.enabled:
-        raise frappe.AuthenticationError(BAD_LOGIN)
+    if not user:
+        _refuse(BAD_LOGIN)
+    if not user.enabled:
+        _refuse(SUSPENDED)
     try:
         check_password(user.name, pwd or "")
     except frappe.AuthenticationError:
-        raise frappe.AuthenticationError(BAD_LOGIN) from None
+        frappe.clear_messages()
+        _refuse(BAD_LOGIN)
     if not rt_role(user.name):
-        raise frappe.AuthenticationError("You do not have access to the Royale Touche app")
+        _refuse("You do not have access to the Royale Touche app")
     return _issue(user.name)
 
 
@@ -77,16 +86,20 @@ def refresh(refresh_token: str) -> dict:
     if not token or unused_too_long or not frappe.db.get_value("User", token.user, "enabled") or not rt_role(token.user):
         if token:
             _revoke(token.name)
-        raise frappe.AuthenticationError("Session expired. Please sign in again.")
+        _refuse("Session expired. Please sign in again.")
+    # The refresh token stays the same: if this reply is lost on a bad connection, the app still
+    # holds a token that works, and doesn't get logged out. It lapses after REFRESH_DAYS unused.
     _revoke(token.name)
-    return _issue(token.user)
+    return _issue(token.user, refresh_token)
 
 
 @frappe.whitelist(methods=["POST"])
 def logout() -> str:
-    for name in frappe.get_all("OAuth Bearer Token", {"user": frappe.session.user, "status": "Active",
-                                                      "client": app_client()}, pluck="name"):
-        _revoke(name)
+    """Ends this tablet's session only; the same login on another tablet carries on."""
+    header = frappe.get_request_header("Authorization") or ""
+    token = header.split(" ", 1)[1].strip() if header.lower().startswith("bearer ") else None
+    if token and frappe.db.get_value("OAuth Bearer Token", token, "user") == frappe.session.user:
+        _revoke(token)
     return "ok"
 
 

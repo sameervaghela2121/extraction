@@ -51,6 +51,7 @@ def _register(data: dict) -> dict:
     weight = flt(data["weight"])
     # Device times arrive with a zone ("…Z", "+05:30"); stored as India wall-clock time.
     when = as_system(data.get("date") or frappe.utils.now_datetime())
+    taken = [data.get(k) for k in PHOTO_KEYS if data.get(k)]
     batch = frappe.get_doc({
         "doctype": "Batch",
         "batch_id": frappe.generate_hash(length=10),
@@ -100,11 +101,12 @@ def _register(data: dict) -> dict:
         "to_location": location,
         "remarks": f"Roll {roll_number} received",
         # The photos taken at registration show on the IN row, as Node's registrationPhotos did.
-        "photos": frappe.as_json(taken) if (taken := [data.get(k) for k in PHOTO_KEYS if data.get(k)]) else None,
+        "photos": frappe.as_json(taken) if taken else None,
         "stock_doctype": "Purchase Receipt",
         "stock_docname": receipt,
         "stock_documents": frappe.as_json([["Purchase Receipt", receipt]]),
     }).insert(ignore_permissions=True)
+    photos.attach(taken, "Batch", batch.name)
     return roll_dict(batch.name)
 
 
@@ -257,6 +259,7 @@ def update_roll(name: str, changes: dict) -> dict:
             raise RTValidation("That lot no longer exists — pick another")
         batch.rt_lot = changes["lot"]
     photos.check([changes.get(k) for k in PHOTO_KEYS if k in changes])
+    photos.attach([changes.get(k) for k in PHOTO_KEYS if k in changes], "Batch", batch.name)
     for field in PHOTO_KEYS:
         if field in changes:
             batch.set(f"rt_{field}", changes[field])
