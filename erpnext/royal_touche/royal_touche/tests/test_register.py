@@ -96,3 +96,18 @@ class TestRegister(IntegrationTestCase):
     def test_batch_uses_batchwise_valuation(self):
         r = register_roll(base_roll())
         self.assertEqual(frappe.db.get_value("Batch", r["name"], "use_batchwise_valuation"), 1)
+
+    def test_registration_photos_are_kept_and_shown_on_the_in_entry(self):
+        """As Node did: the roll keeps all four photos, and the IN row carries the ones taken
+        (registrationPhotos in materialRolls.service.ts), so any user sees them in history."""
+        r = register_roll(base_roll(tag_photo="/private/files/tag.jpg", side1_photo="/private/files/side1.jpg",
+                                    side2_photo="/private/files/side2.jpg"))
+        self.assertEqual((r["tag_photo"], r["barcode_photo"], r["side1_photo"], r["side2_photo"]),
+                         ("/private/files/tag.jpg", None, "/private/files/side1.jpg", "/private/files/side2.jpg"))
+        photos = frappe.get_value("Roll Movement", {"roll": r["name"], "movement_type": "IN"}, "photos")
+        self.assertEqual(frappe.parse_json(photos),
+                         ["/private/files/tag.jpg", "/private/files/side1.jpg", "/private/files/side2.jpg"])
+
+    def test_no_registration_photos_means_none_on_the_in_entry(self):
+        r = register_roll(base_roll())
+        self.assertIsNone(frappe.get_value("Roll Movement", {"roll": r["name"], "movement_type": "IN"}, "photos"))

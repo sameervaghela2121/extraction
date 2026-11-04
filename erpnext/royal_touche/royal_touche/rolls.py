@@ -14,6 +14,8 @@ from royal_touche.stock_docs import cancel as cancel_stock_document
 from royal_touche.stock_docs import ledger_time, purchase_receipt
 
 ROLL_TAKEN = "A roll with this number already exists"
+# The four photos a roll can be registered with, in Node's order (PHOTO_FIELDS).
+PHOTO_KEYS = ("tag_photo", "barcode_photo", "side1_photo", "side2_photo")
 BARCODE_TAKEN = "A roll with this barcode already exists"
 
 
@@ -69,6 +71,8 @@ def _register(data: dict) -> dict:
         "rt_width": flt(data["width"]),
         "rt_tag_photo": data.get("tag_photo"),
         "rt_barcode_photo": data.get("barcode_photo"),
+        "rt_side1_photo": data.get("side1_photo"),
+        "rt_side2_photo": data.get("side2_photo"),
         "rt_client_id": data.get("client_id") or None,
         "rt_last_posted": ledger_time(None, when),
     })
@@ -94,6 +98,8 @@ def _register(data: dict) -> dict:
         "roll_weight_after": weight,
         "to_location": location,
         "remarks": f"Roll {roll_number} received",
+        # The photos taken at registration show on the IN row, as Node's registrationPhotos did.
+        "photos": frappe.as_json(photos) if (photos := [data.get(k) for k in PHOTO_KEYS if data.get(k)]) else None,
         "stock_doctype": "Purchase Receipt",
         "stock_docname": receipt,
         "stock_documents": frappe.as_json([["Purchase Receipt", receipt]]),
@@ -147,6 +153,8 @@ def roll_dict(name: str, fresh: bool = False) -> dict:
         "remark_codes": [r.remark for r in b.get("rt_remark_codes") or []],
         "tag_photo": b.rt_tag_photo,
         "barcode_photo": b.rt_barcode_photo,
+        "side1_photo": b.rt_side1_photo,
+        "side2_photo": b.rt_side2_photo,
         "client_id": b.rt_client_id,
         "deleted": bool(b.rt_deleted),
         "modified": str(b.modified),
@@ -198,7 +206,8 @@ def _resolve_paper(vendor, rt_code: str | None, delta_code: str | None) -> dict 
     return dict(match)
 
 
-EDITABLE = {"roll_number", "barcode", "rt_code", "delta_code", "gsm", "width", "lot", "tag_photo", "barcode_photo"}
+EDITABLE = {"roll_number", "barcode", "rt_code", "delta_code", "gsm", "width", "lot", "tag_photo", "barcode_photo",
+            "side1_photo", "side2_photo"}
 MAX_REMARK_CODES = 20
 
 
@@ -246,7 +255,7 @@ def update_roll(name: str, changes: dict) -> dict:
         if not changes["lot"] or not frappe.db.exists("Roll Lot", changes["lot"]):
             raise RTValidation("That lot no longer exists — pick another")
         batch.rt_lot = changes["lot"]
-    for field in ("tag_photo", "barcode_photo"):
+    for field in PHOTO_KEYS:
         if field in changes:
             batch.set(f"rt_{field}", changes[field])
     batch.flags.ignore_permissions = True

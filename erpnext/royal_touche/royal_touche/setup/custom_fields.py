@@ -52,6 +52,8 @@ CUSTOM_FIELDS = {
          "insert_after": "rt_width"},
         {"fieldname": "rt_tag_photo", "label": "Tag photo", "fieldtype": "Attach Image", "insert_after": "rt_remark_codes"},
         {"fieldname": "rt_barcode_photo", "label": "Barcode photo", "fieldtype": "Attach Image", "insert_after": "rt_tag_photo"},
+        {"fieldname": "rt_side1_photo", "label": "Side 1 photo", "fieldtype": "Attach Image", "insert_after": "rt_barcode_photo"},
+        {"fieldname": "rt_side2_photo", "label": "Side 2 photo", "fieldtype": "Attach Image", "insert_after": "rt_side1_photo"},
         {"fieldname": "rt_client_id", "label": "Client id", "fieldtype": "Data", "unique": 1, "read_only": 1,
          "insert_after": "rt_barcode_photo"},
         {"fieldname": "rt_deleted", "label": "Deleted", "fieldtype": "Check", "read_only": 1, "insert_after": "rt_client_id"},
