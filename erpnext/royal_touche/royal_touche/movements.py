@@ -12,7 +12,7 @@ from royal_touche import replay
 from royal_touche.dates import as_system, check_not_future, check_operator_date
 from royal_touche.errors import RTConflict, RTValidation
 from royal_touche.rolls import find_roll, roll_dict, usable_location
-from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
+from royal_touche.setup.install import DIRECT_SALE_BUYER, UNASSIGNED_WAREHOUSE
 from royal_touche.stock_docs import delivery_note, ledger_time, purchase_return, stock_entry
 
 MOVEMENT_TYPES = ("IN", "OUT", "RETURN", "ADJUSTMENT", "CONSUME", "RETURN_TO_VENDOR", "SELL")
@@ -116,8 +116,6 @@ def _check_fields(mtype: str, data: dict) -> None:
             raise RTValidation("ADJUSTMENT requires new_weight")
         if not (data.get("remarks") or "").strip():
             raise RTValidation("ADJUSTMENT requires remarks")
-    if mtype == "SELL" and not data.get("buyer"):
-        raise RTValidation("Pick the buyer")
 
 
 def _where(roll) -> str:
@@ -210,16 +208,17 @@ def _sell(roll, data, when):
         raise RTConflict("This roll is already consumed — there is nothing left to sell")
     if roll.rt_status == "RETURNED_TO_VENDOR":
         raise RTConflict("This roll has already been returned to the vendor")
-    if not frappe.db.exists("Customer", data["buyer"]):
+    buyer = data.get("buyer") or DIRECT_SALE_BUYER
+    if not frappe.db.exists("Customer", buyer):
         raise RTValidation("That buyer no longer exists — pick another")
     qty = flt(roll.rt_remaining_weight)
     docs = []
     if qty > 0:
-        docs.append(("Delivery Note", delivery_note(data["buyer"], roll.item, roll.name, qty, _where(roll), when,
+        docs.append(("Delivery Note", delivery_note(buyer, roll.item, roll.name, qty, _where(roll), when,
                                                     rate_per_roll=data.get("rate_per_roll"))))
     return {"roll": {"rt_status": "SOLD", "rt_remaining_weight": 0, "rt_location": None}, "docs": docs,
             "weight": qty, "roll_weight_after": 0, "from_location": roll.rt_location or None,
-            "buyer": data["buyer"], "savio_bill_no": (data.get("savio_bill_no") or "").strip() or None,
+            "buyer": buyer, "savio_bill_no": (data.get("savio_bill_no") or "").strip() or None,
             "vehicle_no": (data.get("vehicle_no") or "").strip().upper() or None,
             "rate_per_roll": flt(data.get("rate_per_roll")) or None}
 

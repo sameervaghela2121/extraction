@@ -5,6 +5,9 @@ import frappe
 
 COMPANY = "Royale Touche"
 UNASSIGNED_WAREHOUSE = "Unassigned - RT"
+# Sales recorded without a buyer go to this customer: the app's sell dialog has no buyer
+# picker (user directive 2026-11-04: the app's screens don't change).
+DIRECT_SALE_BUYER = "Direct Sale"
 RT_ROLES = ("RT Super Admin", "RT Admin", "Godown Supervisor", "Godown Operator")
 
 
@@ -25,6 +28,18 @@ def ensure_setup():
     _ensure_unassigned_warehouse()
     _ensure_delta_indexes()
     _ensure_app_client()
+    _ensure_direct_sale_buyer()
+
+
+def _ensure_direct_sale_buyer():
+    if frappe.db.exists("Customer", DIRECT_SALE_BUYER):
+        return
+    group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+    territory = frappe.db.get_value("Territory", {"is_group": 0}, "name") or "All Territories"
+    if not group:
+        return  # the setup wizard has not created customer groups yet; the next migrate will
+    frappe.get_doc({"doctype": "Customer", "customer_name": DIRECT_SALE_BUYER, "customer_group": group,
+                    "territory": territory}).insert(ignore_permissions=True)
 
 
 def _ensure_app_client():

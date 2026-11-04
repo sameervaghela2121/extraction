@@ -22,6 +22,11 @@ class TestSetup(IntegrationTestCase):
         for role in RT_ROLES:
             self.assertTrue(frappe.db.exists("Role", role), role)
         self.assertTrue(frappe.db.exists("UOM", "Kg"))
+        from royal_touche.setup.install import DIRECT_SALE_BUYER
+
+        self.assertEqual(DIRECT_SALE_BUYER, "Direct Sale")
+        self.assertTrue(frappe.db.exists("Customer", DIRECT_SALE_BUYER))
+        self.assertEqual(frappe.db.count("Customer", {"customer_name": "Direct Sale"}), 1)
 
     def test_delta_synced_tables_have_a_modified_index(self):
         ensure_setup()

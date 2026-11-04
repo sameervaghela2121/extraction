@@ -112,9 +112,15 @@ class TestMovements(IntegrationTestCase):
             move(self.roll, "RETURN_TO_VENDOR")
 
     # SELL
-    def test_sell_needs_a_buyer(self):
-        with self.assertRaisesRegex(RTValidation, "Pick the buyer"):
-            move(self.roll, "SELL")
+    def test_sell_without_a_buyer_goes_to_direct_sale(self):
+        # The app's sell dialog has no buyer picker (user directive: the app's screens don't
+        # change), so a sale with no buyer is recorded against the default buyer.
+        from royal_touche.setup.install import DIRECT_SALE_BUYER
+
+        res = move(self.roll, "SELL")
+        self.assertEqual((res["roll"]["status"], res["movement"]["buyer"]), ("SOLD", DIRECT_SALE_BUYER))
+        note = frappe.get_doc("Delivery Note", res["movement"]["stock_docname"])
+        self.assertEqual(note.customer, DIRECT_SALE_BUYER)
 
     def test_sell_makes_a_delivery_note(self):
         buyer = make_buyer()
