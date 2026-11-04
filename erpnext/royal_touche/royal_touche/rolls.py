@@ -5,7 +5,7 @@ Rules and messages follow backend/src/services/materialRolls.service.ts."""
 import frappe
 from frappe.utils import flt
 
-from royal_touche import replay
+from royal_touche import photos, replay
 from royal_touche.dates import as_system
 from royal_touche.errors import RTDuplicate, RTNotFound, RTValidation
 from royal_touche.masters import normalise_code
@@ -36,6 +36,7 @@ def _register(data: dict) -> dict:
             raise RTValidation(f"{label} must be greater than 0")
     if not frappe.db.exists("Roll Lot", data["lot"]):
         raise RTValidation("That lot no longer exists — pick another")
+    photos.check([data.get(k) for k in PHOTO_KEYS])
     material = _usable_material(data.get("material"))
     vendor = _usable_vendor(data.get("vendor"))
     paper = _resolve_paper(vendor, data.get("rt_code"), data.get("delta_code"))
@@ -99,7 +100,7 @@ def _register(data: dict) -> dict:
         "to_location": location,
         "remarks": f"Roll {roll_number} received",
         # The photos taken at registration show on the IN row, as Node's registrationPhotos did.
-        "photos": frappe.as_json(photos) if (photos := [data.get(k) for k in PHOTO_KEYS if data.get(k)]) else None,
+        "photos": frappe.as_json(taken) if (taken := [data.get(k) for k in PHOTO_KEYS if data.get(k)]) else None,
         "stock_doctype": "Purchase Receipt",
         "stock_docname": receipt,
         "stock_documents": frappe.as_json([["Purchase Receipt", receipt]]),
@@ -255,6 +256,7 @@ def update_roll(name: str, changes: dict) -> dict:
         if not changes["lot"] or not frappe.db.exists("Roll Lot", changes["lot"]):
             raise RTValidation("That lot no longer exists — pick another")
         batch.rt_lot = changes["lot"]
+    photos.check([changes.get(k) for k in PHOTO_KEYS if k in changes])
     for field in PHOTO_KEYS:
         if field in changes:
             batch.set(f"rt_{field}", changes[field])

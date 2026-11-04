@@ -191,9 +191,15 @@ class TestMovements(IntegrationTestCase):
         self.assertEqual(a["movement"]["name"], b["movement"]["name"])
         self.assertEqual(frappe.db.count("Roll Movement", {"client_id": cid}), 1)
 
+    def test_movement_photos_must_be_files_this_server_holds(self):
+        with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
+            self.out(photos=["/api/method/frappe.client.get_list?doctype=User"])
+
     def test_more_than_four_photos_rejected(self):
         with self.assertRaisesRegex(RTValidation, "At most 4 photos per movement"):
-            self.out(photos=["/private/files/a.jpg"] * 5)
+            from royal_touche.tests.factories import make_file
+
+            self.out(photos=[make_file() for _ in range(5)])
 
 
 class TestLedgerTiming(IntegrationTestCase):

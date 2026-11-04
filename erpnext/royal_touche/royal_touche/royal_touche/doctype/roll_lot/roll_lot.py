@@ -1,5 +1,6 @@
 from frappe.model.document import Document
 
+from royal_touche import photos
 from royal_touche.errors import RTValidation
 
 DOCUMENT_TYPES = ("challan", "invoice")
@@ -15,3 +16,5 @@ class RollLot(Document):
             raise RTValidation("Challan or invoice number is required")
         if len(self.document_no) > 100:
             raise RTValidation("Challan or invoice number can be at most 100 characters")
+        if self.has_value_changed("document_photo"):
+            photos.check([self.document_photo])
