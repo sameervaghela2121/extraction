@@ -47,6 +47,19 @@ class TestMovements(IntegrationTestCase):
         with self.assertRaisesRegex(RTConflict, "This roll is already out — record its return first"):
             self.out()
 
+    def test_the_roll_is_read_under_its_row_lock(self):
+        """A portal correction (roll_corrections.plan_correction) locks the roll's Batch row. A
+        movement must take the same lock, and read the roll with it: under REPEATABLE READ a
+        plain read after the lock still sees the snapshot from before a correction committed."""
+        from unittest.mock import patch
+
+        with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as spy:
+            self.out()
+        reads = [str(c.args[0]) for c in spy.call_args_list
+                 if c.args and "tabBatch" in str(c.args[0]) and str(c.args[0]).lstrip().upper().startswith("SELECT *")]
+        self.assertTrue(reads, "the movement never read its roll")
+        self.assertIn("FOR UPDATE", reads[0].upper(), reads[0])
+
     # RETURN
     def test_return_80_of_150_goes_home(self):
         self.out()

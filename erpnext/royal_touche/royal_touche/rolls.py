@@ -100,6 +100,9 @@ def _register(data: dict) -> dict:
         "roll_weight_after": weight,
         "to_location": location,
         "remarks": f"Roll {roll_number} received",
+        # The price exactly as given: the receipt only holds ERPNext's rounded per-kg rate, and a
+        # corrected registration (roll_corrections._reregister) is priced from this.
+        "rate_per_roll": flt(data.get("rate_per_roll")) or None,
         # The photos taken at registration show on the IN row, as Node's registrationPhotos did.
         "photos": frappe.as_json(taken) if taken else None,
         "stock_doctype": "Purchase Receipt",
@@ -214,16 +217,17 @@ EDITABLE = {"roll_number", "barcode", "rt_code", "delta_code", "gsm", "width", "
 MAX_REMARK_CODES = 20
 
 
-def _live_roll(name: str):
-    batch = frappe.get_doc("Batch", name) if frappe.db.exists("Batch", name) else None
+def _live_roll(name: str, for_update: bool = False):
+    batch = frappe.get_doc("Batch", name, for_update=for_update) if frappe.db.exists("Batch", name) else None
     if not batch or batch.rt_deleted or not batch.rt_status:
         raise RTNotFound("Roll not found")
     return batch
 
 
 def update_roll(name: str, changes: dict) -> dict:
-    """Correct what was read off the label. Status, weights and location only ever change
-    through movements, so a figure never changes without a ledger entry behind it."""
+    """Correct what was read off the label. Status only changes through movements; weights,
+    material and location through royal_touche.roll_corrections, which keeps the stock ledger
+    behind every figure."""
     if not changes:
         raise RTValidation("Provide at least one field to update")
     if "status" in changes:

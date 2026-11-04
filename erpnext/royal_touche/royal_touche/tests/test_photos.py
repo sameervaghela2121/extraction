@@ -5,7 +5,7 @@ from frappe.core.doctype.file.file import has_permission as file_has_permission
 
 from royal_touche.errors import RTValidation
 from royal_touche.lots import create_lot
-from royal_touche.photos import is_file_path
+from royal_touche.photos import check, is_file_path
 from royal_touche.rolls import register_roll
 from royal_touche.tests.factories import as_user, base_roll, make_file, make_material, make_user, standard_locations
 from royal_touche.tests.test_movements import move
@@ -95,3 +95,24 @@ class TestEveryRoleSeesEveryPhoto(IntegrationTestCase):
                                "content": frappe.generate_hash().encode()}).insert(ignore_permissions=True).file_url
         with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
             register_roll(base_roll(side1_photo=path))
+
+
+class TestPortalUploadNames(IntegrationTestCase):
+    """The portal uploads every photo under a generated name (frontend/src/api/client.ts
+    uploadName: a UUID, or 32 hex digits where randomUUID isn't available, plus the photo's
+    extension), because people's own file names often fail the plain-name rule."""
+
+    def test_generated_names_pass_the_check_for_their_uploader(self):
+        import uuid
+
+        operator = make_user("Godown Operator")
+        names = [f"{uuid.uuid4()}.{ext}" for ext in ("jpg", "jpeg", "png", "webp")] + [f"{uuid.uuid4().hex}.jpg"]
+        for name in names:
+            with as_user(operator):
+                path = make_file(name)
+                self.assertEqual(path, f"/private/files/{name}")
+                check([path])
+
+    def test_names_people_give_their_files_would_not(self):
+        for name in ("challan #12.jpg", "_x.jpg", "फोटो.jpg"):
+            self.assertFalse(is_file_path(f"/private/files/{name}"), name)

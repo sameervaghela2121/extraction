@@ -23,3 +23,9 @@ class BarcodeBatch(Document):
             {"prefix": self.prefix, "date": self.date, "from_number": self.from_number, "to_number": self.to_number},
         ):
             raise RTConflict("That exact run has already been saved")
+
+
+def on_doctype_update():
+    """A run's numbers are spent once saved, deleted or not: the database refuses a second copy
+    of one even when two saves race past validate(). Also applied by setup.install.ensure_setup."""
+    frappe.db.add_unique("Barcode Batch", ["prefix", "date", "from_number", "to_number"], constraint_name="rt_unique_run")

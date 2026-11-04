@@ -18,7 +18,7 @@ def require_roles(*roles: str) -> None:
     """requireRole(): the user's role must be one of [roles]; super_admin always passes."""
     role = rt_role()
     if role != "super_admin" and role not in roles:
-        raise frappe.PermissionError("You do not have permission to perform this action")
+        frappe.throw("You do not have permission to perform this action", frappe.PermissionError)
 
 
 def page_window(page, page_size, default_size: int = DEFAULT_PAGE_SIZE) -> tuple[int, int, int]:
@@ -31,4 +31,4 @@ def page_window(page, page_size, default_size: int = DEFAULT_PAGE_SIZE) -> tuple
 def page_of(items: list, total: int, page: int, page_size: int) -> dict:
     """The old server's Paginated<T>: { items, total, page, pageSize, totalPages }."""
     return {"items": items, "total": total, "page": page, "pageSize": page_size,
-            "totalPages": math.ceil(total / page_size) if total else 0}
+            "totalPages": max(1, math.ceil(total / page_size))}

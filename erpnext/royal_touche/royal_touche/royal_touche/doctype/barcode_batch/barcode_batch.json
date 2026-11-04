@@ -14,6 +14,8 @@
   "from_number",
   "to_number",
   "kind",
+  "width_mm",
+  "height_mm",
   "deleted"
  ],
  "fields": [
@@ -52,6 +54,16 @@
    "label": "Kind",
    "options": "barcode\nqr",
    "default": "barcode"
+  },
+  {
+   "fieldname": "width_mm",
+   "fieldtype": "Float",
+   "label": "Label width (mm)"
+  },
+  {
+   "fieldname": "height_mm",
+   "fieldtype": "Float",
+   "label": "Label height (mm)"
   },
   {
    "fieldname": "deleted",

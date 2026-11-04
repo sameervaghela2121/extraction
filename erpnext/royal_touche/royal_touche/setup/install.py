@@ -27,6 +27,7 @@ def ensure_setup():
     _ensure_company()
     _ensure_unassigned_warehouse()
     _ensure_delta_indexes()
+    _ensure_unique_barcode_runs()
     _ensure_app_client()
     _ensure_direct_sale_buyer()
 
@@ -69,6 +70,13 @@ DELTA_SYNCED = ("Batch", "Supplier", "Item", "Warehouse", "Customer")
 def _ensure_delta_indexes():
     for doctype in DELTA_SYNCED:
         frappe.db.add_index(doctype, ["modified", "name"], index_name="rt_modified_name")
+
+
+def _ensure_unique_barcode_runs():
+    # on_doctype_update runs only when the doctype itself changes; this reaches existing sites.
+    from royal_touche.royal_touche.doctype.barcode_batch.barcode_batch import on_doctype_update
+
+    on_doctype_update()
 
 
 # A Godown Operator works in the tablet app only, never ERPNext's own screens. ERPNext makes a

@@ -61,7 +61,10 @@ def _record(data: dict) -> dict:
     else:
         check_not_future(when)
 
-    roll = frappe.get_doc("Batch", find_roll(data.get("roll") or ""))
+    # A locking read, as roll_corrections.plan_correction takes: a portal correction of this roll
+    # and this movement wait for each other, and the roll read is what the other one committed
+    # (a plain read after the lock would still see this transaction's older snapshot).
+    roll = frappe.get_doc("Batch", find_roll(data.get("roll") or ""), for_update=True)
     if roll.rt_status == "SOLD" and mtype not in ("CONSUME", "IN"):
         raise RTConflict("This roll has already been sold")
 

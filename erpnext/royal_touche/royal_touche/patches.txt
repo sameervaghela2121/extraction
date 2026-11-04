@@ -1,3 +1,4 @@
 [pre_model_sync]
 
 [post_model_sync]
+royal_touche.patches.clear_portal_reset_keys

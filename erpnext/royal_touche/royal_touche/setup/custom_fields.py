@@ -11,6 +11,9 @@ CUSTOM_FIELDS = {
         # A vendor added on a tablet while offline: its retry must find this one again.
         {"fieldname": "rt_client_id", "label": "Client id", "fieldtype": "Data", "unique": 1, "read_only": 1,
          "insert_after": "rt_papers"},
+        # The portal's free-text vendor address. ERPNext's own addresses are separate Address
+        # records with required city/country, which a one-line address can't fill.
+        {"fieldname": "rt_address", "label": "Address", "fieldtype": "Small Text", "insert_after": "rt_client_id"},
     ],
     "Item": [
         {"fieldname": "rt_material_code", "label": "Material code", "fieldtype": "Data", "unique": 1,
@@ -62,6 +65,17 @@ CUSTOM_FIELDS = {
         # When this roll's newest stock document is posted: see stock_docs.ledger_time().
         {"fieldname": "rt_last_posted", "label": "Last posted", "fieldtype": "Datetime", "read_only": 1,
          "insert_after": "rt_purchase_receipt"},
+    ],
+    # The portal's emailed invite / reset link (api/portal_users.py). Kept apart from ERPNext's
+    # own reset_password_key: ERPNext's guest update_password takes that one with no expiry and
+    # none of the portal's checks. Only the key's sha256 is stored.
+    "User": [
+        {"fieldname": "rt_link_key_hash", "label": "Portal link key", "fieldtype": "Data", "hidden": 1, "read_only": 1,
+         "no_copy": 1, "search_index": 1, "insert_after": "last_reset_password_key_generated_on"},
+        {"fieldname": "rt_link_purpose", "label": "Portal link purpose", "fieldtype": "Select", "options": "\ninvite\nreset",
+         "hidden": 1, "read_only": 1, "no_copy": 1, "insert_after": "rt_link_key_hash"},
+        {"fieldname": "rt_link_expires", "label": "Portal link expires", "fieldtype": "Datetime", "hidden": 1,
+         "read_only": 1, "no_copy": 1, "insert_after": "rt_link_purpose"},
     ],
     "Warehouse": [
         {"fieldname": "rt_location_code", "label": "Location code", "fieldtype": "Data", "unique": 1,

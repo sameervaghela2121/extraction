@@ -95,11 +95,14 @@ def cancel(doctype: str, name: str) -> None:
 
 
 def purchase_receipt(batch: str, supplier: str, item: str, qty: float, warehouse: str, when,
-                     rate_per_roll: float | None = None) -> str:
+                     rate_per_roll: float | None = None, amended_from: str | None = None) -> str:
+    """amended_from: the cancelled receipt this one replaces (a corrected registration); it
+    is named after it, as ERPNext names any amendment."""
     return _submit(_posting({
         "doctype": "Purchase Receipt",
         "company": COMPANY,
         "supplier": supplier,
+        "amended_from": amended_from,
         "ignore_pricing_rule": 1,
         "items": [{
             "item_code": item, "qty": qty, "received_qty": qty, "uom": "Kg", "stock_uom": "Kg",
