@@ -119,6 +119,7 @@ class TestRegister(IntegrationTestCase):
         r = register_roll(base_roll(side1_photo=good))
         self.assertEqual(r["side1_photo"], good)
         for bad in ("/api/method/royal_touche.api.rolls.delete?name=x", "https://evil.example/x.jpg",
-                    "/private/files/../../site_config.json", "/private/files/never-uploaded.jpg"):
+                    "/private/files/../../site_config.json", "/private/files/never-uploaded.jpg",
+                    "/files/%2e%2e\\api\\method\\x", "/files/a%2fb.jpg", "/files/a\tb.jpg", "/files/a.jpg\n", "/files/.hidden"):
             with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
                 register_roll(base_roll(side1_photo=bad))
