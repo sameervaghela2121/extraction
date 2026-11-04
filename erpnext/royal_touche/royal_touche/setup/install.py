@@ -71,10 +71,20 @@ def _ensure_delta_indexes():
         frappe.db.add_index(doctype, ["modified", "name"], index_name="rt_modified_name")
 
 
+# A Godown Operator works in the tablet app only, never ERPNext's own screens. ERPNext makes a
+# user whose roles have no desk access a Website User: kept out of /app, app login unaffected.
+APP_ONLY_ROLES = ("Godown Operator",)
+
+
 def _ensure_roles():
     for role in RT_ROLES:
+        desk = 0 if role in APP_ONLY_ROLES else 1
         if not frappe.db.exists("Role", role):
-            frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1}).insert(ignore_permissions=True)
+            frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": desk}).insert(ignore_permissions=True)
+        elif frappe.db.get_value("Role", role, "desk_access") != desk:
+            doc = frappe.get_doc("Role", role)
+            doc.desk_access = desk
+            doc.save(ignore_permissions=True)  # ERPNext re-types that role's users on save
 
 
 def _ensure_stock_settings():

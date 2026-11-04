@@ -153,8 +153,8 @@ can't OR an AND), and vendors and rolls need joined data (papers, lot, remark co
   `bench --site rt.localhost execute royal_touche.setup.dev_seed.load --kwargs "{'repo_docs': '<repo>/docs'}"`.
   Reads `vendors-seed.json`, `locations-seed.json`, `remarks-seed.json`; creates materials
   `BASE-PAPER`, `TISSUE`, `BARRIER`, one buyer `Walk-in Buyer`, and one user per RT role
-  (`rt-operator@rt.localhost`, `rt-supervisor@rt.localhost`, `rt-admin@rt.localhost`,
-  `rt-superadmin@rt.localhost`) with a password written to `~/.config/rt-erpnext/dev-users`
+  (`operator1@gmail.com`, `supervisor1@gmail.com`, `admin1@gmail.com`,
+  `superadmin1@gmail.com`) with the password `Admin@123`
   (mode 600). Refuses to run unless `developer_mode` is on.
 
 - [ ] **Step 1: Failing tests** — loading twice gives the same counts and no duplicates; vendor
@@ -330,11 +330,11 @@ can't OR an AND), and vendors and rolls need joined data (papers, lot, remark co
 - [ ] **Step 1:** `bench start`; `ngrok http 8000 --host-header=rt.localhost`; put the tunnel in
   `local.properties`; build `erpDebug`; the user installs it.
 - [ ] **Step 2: The user, step by step; the executor watches logs and the server:**
-  1. Log in as `rt-operator@rt.localhost` → first sync shows 74 vendors, 6 locations, 3 materials.
+  1. Log in as `operator1@gmail.com` → first sync shows 74 vendors, 6 locations, 3 materials.
   2. Create a lot, register a roll with a scale weight.
   3. OUT to Running Godown side 1; RETURN 80 kg; SELL to `Walk-in Buyer` with a bill no.
   4. Airplane mode: register a roll and move it; back online: it drains once.
-  5. Log out; log in as `rt-supervisor@rt.localhost`; the sold roll shows in Inventory.
+  5. Log out; log in as `supervisor1@gmail.com`; the sold roll shows in Inventory.
 - [ ] **Step 3:** `bench --site rt.localhost execute royal_touche.checks.ledger_mismatches` → `[]`;
   the movements in Desk match what the tablet showed.
 - [ ] **Step 4:** Record anything the user saw as wrong; fix through the task that owns it.

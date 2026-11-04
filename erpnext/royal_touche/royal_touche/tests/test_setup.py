@@ -37,3 +37,15 @@ class TestSetup(IntegrationTestCase):
                 f"tab{doctype}",
             )
             self.assertTrue(indexed, doctype)
+
+    def test_operators_use_the_app_only(self):
+        """A Godown Operator works in the tablet app, not ERPNext's own screens: the role has no
+        desk access, so ERPNext makes such users Website Users (app login still works)."""
+        from royal_touche.tests.factories import make_user
+
+        ensure_setup()
+        self.assertEqual(frappe.db.get_value("Role", "Godown Operator", "desk_access"), 0)
+        for role in ("Godown Supervisor", "RT Admin", "RT Super Admin"):
+            self.assertEqual(frappe.db.get_value("Role", role, "desk_access"), 1, role)
+        self.assertEqual(frappe.db.get_value("User", make_user("Godown Operator"), "user_type"), "Website User")
+        self.assertEqual(frappe.db.get_value("User", make_user("Godown Supervisor"), "user_type"), "System User")

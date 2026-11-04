@@ -4,11 +4,9 @@ a buyer, and one login per role. Never for production: refuses unless developer_
     bench --site rt.localhost execute royal_touche.setup.dev_seed.load \\
         --kwargs "{'repo_docs': '/path/to/extraction/docs'}"
 
-Passwords go to ~/.config/rt-erpnext/dev-users (mode 600), never to the output."""
+Every test user's password is DEV_PASSWORD: a development site only, never production."""
 
 import json
-import os
-import secrets
 from pathlib import Path
 
 import frappe
@@ -17,17 +15,16 @@ from royal_touche.setup.install import COMPANY
 
 MATERIALS = (("BASE-PAPER", "Base paper"), ("TISSUE", "Tissue"), ("BARRIER", "Barrier"))
 BUYER = "Walk-in Buyer"
-# rt-* addresses: the setup wizard already made admin@rt.localhost, the site's own administrator.
 DEV_USERS = {
-    "rt-operator@rt.localhost": "Godown Operator",
-    "rt-supervisor@rt.localhost": "Godown Supervisor",
-    "rt-admin@rt.localhost": "RT Admin",
-    "rt-superadmin@rt.localhost": "RT Super Admin",
+    "operator1@gmail.com": "Godown Operator",
+    "supervisor1@gmail.com": "Godown Supervisor",
+    "admin1@gmail.com": "RT Admin",
+    "superadmin1@gmail.com": "RT Super Admin",
 }
-USERS_FILE = "~/.config/rt-erpnext/dev-users"
+DEV_PASSWORD = "Admin@123"
 
 
-def load(repo_docs: str, users_file: str = USERS_FILE) -> dict:
+def load(repo_docs: str) -> dict:
     if not frappe.conf.get("developer_mode"):
         frappe.throw("The dev seed only runs on a development site (developer_mode is off)")
     docs = Path(repo_docs)
@@ -68,7 +65,7 @@ def load(repo_docs: str, users_file: str = USERS_FILE) -> dict:
                         "territory": frappe.db.get_value("Territory", {"is_group": 0}, "name") or "All Territories",
                         }).insert(ignore_permissions=True)
 
-    _users(Path(os.path.expanduser(users_file)))
+    _users()
     vendor_names = [frappe.db.get_value("Supplier", {"rt_vendor_code": v["vendor_code"].strip().upper()}) for v in vendors]
     return {
         "vendors": len(vendor_names),
@@ -81,19 +78,13 @@ def load(repo_docs: str, users_file: str = USERS_FILE) -> dict:
     }
 
 
-def _users(path: Path) -> None:
+def _users() -> None:
     from frappe.utils.password import update_password
 
-    saved = json.loads(path.read_text()) if path.exists() else {}
     for email, role in DEV_USERS.items():
         if not frappe.db.exists("User", email):
             frappe.get_doc({"doctype": "User", "email": email, "first_name": role, "send_welcome_email": 0,
                             "roles": [{"role": role}]}).insert(ignore_permissions=True)
         elif role not in frappe.get_roles(email):
             frappe.get_doc("User", email).add_roles(role)
-        saved.setdefault(email, secrets.token_urlsafe(12))
-        update_password(email, saved[email])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(mode=0o600, exist_ok=True)
-    path.chmod(0o600)
-    path.write_text(json.dumps(saved, indent=1))
+        update_password(email, DEV_PASSWORD)

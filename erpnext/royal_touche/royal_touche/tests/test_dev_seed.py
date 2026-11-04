@@ -22,12 +22,11 @@ class TestDevSeed(IntegrationTestCase):
         self.docs = Path(tempfile.mkdtemp())
         for name, rows in (("vendors-seed.json", VENDORS), ("locations-seed.json", LOCATIONS), ("remarks-seed.json", REMARKS)):
             (self.docs / name).write_text(json.dumps(rows))
-        self.users_file = self.docs / "dev-users"
         frappe.conf.developer_mode = 1
         self.addCleanup(setattr, frappe.conf, "developer_mode", frappe.conf.get("developer_mode"))
 
     def load(self):
-        return dev_seed.load(str(self.docs), users_file=str(self.users_file))
+        return dev_seed.load(str(self.docs))
 
     def test_loads_everything_once(self):
         first = self.load()
@@ -47,16 +46,21 @@ class TestDevSeed(IntegrationTestCase):
             self.assertTrue(frappe.db.exists("Item", {"rt_material_code": code}), code)
         self.assertTrue(frappe.db.exists("Customer", "Walk-in Buyer"))
 
-    def test_one_user_per_role_with_passwords_kept_private(self):
+    def test_one_simple_user_per_role(self):
         from frappe.utils.password import check_password
 
         self.load()
-        saved = json.loads(self.users_file.read_text())
-        self.assertEqual(sorted(saved), sorted(dev_seed.DEV_USERS))
-        self.assertEqual(self.users_file.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(dev_seed.DEV_USERS, {
+            "operator1@gmail.com": "Godown Operator",
+            "supervisor1@gmail.com": "Godown Supervisor",
+            "admin1@gmail.com": "RT Admin",
+            "superadmin1@gmail.com": "RT Super Admin",
+        })
         for email, role in dev_seed.DEV_USERS.items():
             self.assertIn(role, frappe.get_roles(email))
-            check_password(email, saved[email])
+            check_password(email, "Admin@123")
+        self.assertEqual(frappe.db.get_value("User", "operator1@gmail.com", "user_type"), "Website User")
+        self.assertEqual(frappe.db.get_value("User", "supervisor1@gmail.com", "user_type"), "System User")
 
     def test_refuses_without_developer_mode(self):
         frappe.conf.developer_mode = 0
