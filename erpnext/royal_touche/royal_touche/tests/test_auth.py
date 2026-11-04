@@ -126,6 +126,25 @@ class TestAppLogin(IntegrationTestCase):
         with self.assertRaisesRegex(frappe.AuthenticationError, "Your account has been suspended"):
             self.login()
 
+    def test_a_wrong_password_never_reveals_that_an_account_is_suspended(self):
+        frappe.db.set_value("User", self.user, "enabled", 0)
+        with self.assertRaisesRegex(frappe.AuthenticationError, "Invalid email or password"):
+            self.login(pwd="wrong")
+
+    def test_logout_ends_every_token_of_this_tablets_session(self):
+        from frappe.utils import set_request
+
+        res = self.login()
+        # Two refreshes racing can leave a second active token on one refresh token.
+        extra = auth._issue(self.user, res["refresh_token"])
+        set_request(path="/api/method/royal_touche.api.auth.logout", method="POST",
+                    headers={"Authorization": f"Bearer {res['access_token']}"})
+        frappe.set_user(self.user)
+        auth.logout()
+        self.assertEqual(authenticated_as(extra["access_token"]), "Guest")
+        with self.assertRaises(frappe.AuthenticationError):
+            auth.refresh(refresh_token=res["refresh_token"])
+
     def test_login_and_refresh_are_open_to_guests(self):
         for fn in (auth.login, auth.refresh):
             self.assertIn(fn, frappe.guest_methods)

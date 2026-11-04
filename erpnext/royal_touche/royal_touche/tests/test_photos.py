@@ -19,7 +19,7 @@ class TestPhotoPaths(IntegrationTestCase):
         for good in ("/private/files/scale-proof-085ec51.jpg", "/files/my photo (1)_a.jpg"):
             self.assertTrue(is_file_path(good), good)
         for bad in ("/files/%2e%2e\\api\\method\\x", "/files/%2e%2e", "/files/a%2fb.jpg", "/files/a\\b.jpg", "/files/a\tb.jpg",
-                    "/files/a.jpg\n", "/files/.hidden", "/files/../x.jpg", "/files/a..b.jpg", "/api/method/x", "files/a.jpg",
+                    "/files/a.jpg\n", "/files/.hidden", "/private/files/notes.txt", "/private/files/invoice.pdf", "/private/files/noextension", "/files/../x.jpg", "/files/a..b.jpg", "/api/method/x", "files/a.jpg",
                     "https://evil.example/x.jpg", "/private/files/", None, 5):
             self.assertFalse(is_file_path(bad), repr(bad))
 
@@ -74,3 +74,24 @@ class TestEveryRoleSeesEveryPhoto(IntegrationTestCase):
         with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
             register_roll(base_roll(side1_photo=path))
         self.assertFalse(frappe.db.get_value("File", {"file_url": path}, "attached_to_doctype"))
+
+    def test_an_administrators_file_is_refused_for_anyone_else(self):
+        manager = make_user("System Manager")
+        for owner in (manager, "Administrator"):
+            path = self.uploaded_by(owner)
+            with as_user(self.operator), self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
+                register_roll(base_roll(side1_photo=path))
+            self.assertFalse(frappe.db.get_value("File", {"file_url": path}, "attached_to_doctype"))
+
+    def test_people_can_use_their_own_upload_whatever_their_role(self):
+        manager = make_user("System Manager")
+        path = self.uploaded_by(manager)
+        data = base_roll(side1_photo=path)
+        with as_user(manager):
+            self.assertEqual(register_roll(data)["side1_photo"], path)
+
+    def test_a_non_image_is_refused(self):
+        path = frappe.get_doc({"doctype": "File", "file_name": frappe.generate_hash(length=8) + ".txt", "is_private": 1,
+                               "content": frappe.generate_hash().encode()}).insert(ignore_permissions=True).file_url
+        with self.assertRaisesRegex(RTValidation, "Photos must be files uploaded to this server"):
+            register_roll(base_roll(side1_photo=path))

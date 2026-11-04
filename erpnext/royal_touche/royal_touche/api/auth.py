@@ -63,13 +63,14 @@ def login(usr: str, pwd: str) -> dict:
         frappe.db.get_value("User", {"email": (usr or "").strip()}, ["name", "enabled"], as_dict=True)
     if not user:
         _refuse(BAD_LOGIN)
-    if not user.enabled:
-        _refuse(SUSPENDED)
     try:
         check_password(user.name, pwd or "")
     except frappe.AuthenticationError:
         frappe.clear_messages()
         _refuse(BAD_LOGIN)
+    # Only after the password: otherwise anyone could learn which accounts are suspended.
+    if not user.enabled:
+        _refuse(SUSPENDED)
     if not rt_role(user.name):
         _refuse("You do not have access to the Royale Touche app")
     return _issue(user.name)
@@ -80,7 +81,7 @@ def login(usr: str, pwd: str) -> dict:
 def refresh(refresh_token: str) -> dict:
     token = frappe.db.get_value(
         "OAuth Bearer Token", {"refresh_token": refresh_token or "", "status": "Active", "client": app_client()},
-        ["name", "user", "modified"], as_dict=True,
+        ["name", "user", "modified"], as_dict=True, for_update=True,
     ) if refresh_token else None
     unused_too_long = token and token.modified < now_datetime() - timedelta(days=REFRESH_DAYS)
     if not token or unused_too_long or not frappe.db.get_value("User", token.user, "enabled") or not rt_role(token.user):
@@ -98,8 +99,11 @@ def logout() -> str:
     """Ends this tablet's session only; the same login on another tablet carries on."""
     header = frappe.get_request_header("Authorization") or ""
     token = header.split(" ", 1)[1].strip() if header.lower().startswith("bearer ") else None
-    if token and frappe.db.get_value("OAuth Bearer Token", token, "user") == frappe.session.user:
-        _revoke(token)
+    row = frappe.db.get_value("OAuth Bearer Token", token, ["user", "refresh_token"], as_dict=True) if token else None
+    if row and row.user == frappe.session.user:
+        # Every token of this session: two refreshes racing can leave more than one active.
+        for name in frappe.get_all("OAuth Bearer Token", {"refresh_token": row.refresh_token, "status": "Active"}, pluck="name"):
+            _revoke(name)
     return "ok"
 
 

@@ -6,7 +6,6 @@ import re
 
 import frappe
 
-from royal_touche.api._access import rt_role
 from royal_touche.errors import RTValidation
 
 OURS = ("Batch", "Roll Movement", "Roll Lot")
@@ -16,16 +15,32 @@ OURS = ("Batch", "Roll Movement", "Roll Lot")
 FILE_PATH = re.compile(r"/(private/)?files/[^\W_][\w.() -]*")
 
 
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+# Whose uploads can be someone else's photo: a queued photo may be sent after the user changed on
+# the tablet. Never an administrator's: their private files aren't app photos.
+APP_ROLES = {"RT Super Admin", "RT Admin", "Godown Supervisor", "Godown Operator"}
+ADMINISTRATIVE_ROLE = "System Manager"
+
+
 def is_file_path(path) -> bool:
-    return isinstance(path, str) and ".." not in path and FILE_PATH.fullmatch(path) is not None
+    if not isinstance(path, str) or ".." in path or not path.lower().endswith(IMAGE_EXTENSIONS):
+        return False
+    return FILE_PATH.fullmatch(path) is not None
+
+
+def _may_use(owner: str) -> bool:
+    if owner == frappe.session.user:
+        return True
+    roles = set(frappe.get_roles(owner))
+    return owner != "Administrator" and ADMINISTRATIVE_ROLE not in roles and bool(roles & APP_ROLES)
 
 
 def _usable_rows(path: str) -> list:
-    """Upload rows for this path that the app may use: uploaded by someone with an app role, and
-    not belonging to anything else. ERPNext attaches an Attach field's file to the record by
+    """Upload rows for this path that the app may use: uploaded by this user or another app user,
+    and not belonging to anything else. ERPNext attaches an Attach field's file to the record by
     itself, so a looser check would open any private file to whoever could read that record."""
     rows = frappe.get_all("File", filters={"file_url": path}, fields=["name", "owner", "attached_to_doctype"])
-    return [r for r in rows if rt_role(r.owner) and (r.attached_to_doctype or OURS[0]) in OURS]
+    return [r for r in rows if _may_use(r.owner) and (r.attached_to_doctype or OURS[0]) in OURS]
 
 
 def check(paths) -> None:

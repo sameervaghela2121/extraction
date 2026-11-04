@@ -154,8 +154,14 @@ def batch_qty(batch: str, warehouse: str | None = None) -> float:
 
 
 def make_file(name: str | None = None) -> str:
-    """A file really uploaded to this site; its path is what photo fields hold."""
+    """An image really uploaded to this site; its path is what photo fields hold."""
+    import io
+    import os
+
+    from PIL import Image
+
     # Unique content: ERPNext gives files with equal content one shared path.
-    file_name = name or unique("photo") + ".txt"
-    return frappe.get_doc({"doctype": "File", "file_name": file_name, "is_private": 1,
-                           "content": file_name.encode()}).insert(ignore_permissions=True).file_url
+    buffer = io.BytesIO()
+    Image.frombytes("RGB", (4, 4), os.urandom(48)).save(buffer, format="PNG")
+    return frappe.get_doc({"doctype": "File", "file_name": name or unique("photo") + ".png", "is_private": 1,
+                           "content": buffer.getvalue()}).insert(ignore_permissions=True).file_url
