@@ -13,7 +13,7 @@ from royal_touche.dates import as_system, check_not_future, check_operator_date
 from royal_touche.errors import RTConflict, RTValidation
 from royal_touche.rolls import find_roll, roll_dict, usable_location
 from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
-from royal_touche.stock_docs import delivery_note, purchase_return, stock_entry
+from royal_touche.stock_docs import delivery_note, ledger_time, purchase_return, stock_entry
 
 MOVEMENT_TYPES = ("IN", "OUT", "RETURN", "ADJUSTMENT", "CONSUME", "RETURN_TO_VENDOR", "SELL")
 OPERATOR_DATED = {"OUT", "RETURN", "CONSUME", "RETURN_TO_VENDOR", "SELL"}
@@ -40,9 +40,9 @@ def record_movement(data: dict) -> dict:
     return replay.guarded("Roll Movement", "client_id", data.get("client_id"), lambda: _record(data), _replayed)
 
 
-def _replayed(name: str) -> dict:
-    mv = movement_dict(name)
-    return {"movement": mv, "roll": roll_dict(mv["roll"])}
+def _replayed(name: str, fresh: bool = False) -> dict:
+    mv = movement_dict(name, fresh=fresh)
+    return {"movement": mv, "roll": roll_dict(mv["roll"], fresh=fresh)}
 
 
 def _record(data: dict) -> dict:
@@ -63,9 +63,16 @@ def _record(data: dict) -> dict:
     if roll.rt_status == "SOLD" and mtype not in ("CONSUME", "IN"):
         raise RTConflict("This roll has already been sold")
 
-    effect = HANDLERS[mtype](roll, data, when)
+    # `when` stays the business date (the report's day). The ledger needs a roll's documents in
+    # order, and a picked day may fall before the roll's last one, so it gets its own time.
+    posted_at = ledger_time(roll.rt_last_posted, as_system(when))
+    effect = HANDLERS[mtype](roll, data, posted_at)
     docs = effect.pop("docs", [])
-    frappe.db.set_value("Batch", roll.name, effect.pop("roll"))
+    changes = effect.pop("roll")
+    if docs:
+        changes["rt_last_posted"] = posted_at
+    if changes:
+        frappe.db.set_value("Batch", roll.name, changes)
     mv = frappe.get_doc({
         "doctype": "Roll Movement",
         "roll": roll.name,
@@ -87,8 +94,8 @@ def _record(data: dict) -> dict:
     return {"movement": movement_dict(mv.name), "roll": roll_dict(roll.name)}
 
 
-def movement_dict(name: str) -> dict:
-    mv = frappe.db.get_value("Roll Movement", name, MOVEMENT_FIELDS, as_dict=True)
+def movement_dict(name: str, fresh: bool = False) -> dict:
+    mv = frappe.db.get_value("Roll Movement", name, MOVEMENT_FIELDS, as_dict=True, for_update=fresh)
     for field in ("photos", "stock_documents"):
         mv[field] = frappe.parse_json(mv[field]) if mv[field] else []
     return mv
@@ -148,6 +155,9 @@ def _return(roll, data, when):
         "Roll Movement", {"roll": roll.name, "movement_type": "OUT", "deleted": 0}, "from_location",
         order_by="transaction_date desc, creation desc",
     )
+    # A rack retired while the roll was out can't take it back; it stays where it is.
+    if home and frappe.db.get_value("Warehouse", home, "disabled"):
+        home = None
     here = _where(roll)
     consumed = returned == 0
     docs = []

@@ -46,6 +46,9 @@ def _ensure_stock_settings():
     settings = frappe.get_single("Stock Settings")
     settings.allow_negative_stock = 0
     settings.allow_negative_stock_for_batch = 0
+    # Otherwise the first priced roll creates an Item Price, and every later unpriced roll or
+    # sale of that material silently takes its rate (spec §7: rates are 0 unless given).
+    settings.auto_insert_price_list_rate_if_missing = 0
     # Every roll is a batch; ERPNext 16 refuses batch-tracked items until this is on.
     settings.enable_serial_and_batch_no_for_item = 1
     # Each roll is its own batch and keeps its own cost (spec §7). Older sites carry this

@@ -15,3 +15,10 @@ doc_events = {
     "Item": {"before_validate": "royal_touche.masters.item_before_validate"},
     "Warehouse": {"validate": "royal_touche.masters.warehouse_validate"},
 }
+
+# ERPNext's whitelisted rate lookups check no permissions; see api/guards.py.
+override_whitelisted_methods = {
+    "erpnext.stock.utils.get_incoming_rate": "royal_touche.api.guards.get_incoming_rate",
+    "erpnext.stock.utils.get_stock_balance": "royal_touche.api.guards.get_stock_balance",
+    "erpnext.stock.get_item_details.get_valuation_rate": "royal_touche.api.guards.get_valuation_rate",
+}

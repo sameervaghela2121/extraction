@@ -57,6 +57,9 @@ CUSTOM_FIELDS = {
         {"fieldname": "rt_deleted", "label": "Deleted", "fieldtype": "Check", "read_only": 1, "insert_after": "rt_client_id"},
         {"fieldname": "rt_purchase_receipt", "label": "Purchase receipt", "fieldtype": "Link",
          "options": "Purchase Receipt", "read_only": 1, "insert_after": "rt_deleted"},
+        # When this roll's newest stock document is posted: see stock_docs.ledger_time().
+        {"fieldname": "rt_last_posted", "label": "Last posted", "fieldtype": "Datetime", "read_only": 1,
+         "insert_after": "rt_purchase_receipt"},
     ],
     "Warehouse": [
         {"fieldname": "rt_location_code", "label": "Location code", "fieldtype": "Data", "unique": 1,

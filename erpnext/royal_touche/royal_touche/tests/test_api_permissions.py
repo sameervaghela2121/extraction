@@ -7,7 +7,7 @@ from royal_touche.api import movements as movements_api
 from royal_touche.api import rolls as rolls_api
 from royal_touche.errors import RTConflict
 from royal_touche.rolls import register_roll
-from royal_touche.tests.factories import as_user, base_roll, make_buyer, make_remark, make_user, standard_locations
+from royal_touche.tests.factories import as_user, base_roll, make_buyer, make_material, make_remark, make_user, standard_locations
 from royal_touche.tests.test_movements import now_iso
 
 
@@ -148,3 +148,47 @@ class TestApiPermissions(IntegrationTestCase):
                 reports_api.consumption_summary_csv(from_date="2026-10-31", to_date="2026-10-01")
             with self.assertRaisesRegex(frappe.ValidationError, "Group by material or design"):
                 reports_api.consumption_summary_csv(from_date="2026-10-01", to_date="2026-10-31", group="vendor")
+
+    def test_godown_roles_cannot_read_or_set_item_prices(self):
+        item = make_material()
+        frappe.db.set_value("Item", item, {"valuation_rate": 30, "last_purchase_rate": 30, "standard_rate": 40})
+        fields = ["name", "valuation_rate", "last_purchase_rate", "standard_rate"]
+        for user in (self.operator, self.supervisor):
+            with as_user(user):
+                row = frappe.get_list("Item", filters={"name": item}, fields=fields)[0]
+                self.assertFalse(row.get("valuation_rate") or row.get("last_purchase_rate") or row.get("standard_rate"), user)
+        with as_user(self.operator):
+            doc = frappe.get_doc("Item", item)
+            doc.valuation_rate = 99
+            doc.save()
+        self.assertEqual(frappe.db.get_value("Item", item, "valuation_rate"), 30)
+        with as_user(self.admin):
+            row = frappe.get_list("Item", filters={"name": item}, fields=fields)[0]
+            self.assertEqual(row.get("valuation_rate"), 30)
+
+    def test_erpnext_rate_lookups_are_closed_to_godown_roles(self):
+        import importlib
+
+        endpoints = ["erpnext.stock.utils.get_incoming_rate", "erpnext.stock.get_item_details.get_valuation_rate",
+                     "erpnext.stock.utils.get_stock_balance"]
+        overrides = frappe.get_hooks("override_whitelisted_methods", {})
+        for cmd in endpoints:
+            target = overrides[cmd][-1]
+            module, fn = target.rsplit(".", 1)
+            guard = getattr(importlib.import_module(module), fn)
+            with as_user(self.operator), self.assertRaises(frappe.PermissionError):
+                guard(item_code="X", company="Royale Touche", warehouse="X", args="{}")
+
+    def test_barcode_runs_cannot_be_hard_deleted_and_their_numbers_stay_spent(self):
+        from royal_touche.barcodes import next_number
+
+        prefix = frappe.generate_hash(length=4).upper()
+        batch = frappe.get_doc({"doctype": "Barcode Batch", "prefix": prefix, "date": "2026-11-03",
+                                "from_number": 1, "to_number": 10}).insert()
+        with as_user(self.operator):
+            with self.assertRaises(frappe.PermissionError):
+                frappe.delete_doc("Barcode Batch", batch.name)
+            doc = frappe.get_doc("Barcode Batch", batch.name)
+            doc.deleted = 1
+            doc.save()
+        self.assertEqual(next_number(prefix, "2026-11-03"), 11)

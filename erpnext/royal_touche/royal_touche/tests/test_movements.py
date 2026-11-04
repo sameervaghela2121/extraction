@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -7,7 +7,8 @@ from royal_touche.dates import IST
 from royal_touche.errors import RTConflict, RTValidation
 from royal_touche.movements import record_movement
 from royal_touche.rolls import register_roll
-from royal_touche.tests.factories import base_roll, batch_qty, make_buyer, standard_locations
+from royal_touche.checks import ledger_mismatches
+from royal_touche.tests.factories import base_roll, batch_qty, make_buyer, make_material, standard_locations, today_ist
 
 
 def now_iso() -> str:
@@ -187,3 +188,116 @@ class TestMovements(IntegrationTestCase):
     def test_more_than_four_photos_rejected(self):
         with self.assertRaisesRegex(RTValidation, "At most 4 photos per movement"):
             self.out(photos=["/private/files/a.jpg"] * 5)
+
+
+class TestLedgerTiming(IntegrationTestCase):
+    """The date on a Roll Movement is the business date; the stock ledger needs an order it can
+    accept. A picked day must never make a movement impossible."""
+
+    def setUp(self):
+        self.loc = standard_locations()
+        self.home, self.running = self.loc["GODOWN-A-1"], self.loc["RUNNING-1"]
+
+    def yesterday(self) -> str:
+        return (datetime.now(IST) - timedelta(days=1)).isoformat(timespec="seconds")
+
+    def posted(self, movement: dict) -> datetime:
+        doc = frappe.get_doc(movement["stock_doctype"], movement["stock_docname"])
+        return frappe.utils.get_datetime(f"{doc.posting_date} {frappe.utils.get_time(doc.posting_time)}")
+
+    def test_a_zoned_time_posts_the_ledger_at_india_time(self):
+        roll = register_roll(base_roll(location=self.home, date=today_ist(3)))["name"]
+        at = (datetime.now(IST) - timedelta(days=1)).replace(hour=2, minute=0, second=0, microsecond=0)
+        utc = at.astimezone(timezone.utc).isoformat()
+        res = move(roll, "OUT", location=self.running, transaction_date=utc, recorded_at=now_iso())
+        self.assertEqual(self.posted(res["movement"]), at.replace(tzinfo=None))
+        self.assertEqual(str(res["movement"]["transaction_date"]), at.strftime("%Y-%m-%d %H:%M:%S"))
+
+    def test_a_zoned_time_just_after_midnight_stays_on_its_india_day(self):
+        roll = register_roll(base_roll(location=self.home, date=today_ist(3)))["name"]
+        at = (datetime.now(IST) - timedelta(days=1)).replace(hour=0, minute=30, second=0, microsecond=0)
+        res = move(roll, "OUT", location=self.running, transaction_date=at.astimezone(timezone.utc).isoformat(),
+                   recorded_at=now_iso())
+        self.assertEqual(self.posted(res["movement"]).date(), at.date())
+
+    def test_out_dated_yesterday_on_a_roll_received_today(self):
+        roll = register_roll(base_roll(location=self.home, date=today_ist()))["name"]
+        day = self.yesterday()
+        res = move(roll, "OUT", location=self.running, transaction_date=day)
+        self.assertEqual(res["roll"]["status"], "ISSUED")
+        self.assertEqual(str(res["movement"]["transaction_date"]), day[:19].replace("T", " "))
+        self.assertEqual((batch_qty(roll, self.home), batch_qty(roll, self.running)), (0, 150))
+        self.assertEqual(ledger_mismatches([roll]), [])
+
+    def test_return_dated_before_its_out(self):
+        roll = register_roll(base_roll(location=self.home, date=today_ist()))["name"]
+        move(roll, "OUT", location=self.running)
+        res = move(roll, "RETURN", returned_weight=80, transaction_date=self.yesterday())
+        self.assertEqual((res["roll"]["status"], res["roll"]["remaining_weight"]), ("IN_STOCK", 80))
+        self.assertEqual((batch_qty(roll, self.home), batch_qty(roll, self.running)), (80, 0))
+        self.assertEqual(ledger_mismatches([roll]), [])
+
+    def test_roll_with_no_date_then_a_date_only_movement_today(self):
+        roll = register_roll(base_roll(location=self.home, date=None))["name"]
+        res = move(roll, "OUT", location=self.running, transaction_date=today_ist())
+        self.assertEqual(res["roll"]["status"], "ISSUED")
+        self.assertEqual(ledger_mismatches([roll]), [])
+
+    def test_timed_out_then_a_date_only_return_today(self):
+        roll = register_roll(base_roll(location=self.home, date=today_ist()))["name"]
+        move(roll, "OUT", location=self.running)
+        res = move(roll, "RETURN", returned_weight=0, transaction_date=today_ist())
+        self.assertEqual(res["roll"]["status"], "CONSUMED")
+        self.assertEqual(ledger_mismatches([roll]), [])
+
+    def test_every_finish_works_out_of_order(self):
+        for action, extra in (("SELL", {"buyer": make_buyer()}), ("RETURN_TO_VENDOR", {}), ("CONSUME", {})):
+            roll = register_roll(base_roll(location=self.home, date=today_ist()))["name"]
+            move(roll, action, transaction_date=self.yesterday(), **extra)
+            self.assertEqual(batch_qty(roll), 0, action)
+            self.assertEqual(ledger_mismatches([roll]), [], action)
+
+    def test_delete_undoes_out_of_order_history(self):
+        from royal_touche.rolls import delete_roll
+
+        roll = register_roll(base_roll(location=self.home, date=today_ist()))["name"]
+        move(roll, "OUT", location=self.running, transaction_date=self.yesterday())
+        delete_roll(roll)
+        self.assertEqual(batch_qty(roll), 0)
+
+
+class TestRetiredMastersMidway(IntegrationTestCase):
+    def test_a_roll_returns_where_it_is_when_its_home_rack_was_retired(self):
+        loc = standard_locations()
+        from royal_touche.tests.factories import make_location, unique
+
+        home = make_location(unique("OLD-RACK"))
+        roll = register_roll(base_roll(location=home))["name"]
+        move(roll, "OUT", location=loc["RUNNING-1"])
+        rack = frappe.get_doc("Warehouse", home)
+        rack.disabled = 1
+        rack.save()
+        res = move(roll, "RETURN", returned_weight=80)
+        self.assertEqual((res["roll"]["status"], res["roll"]["location"]), ("IN_STOCK", loc["RUNNING-1"]))
+        self.assertEqual(batch_qty(roll, loc["RUNNING-1"]), 80)
+
+
+class TestPricesStayWhereTheyWereGiven(IntegrationTestCase):
+    def test_a_priced_roll_does_not_price_the_next_receipt(self):
+        material = make_material()
+        register_roll(base_roll(material=material, rate_per_roll=4500))
+        plain = register_roll(base_roll(material=material))
+        receipt = frappe.get_doc("Purchase Receipt", frappe.db.get_value("Batch", plain["name"], "rt_purchase_receipt"))
+        self.assertEqual((receipt.items[0].rate, receipt.items[0].amount), (0, 0))
+        self.assertEqual(frappe.db.count("Item Price", {"item_code": material}), 0)
+
+    def test_a_priced_sale_does_not_price_the_next_sale(self):
+        material = make_material()
+        buyer = make_buyer()
+        one = register_roll(base_roll(material=material))["name"]
+        two = register_roll(base_roll(material=material))["name"]
+        move(one, "SELL", buyer=buyer, rate_per_roll=6000)
+        res = move(two, "SELL", buyer=buyer)
+        note = frappe.get_doc("Delivery Note", res["movement"]["stock_docname"])
+        self.assertEqual((note.items[0].rate, note.grand_total), (0, 0))
+        self.assertEqual(frappe.db.count("Item Price", {"item_code": material}), 0)

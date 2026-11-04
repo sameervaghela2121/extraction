@@ -11,7 +11,7 @@ from royal_touche.errors import RTDuplicate, RTNotFound, RTValidation
 from royal_touche.masters import normalise_code
 from royal_touche.setup.install import UNASSIGNED_WAREHOUSE
 from royal_touche.stock_docs import cancel as cancel_stock_document
-from royal_touche.stock_docs import purchase_receipt
+from royal_touche.stock_docs import ledger_time, purchase_receipt
 
 ROLL_TAKEN = "A roll with this number already exists"
 BARCODE_TAKEN = "A roll with this barcode already exists"
@@ -46,6 +46,8 @@ def _register(data: dict) -> dict:
     ensure_codes_free(roll_number, barcode)
 
     weight = flt(data["weight"])
+    # Device times arrive with a zone ("…Z", "+05:30"); stored as India wall-clock time.
+    when = as_system(data.get("date") or frappe.utils.now_datetime())
     batch = frappe.get_doc({
         "doctype": "Batch",
         "batch_id": frappe.generate_hash(length=10),
@@ -68,6 +70,7 @@ def _register(data: dict) -> dict:
         "rt_tag_photo": data.get("tag_photo"),
         "rt_barcode_photo": data.get("barcode_photo"),
         "rt_client_id": data.get("client_id") or None,
+        "rt_last_posted": ledger_time(None, when),
     })
     batch.flags.ignore_permissions = True
     try:
@@ -76,8 +79,6 @@ def _register(data: dict) -> dict:
         # Two registrations racing past ensure_codes_free(): the unique index lets one through.
         raise RTDuplicate(BARCODE_TAKEN if "barcode" in str(e) else ROLL_TAKEN) from e
 
-    # Device times arrive with a zone ("…Z", "+05:30"); stored as India wall-clock time.
-    when = as_system(data.get("date") or frappe.utils.now_datetime())
     receipt = purchase_receipt(batch.name, vendor.name, material.name, weight, location or UNASSIGNED_WAREHOUSE,
                                when, rate_per_roll=data.get("rate_per_roll"))
     frappe.db.set_value("Batch", batch.name, "rt_purchase_receipt", receipt, update_modified=False)
@@ -125,8 +126,8 @@ def find_roll(id_or_code: str) -> str:
     raise RTNotFound("Roll not found")
 
 
-def roll_dict(name: str) -> dict:
-    b = frappe.get_doc("Batch", name)
+def roll_dict(name: str, fresh: bool = False) -> dict:
+    b = frappe.get_doc("Batch", name, for_update=fresh)
     return {
         "name": b.name,
         "roll_number": b.rt_roll_number,

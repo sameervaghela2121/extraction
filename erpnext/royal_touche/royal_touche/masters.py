@@ -1,5 +1,21 @@
 """Rules for master data: codes are trimmed and upper-case everywhere (Global Constraints)."""
 
+import frappe
+
+from royal_touche.errors import RTConflict, RTValidation
+
+LIVE_ROLL_STATUSES = ("IN_STOCK", "ISSUED")
+
+
+def _refuse_retiring_with_live_rolls(doc, label: str, roll_filter: dict) -> None:
+    """ERPNext refuses every movement of a disabled item or supplier, which would strand the
+    rolls still in the godown. Node let them go out regardless; here a master waits for its
+    rolls to be finished."""
+    if not doc.disabled or doc.is_new() or not doc.has_value_changed("disabled"):
+        return
+    if frappe.db.exists("Batch", {"rt_status": ["in", LIVE_ROLL_STATUSES], "rt_deleted": 0, **roll_filter}):
+        raise RTConflict(f"{label} still has rolls in stock or out — finish them before deactivating")
+
 
 def normalise_code(value: str | None) -> str | None:
     if value is None:
@@ -9,6 +25,7 @@ def normalise_code(value: str | None) -> str | None:
 
 
 def supplier_validate(doc, method=None):
+    _refuse_retiring_with_live_rolls(doc, doc.supplier_name, {"rt_vendor": doc.name})
     doc.rt_vendor_code = normalise_code(doc.rt_vendor_code)
     for paper in doc.get("rt_papers") or []:
         paper.paper_code = normalise_code(paper.paper_code)
@@ -17,6 +34,7 @@ def supplier_validate(doc, method=None):
 
 
 def item_before_validate(doc, method=None):
+    _refuse_retiring_with_live_rolls(doc, doc.item_name, {"item": doc.name})
     # A raw material is weighed in kg and tracked roll by roll; each roll's batch is made by
     # roll registration, never automatically.
     doc.rt_material_code = normalise_code(doc.rt_material_code)
@@ -42,8 +60,6 @@ def create_vendor(data: dict) -> dict:
 
 
 def _create_vendor(data: dict) -> dict:
-    import frappe
-
     group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
     return vendor_dict(frappe.get_doc({
         "doctype": "Supplier",
@@ -58,10 +74,6 @@ def _create_vendor(data: dict) -> dict:
 def add_papers(vendor: str, papers: list[dict]) -> dict:
     """Add supplier codes to a vendor (sync item "supplier_code"). A paper the vendor already
     has is left alone, so a retried item changes nothing."""
-    import frappe
-
-    from royal_touche.errors import RTValidation
-
     if not papers:
         raise RTValidation("Send at least one supplier code")
     doc = frappe.get_doc("Supplier", vendor)
@@ -77,10 +89,8 @@ def add_papers(vendor: str, papers: list[dict]) -> dict:
     return vendor_dict(doc.name)
 
 
-def vendor_dict(name: str) -> dict:
-    import frappe
-
-    doc = frappe.get_doc("Supplier", name)
+def vendor_dict(name: str, fresh: bool = False) -> dict:
+    doc = frappe.get_doc("Supplier", name, for_update=fresh)
     return {"name": doc.name, "vendor_code": doc.rt_vendor_code, "supplier_name": doc.supplier_name,
             "disabled": doc.disabled, "client_id": doc.rt_client_id, "modified": str(doc.modified),
             "papers": [{"paper_code": p.paper_code, "rt_code": p.rt_code, "delta_code": p.delta_code,

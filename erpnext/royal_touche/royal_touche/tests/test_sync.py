@@ -3,8 +3,12 @@ import uuid
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from royal_touche.lots import create_lot
+from royal_touche.masters import create_vendor
+from royal_touche.movements import record_movement
+from royal_touche.rolls import register_roll
 from royal_touche.sync import run_batch
-from royal_touche.tests.factories import base_roll, make_material, standard_locations
+from royal_touche.tests.factories import base_roll, make_location, standard_locations, unique
 from royal_touche.tests.test_movements import now_iso
 
 
@@ -123,54 +127,71 @@ class TestSync(IntegrationTestCase):
         self.assertEqual((log.item_count, log.applied, log.failed, log.skipped), (2, 1, 1, 0))
 
 
-class TestConcurrentRetry(IntegrationTestCase):
-    """Two copies of one request racing: both miss the replay lookup, the unique index lets
-    one through, and the other must get that one's result — not a duplicate error."""
+class TestRacingRetries(IntegrationTestCase):
+    """Two copies of one request on two real database connections. The loser's transaction
+    began before the winner committed, so its ordinary reads cannot see the winner (MariaDB's
+    REPEATABLE READ). It must still end up with the winner's result, not an error."""
 
-    def test_roll_retry_that_lost_the_race_returns_the_winner(self):
-        from unittest.mock import patch
+    def open_snapshot(self):
+        with self.primary_connection():
+            frappe.db.sql("select name from tabBatch limit 1")
 
-        from royal_touche.rolls import register_roll
+    def committed(self, fn):
+        with self.secondary_connection():
+            result = fn()
+            frappe.db.commit()
+        return result
 
+    def test_lot(self):
         key = cid()
-        first = register_roll(base_roll(client_id=key))
-        retry = base_roll(client_id=key)  # built outside the patch: base_roll's lot does a lookup too
-        with patch("royal_touche.replay.find", side_effect=[None, first["name"]]) as find:
+        body = {"document_type": "challan", "document_no": "RACE-LOT", "client_id": key}
+        self.open_snapshot()
+        winner = self.committed(lambda: create_lot(dict(body)))
+        with self.primary_connection():
+            self.assertEqual(create_lot(dict(body))["name"], winner["name"])
+
+    def test_vendor(self):
+        key = cid()
+        body = {"vendor_code": unique("RACEV"), "name": unique("Race Vendor"), "client_id": key}
+        self.open_snapshot()
+        winner = self.committed(lambda: create_vendor(dict(body)))
+        with self.primary_connection():
+            again = create_vendor(dict(body))
+        self.assertEqual((again["name"], again["vendor_code"]), (winner["name"], winner["vendor_code"]))
+
+    def test_roll(self):
+        key, number = cid(), unique("RACER")
+        self.open_snapshot()
+        winner = self.committed(lambda: register_roll(base_roll(client_id=key, roll_number=number, location=None)))
+        with self.primary_connection():
+            retry = base_roll(client_id=key, roll_number=number, location=None)
             again = register_roll(retry)
-        self.assertEqual(again["name"], first["name"])
-        self.assertEqual(find.call_count, 2)
+            self.assertEqual((again["name"], again["roll_number"], again["weight"]), (winner["name"], number.upper(), 150))
+            self.assertEqual(frappe.db.sql("select count(*) from tabBatch where rt_client_id=%s for update", key)[0][0], 1)
 
-    def test_movement_retry_that_lost_the_race_returns_the_winner(self):
-        from unittest.mock import patch
-
-        from royal_touche.movements import record_movement
-        from royal_touche.rolls import register_roll
-
-        loc = standard_locations()
-        roll = register_roll(base_roll(location=loc["GODOWN-A-1"]))["name"]
+    def test_movement(self):
         key = cid()
-        body = {"movement_type": "OUT", "roll": roll, "location": loc["RUNNING-1"],
-                "transaction_date": now_iso(), "recorded_at": now_iso(), "client_id": key}
-        first = record_movement(dict(body))
-        with patch("royal_touche.replay.find", side_effect=[None, first["movement"]["name"]]) as find:
+
+        def setup():
+            here, there = make_location(unique("RACE-A")), make_location(unique("RACE-B"))
+            return here, there, register_roll(base_roll(location=here))["name"]
+
+        here, there, roll = self.committed(setup)
+        self.open_snapshot()
+        body = {"movement_type": "OUT", "roll": roll, "location": there, "client_id": key,
+                "transaction_date": now_iso(), "recorded_at": now_iso()}
+        winner = self.committed(lambda: record_movement(dict(body)))
+        with self.primary_connection():
             again = record_movement(dict(body))
-        self.assertEqual(again["movement"]["name"], first["movement"]["name"])
-        self.assertEqual(find.call_count, 2)
+        self.assertEqual(again["movement"]["name"], winner["movement"]["name"])
+        self.assertEqual((again["roll"]["status"], again["roll"]["location"]), ("ISSUED", there))
 
-    def test_lot_and_vendor_retries_that_lost_the_race_return_the_winner(self):
-        from unittest.mock import patch
-
-        from royal_touche.lots import create_lot
-        from royal_touche.masters import create_vendor
-
+    def test_batch_item(self):
         key = cid()
-        first = create_lot({"document_type": "challan", "document_no": "RACE-1", "client_id": key})
-        with patch("royal_touche.replay.find", side_effect=[None, first["name"]]):
-            again = create_lot({"document_type": "challan", "document_no": "RACE-1", "client_id": key})
-        self.assertEqual(again["name"], first["name"])
-
-        key = cid()
-        first = create_vendor({"vendor_code": "RACEV", "name": "Race Vendor", "client_id": key})
-        with patch("royal_touche.replay.find", side_effect=[None, first["name"]]):
-            again = create_vendor({"vendor_code": "RACEV", "name": "Race Vendor", "client_id": key})
-        self.assertEqual(again["name"], first["name"])
+        body = {"document_type": "invoice", "document_no": "RACE-BATCH", "client_id": key}
+        self.open_snapshot()
+        winner = self.committed(lambda: create_lot(dict(body)))
+        with self.primary_connection():
+            res = run_batch([{"type": "lot", "client_id": key, "body": {"document_type": "invoice", "document_no": "RACE-BATCH"}}])
+        self.assertEqual(res["results"][0]["status"], "ok")
+        self.assertEqual(res["results"][0]["data"]["name"], winner["name"])

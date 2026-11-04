@@ -27,5 +27,5 @@ def _create(data: dict) -> dict:
     return lot_dict(doc.name)
 
 
-def lot_dict(name: str) -> dict:
-    return frappe.db.get_value("Roll Lot", name, LOT_FIELDS, as_dict=True)
+def lot_dict(name: str, fresh: bool = False) -> dict:
+    return frappe.db.get_value("Roll Lot", name, LOT_FIELDS, as_dict=True, for_update=fresh)

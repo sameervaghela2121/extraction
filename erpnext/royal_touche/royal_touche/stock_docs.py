@@ -7,11 +7,26 @@ even when a document skips its own check. The person who acted is recorded as th
 Rates are 0 unless a rate per roll is given."""
 
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 
 import frappe
 from frappe.utils import flt, get_datetime
 
 from royal_touche.setup.install import COMPANY
+
+
+def ledger_time(last_posted, when) -> datetime:
+    """When to post a roll's next stock document: its business time, or just after the roll's
+    newest document if that is later. ERPNext checks each batch's stock at the posting time,
+    so a movement dated before an earlier one would be refused for good and block the
+    tablet's queue. The business date itself stays on the Roll Movement, which the reports
+    read; only the ledger's position moves."""
+    when = get_datetime(when).replace(microsecond=0)
+    if last_posted:
+        last = get_datetime(last_posted).replace(microsecond=0)
+        if when <= last:
+            return last + timedelta(seconds=1)
+    return when
 
 
 def _posting(doc: dict, when) -> dict:
@@ -85,6 +100,7 @@ def purchase_receipt(batch: str, supplier: str, item: str, qty: float, warehouse
         "doctype": "Purchase Receipt",
         "company": COMPANY,
         "supplier": supplier,
+        "ignore_pricing_rule": 1,
         "items": [{
             "item_code": item, "qty": qty, "received_qty": qty, "uom": "Kg", "stock_uom": "Kg",
             "conversion_factor": 1, "rate": _rate(qty, rate_per_roll), "warehouse": warehouse,
@@ -137,5 +153,6 @@ def delivery_note(customer: str, item: str, batch: str, qty: float, warehouse: s
         "doctype": "Delivery Note",
         "company": COMPANY,
         "customer": customer,
+        "ignore_pricing_rule": 1,
         "items": [_line(item, qty, batch, rate=_rate(qty, rate_per_roll), warehouse=warehouse)],
     }, when))
