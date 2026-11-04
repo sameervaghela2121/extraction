@@ -8,6 +8,7 @@ greys them out itself."""
 import frappe
 from frappe.utils import cint
 
+from royal_touche.dates import as_system
 from royal_touche.errors import RTValidation
 from royal_touche.lots import lot_dict
 from royal_touche.masters import vendor_dict
@@ -37,6 +38,9 @@ def changes(kind: str, after: str | None, after_name: str | None, limit: int = 2
         raise RTValidation(f"Unknown kind: {kind}")
     doctype, condition = SOURCES[kind]
     limit = max(1, min(cint(limit) or 200, MAX_LIMIT))
+    # The app sends back the ISO UTC times it was given (…Z); the column holds India time.
+    # MariaDB would read the text as local time, 5½ hours off, so it is converted here.
+    after = as_system(after).isoformat(sep=" ") if after else None
     keyset = ""
     if after:
         keyset = "AND (`modified` > %(after)s OR (`modified` = %(after)s AND `name` > %(after_name)s))"
@@ -59,8 +63,12 @@ def _shape(kind: str, name: str) -> dict:
     if kind == "rolls":
         roll = roll_dict(name)
         lot = frappe.db.get_value("Roll Lot", roll["lot"], ["document_type", "document_no"], as_dict=True) if roll["lot"] else None
+        received = frappe.db.get_value("Roll Movement", {"roll": name, "movement_type": "IN"}, "transaction_date",
+                                       order_by="creation asc")
         return {**roll, "lot_document_type": lot.document_type if lot else None,
-                "lot_document_no": lot.document_no if lot else None}
+                "lot_document_no": lot.document_no if lot else None,
+                "received_date": str(received) if received else None,
+                "creation": str(frappe.db.get_value("Batch", name, "creation"))}
     if kind == "movements":
         mv = movement_dict(name)
         return {**mv, "roll_number": frappe.db.get_value("Batch", mv["roll"], "rt_roll_number")}

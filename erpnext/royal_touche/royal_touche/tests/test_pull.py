@@ -116,3 +116,28 @@ class TestPull(IntegrationTestCase):
 
         with as_user(make_user("Accounts User")), self.assertRaises(frappe.PermissionError):
             pull_api.changes(kind="remarks")
+
+
+class TestPullForTheApp(IntegrationTestCase):
+    """The app sends back what it received: ISO times in UTC (…Z), any fraction."""
+
+    def test_after_accepts_iso_utc_with_any_fraction(self):
+        remark = make_remark()
+        modified = frappe.db.get_value("RT Remark", remark, "modified")
+        from royal_touche.dates import IST
+        from datetime import timezone
+
+        utc = modified.replace(tzinfo=IST).astimezone(timezone.utc)
+        just_before = (utc - frappe.utils.datetime.timedelta(milliseconds=1))
+        for text in (just_before.strftime("%Y-%m-%dT%H:%M:%S.%fZ"), just_before.strftime("%Y-%m-%dT%H:%M:%S.") +
+                     f"{just_before.microsecond // 1000:03d}Z"):
+            self.assertIn(remark, [r["name"] for r in everything("remarks", text)], text)
+        just_after = (utc + frappe.utils.datetime.timedelta(milliseconds=1)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        self.assertNotIn(remark, [r["name"] for r in everything("remarks", just_after)], "read as UTC, not local")
+        self.assertEqual(len(changes("remarks", "1970-01-01T00:00:00.000Z", None, 1)["items"]), 1)
+
+    def test_rolls_carry_received_date_and_creation(self):
+        roll = register_roll(base_roll(date="2026-11-02"))
+        row = next(r for r in everything("rolls", "1970-01-01T00:00:00.000Z") if r["name"] == roll["name"])
+        self.assertEqual(str(row["received_date"])[:10], "2026-11-02")
+        self.assertTrue(row["creation"])
