@@ -1,7 +1,7 @@
-import { api } from "./client";
+import { call } from "./client";
 import type { GodownLocation, MasterStatus, MaterialType, Paginated, Remark, Vendor, VendorPaper } from "../types";
 
-/** Body of every `POST …/search`: one page of a list, searched and sorted by the server. */
+/** Arguments of every `…_search`: one page of a list, searched and sorted by the server. */
 export interface SearchQuery {
   page: number;
   pageSize: number;
@@ -19,36 +19,36 @@ export interface PaperRow {
   paper: VendorPaper;
 }
 
-/** The master collections are the same CRUD shape over different paths, so one factory
- *  covers all of them. `list` reads a whole master (for pickers, and what the mobile app
- *  uses); `search` is the admin panel's paged, server-searched table. */
-function crud<T extends { id: string }>(path: string) {
+/** The backend's master methods: royal_touche.api.portal_masters.<master>_<action>. */
+const METHODS = "royal_touche.api.portal_masters.";
+
+/** The master collections are the same CRUD shape over different methods, so one factory
+ *  covers all of them. `list` reads a whole master (for pickers); `search` is the admin
+ *  panel's paged, server-searched table. */
+function crud<T extends { id: string }>(master: string) {
+  const method = (action: string) => `${METHODS}${master}_${action}`;
   return {
-    list: (q?: string) => api.get<T[]>(path, { params: q ? { q } : {} }).then((r) => r.data),
-    search: (query: SearchQuery) => api.post<Paginated<T>>(`${path}/search`, query).then((r) => r.data),
-    get: (id: string) => api.get<T>(`${path}/${id}`).then((r) => r.data),
-    create: (body: Partial<T>) => api.post<T>(path, body).then((r) => r.data),
-    update: (id: string, body: Partial<T>) =>
-      api.patch<T>(`${path}/${id}`, body).then((r) => r.data),
-    remove: (id: string) => api.delete(`${path}/${id}`).then((r) => r.data),
+    list: (q?: string) => call<T[]>(method("list"), q ? { q } : {}),
+    search: (query: SearchQuery) => call<Paginated<T>>(method("search"), { ...query }),
+    get: (id: string) => call<T>(method("get"), { id }),
+    create: (body: Partial<T>) => call<T>(method("create"), { body }, "POST"),
+    update: (id: string, body: Partial<T>) => call<T>(method("update"), { id, body }, "POST"),
+    // A soft delete: the record stays, inactive. Answers { id, status }.
+    remove: (id: string) => call<unknown>(method("remove"), { id }, "DELETE"),
     // Drag-and-drop's other half: one page's ids in their new top-to-bottom order, and where
     // that page starts in the full list. Only the reorderable masters call this.
-    reorder: (ids: string[], offset?: number) =>
-      api.post<T[]>(`${path}/reorder`, { ids, offset }).then((r) => r.data),
+    reorder: (ids: string[], offset?: number) => call<T[]>(method("reorder"), { ids, offset }, "POST"),
   };
 }
 
 export const vendorsApi = {
-  ...crud<Vendor>("/vendors"),
+  ...crud<Vendor>("vendors"),
   /** The vendor table: vendors without their papers, which have their own screen. */
-  search: (query: SearchQuery) =>
-    api.post<Paginated<Omit<Vendor, "papers">>>("/vendors/search", query).then((r) => r.data),
+  search: (query: SearchQuery) => call<Paginated<Omit<Vendor, "papers">>>(`${METHODS}vendors_search`, { ...query }),
   /** The paper-codes screen: every vendor's papers, one row per paper, paged by the server. */
-  searchPapers: (query: SearchQuery) =>
-    api.post<Paginated<PaperRow>>("/vendors/papers/search", query).then((r) => r.data),
+  searchPapers: (query: SearchQuery) => call<Paginated<PaperRow>>(`${METHODS}vendors_search_papers`, { ...query }),
 };
-export const locationsApi = crud<GodownLocation>("/locations");
-// Path stays "/raw-materials": the backend resource is unchanged, only what the screen
-// calls it. Renaming the endpoint would break the mobile app, which reads the same list.
-export const materialTypesApi = crud<MaterialType>("/raw-materials");
-export const remarksApi = crud<Remark>("/remarks");
+export const locationsApi = crud<GodownLocation>("locations");
+// The screen calls them material types; on the backend they are ERPNext Items.
+export const materialTypesApi = crud<MaterialType>("materials");
+export const remarksApi = crud<Remark>("remarks");

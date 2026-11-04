@@ -1,26 +1,48 @@
-import { api } from "./client";
+import { call, fileObjectUrl, uploadFile } from "./client";
 import type { MaterialRoll, MaterialRollListItem, Paginated, VendorPaper } from "../types";
+
+const M = "royal_touche.api.portal_rolls.";
+
+/** The roll's photo paths and the link fields they fill. The server returns the paths; private
+ *  files need the login token, so the links are made here (see fileObjectUrl). */
+const PHOTOS = [
+  ["tag_photo_path", "tag_photo_url"],
+  ["stitched_barcode_photo_path", "stitched_barcode_photo_url"],
+  ["side1_photo_path", "side1_photo_url"],
+  ["side2_photo_path", "side2_photo_url"],
+] as const;
+
+type WithPhotoPaths = MaterialRoll & Partial<Record<(typeof PHOTOS)[number][0], string>>;
+
+/** One roll with its photo links filled. Only for single-roll answers: a page of rolls would
+ *  download every photo on it, and no list screen shows them. */
+async function withPhotos(roll: MaterialRoll): Promise<MaterialRoll> {
+  const r = roll as WithPhotoPaths;
+  const urls = await Promise.all(PHOTOS.map(([path]) => fileObjectUrl(r[path])));
+  const out = { ...roll };
+  PHOTOS.forEach(([, url], i) => {
+    out[url] = urls[i];
+  });
+  return out;
+}
 
 /** Unlike the masters, this endpoint pages server-side — rolls grow without bound, so the
  *  list is never read whole and `q` is a real query rather than an in-memory filter. */
 export const rollsApi = {
   list: (params: { q?: string; page?: number; pageSize?: number }) =>
-    api
-      .get<Paginated<MaterialRollListItem>>("/material-rolls", { params })
-      .then((r) => r.data),
+    call<Paginated<MaterialRollListItem>>(`${M}list`, params),
 
-  /** The full roll — the list item is deliberately narrower than this. The admin panel's
-   *  POST search; the GET list stays as the mobile app uses it. */
+  /** The full roll — the list item is deliberately narrower than this. */
   listFull: (body: {
     q?: string;
     sort?: "roll_number" | "date";
     order?: "asc" | "desc";
     page?: number;
     pageSize?: number;
-  }) =>
-    api.post<Paginated<MaterialRoll>>("/material-rolls/search", body).then((r) => r.data),
+  }) => call<Paginated<MaterialRoll>>(`${M}search`, body),
 
-  get: (id: string) => api.get<MaterialRoll>(`/material-rolls/${id}`).then((r) => r.data),
+  /** By id, roll number or barcode. */
+  get: (id: string) => call<MaterialRoll>(`${M}get`, { id }).then(withPhotos),
 
   /** Registers a roll; the server writes its IN movement. Refused without a lot. */
   create: (body: {
@@ -37,22 +59,16 @@ export const rollsApi = {
     width: number;
     side1_photo_path?: string;
     side2_photo_path?: string;
-  }) => api.post<MaterialRoll>("/material-rolls", body).then((r) => r.data),
+  }) => call<MaterialRoll>(`${M}create`, body, "POST").then(withPhotos),
 
-  /** A roll photo goes to the bucket's rolls/ folder; the returned path is what create takes. */
-  uploadPhoto: (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    return api
-      .post<{ objectPath: string; mediaUrl: string }>("/media/upload", form)
-      .then((r) => r.data.objectPath);
-  },
+  /** Uploads a roll photo as a private file; the returned path is what create takes. */
+  uploadPhoto: (file: File) => uploadFile(file),
 
-  /** Never send remaining_weight, status or client_id — all three are refused with a 400.
+  /** Never send remaining_weight, weight, status or client_id — all are refused with a 400.
    *  A stock figure changes through a movement, which leaves a ledger row behind it. */
   update: (id: string, body: Partial<MaterialRoll> & { material_id?: string }) =>
-    api.patch<MaterialRoll>(`/material-rolls/${id}`, body).then((r) => r.data),
+    call<MaterialRoll>(`${M}update`, { ...body, id }, "POST").then(withPhotos),
 
-  /** Only while the roll is untouched. Anything else is a 409 naming the reason. */
-  remove: (id: string) => api.delete(`/material-rolls/${id}`).then((r) => r.data),
+  /** Soft: the roll and its movements are kept, marked deleted. */
+  remove: (id: string) => call<{ id: string; deleted: boolean }>(`${M}remove`, { id }, "POST"),
 };

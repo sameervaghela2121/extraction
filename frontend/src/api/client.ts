@@ -5,7 +5,11 @@ import axios, { AxiosError } from "axios";
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const ACCESS_KEY = "docflow.accessToken";
 const REFRESH_KEY = "docflow.refreshToken";
-const AUTH_METHODS = "royal_touche.api.auth.";
+const REFRESH_METHOD = "royal_touche.api.auth.refresh";
+// Methods a logged-out person calls. They never carry the saved token (a stale one would get
+// them a 401 from ERPNext), and their own 401 is an answer, not a cue to refresh.
+const GUEST_METHODS =
+  /royal_touche\.api\.(auth\.(login|refresh)|portal_users\.(accept_invite|forgot_password|reset_password))\b/;
 
 export const tokenStore = {
   get access() {
@@ -28,7 +32,7 @@ export const api = axios.create({ baseURL: BASE_URL });
 
 api.interceptors.request.use((config) => {
   const token = tokenStore.access;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !GUEST_METHODS.test(config.url ?? "")) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -42,7 +46,7 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       original &&
-      !original.url?.includes(AUTH_METHODS) &&
+      !GUEST_METHODS.test(original.url ?? "") &&
       !(original as { _retried?: boolean })._retried
     ) {
       (original as { _retried?: boolean })._retried = true;
@@ -53,7 +57,7 @@ api.interceptors.response.use(
             status: 401,
           } as never);
           refreshing = axios
-            .post(`${BASE_URL}/method/${AUTH_METHODS}refresh`, { refresh_token: refreshToken })
+            .post(`${BASE_URL}/method/${REFRESH_METHOD}`, { refresh_token: refreshToken })
             .then((r) => {
               const m = r.data.message as { access_token: string; refresh_token: string };
               tokenStore.set(m.access_token, m.refresh_token);
@@ -101,10 +105,30 @@ export async function call<T>(
   return res.data.message as T;
 }
 
-/** Uploads one file to ERPNext as a private file; returns its path ("/private/files/x.jpg"). */
+const PHOTO_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
+const EXTENSION_OF_TYPE: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+/** A plain, unique file name for an upload. The server only takes photo paths made of plain
+ *  letters, digits and a few marks (photos.py FILE_PATH), so the user's own file name
+ *  ("challan #12.jpg", a Devanagari name) is never sent. An extension that isn't a photo's is
+ *  kept, so the server refuses the file with its own message. */
+function uploadName(file: File): string {
+  const dot = file.name.lastIndexOf(".");
+  const own = dot >= 0 ? file.name.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+  const ext = PHOTO_EXTENSIONS.includes(own) ? own : (EXTENSION_OF_TYPE[file.type] ?? own);
+  // randomUUID needs a secure context (https or localhost); getRandomValues works everywhere.
+  const id =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return ext ? `${id}.${ext}` : id;
+}
+
+/** Uploads one file to ERPNext as a private file, under a generated name; returns its path
+ *  ("/private/files/<uuid>.jpg"). */
 export async function uploadFile(file: File): Promise<string> {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", file, uploadName(file));
   form.append("is_private", "1");
   const res = await api.post("/method/upload_file", form);
   return (res.data.message as { file_url: string }).file_url;
@@ -116,7 +140,9 @@ export async function uploadFile(file: File): Promise<string> {
  * URL. Returns null for no path, or when the file can't be read (shown as "no photo").
  */
 export async function fileObjectUrl(path: string | null | undefined): Promise<string | null> {
-  if (!path) return null;
+  // Only this server's own files: anything else ("//other.host/x", a full URL) would carry the
+  // login token off-site.
+  if (!path || !/^\/?(private\/)?files\/[^/]+$/.test(path)) return null;
   try {
     const res = await api.get(path.replace(/^\/?/, "/"), { baseURL: BASE_URL.replace(/\/api\/?$/, ""), responseType: "blob" });
     return URL.createObjectURL(res.data as Blob);

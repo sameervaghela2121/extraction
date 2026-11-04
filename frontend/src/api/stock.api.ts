@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { call } from "./client";
 import type { Paginated, StockMovement } from "../types";
 
 export const stockApi = {
@@ -10,5 +10,5 @@ export const stockApi = {
    * writes exactly one IN row, so a total of 1 means nothing has happened since it arrived.
    */
   movements: (params: { roll_id: string; page?: number; pageSize?: number }) =>
-    api.get<Paginated<StockMovement>>("/stock/movements", { params }).then((r) => r.data)
+    call<Paginated<StockMovement>>("royal_touche.api.portal_rolls.movements", params),
 };
