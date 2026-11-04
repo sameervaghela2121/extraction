@@ -24,6 +24,26 @@ def ensure_setup():
     _ensure_company()
     _ensure_unassigned_warehouse()
     _ensure_delta_indexes()
+    _ensure_app_client()
+
+
+def _ensure_app_client():
+    """The OAuth Client the app's login tokens belong to. Tokens are issued by
+    royal_touche.api.auth, never through an OAuth sign-in screen, so no redirect is used."""
+    from royal_touche.api.auth import APP_CLIENT
+
+    if frappe.db.exists("OAuth Client", {"app_name": APP_CLIENT}):
+        return
+    frappe.get_doc({
+        "doctype": "OAuth Client",
+        "app_name": APP_CLIENT,
+        "scopes": "all",
+        "default_redirect_uri": "https://localhost/unused",
+        "redirect_uris": "https://localhost/unused",
+        "grant_type": "Authorization Code",
+        "response_type": "Code",
+        "skip_authorization": 0,
+    }).insert(ignore_permissions=True)
 
 
 # The tablet pulls these by "changed since" (modified, name); ERPNext's own tables have no
