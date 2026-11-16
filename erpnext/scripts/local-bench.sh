@@ -19,8 +19,15 @@ DB_ROOT_PASS="${RT_MARIADB_ROOT_PASSWORD:-$(cat "$HOME/.config/rt-mariadb/root-p
 REPO_APP="$(cd "$(dirname "$0")/.." && pwd)/royal_touche"
 # Frappe shells out to the mariadb client for schema restores; use the one that matches our
 # server, ahead of any system MySQL client.
-MARIADB_BASE=$(ls -d "$HOME"/.local/opt/mariadb-*-linux-systemd-x86_64 2>/dev/null | sort -V | tail -1)
+# Linux private tarball (local-mariadb.sh). `|| true` so Mac (no match) does not abort under pipefail.
+MARIADB_BASE=$(ls -d "$HOME"/.local/opt/mariadb-*-linux-systemd-x86_64 2>/dev/null | sort -V | tail -1 || true)
 [[ -n "$MARIADB_BASE" ]] && export PATH="$MARIADB_BASE/bin:$PATH" LD_LIBRARY_PATH="$MARIADB_BASE/lib/compat${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# macOS: Homebrew MariaDB from erpnext/scripts/macos-bootstrap.sh
+if command -v brew >/dev/null 2>&1; then
+  _brew_prefix=$(brew --prefix 2>/dev/null || true)
+  [[ -n "$_brew_prefix" && -x "$_brew_prefix/bin/mariadb" ]] && export PATH="$_brew_prefix/bin:$PATH"
+  unset _brew_prefix
+fi
 
 say() { printf '\n== %s\n' "$*"; }
 
