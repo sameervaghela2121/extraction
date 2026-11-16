@@ -124,6 +124,36 @@ class TestMovements(IntegrationTestCase):
         with self.assertRaisesRegex(RTConflict, "This roll has already been returned to the vendor"):
             move(self.roll, "RETURN_TO_VENDOR")
 
+    def test_partial_return_to_vendor_keeps_the_rest(self):
+        res = move(self.roll, "RETURN_TO_VENDOR", weight=70)
+        roll = res["roll"]
+        self.assertEqual((roll["status"], roll["remaining_weight"]), ("IN_STOCK", 80))
+        self.assertIsNotNone(roll["location"])
+        self.assertEqual(res["movement"]["weight"], 70)
+        doc = frappe.get_doc(res["movement"]["stock_doctype"], res["movement"]["stock_docname"])
+        self.assertEqual(abs(doc.items[0].qty), 70)
+        self.assertEqual(batch_qty(self.roll), 80)
+        done = move(self.roll, "RETURN_TO_VENDOR", weight=80)
+        self.assertEqual(done["roll"]["status"], "RETURNED_TO_VENDOR")
+        self.assertEqual(batch_qty(self.roll), 0)
+
+    def test_partial_return_over_remaining_is_refused(self):
+        with self.assertRaisesRegex(RTValidation, "only has 150 kg left"):
+            move(self.roll, "RETURN_TO_VENDOR", weight=200)
+
+    def test_return_of_exactly_what_is_left_finishes_the_roll(self):
+        move(self.roll, "RETURN_TO_VENDOR", weight=40)
+        done = move(self.roll, "RETURN_TO_VENDOR", weight=110)
+        self.assertEqual((done["roll"]["status"], done["roll"]["remaining_weight"], done["roll"]["location"]),
+                         ("RETURNED_TO_VENDOR", 0, None))
+        self.assertEqual(batch_qty(self.roll), 0)
+
+    def test_zero_piece_is_refused(self):
+        with self.assertRaisesRegex(RTValidation, "Weight must be greater than 0"):
+            move(self.roll, "RETURN_TO_VENDOR", weight=0)
+        with self.assertRaisesRegex(RTValidation, "Weight must be greater than 0"):
+            move(self.roll, "SELL", weight=0)
+
     # SELL
     def test_sell_without_a_buyer_goes_to_direct_sale(self):
         # The app's sell dialog has no buyer picker (user directive: the app's screens don't
@@ -149,6 +179,14 @@ class TestMovements(IntegrationTestCase):
         dn = frappe.get_doc("Delivery Note", res["movement"]["stock_docname"])
         self.assertAlmostEqual(dn.items[0].amount, 3000, places=2)
         self.assertAlmostEqual(dn.items[0].rate, 20, places=4)
+
+    def test_selling_exactly_what_is_left_finishes_the_roll(self):
+        buyer = make_buyer()
+        move(self.roll, "SELL", buyer=buyer, weight=60)
+        done = move(self.roll, "SELL", buyer=buyer, weight=90)
+        self.assertEqual((done["roll"]["status"], done["roll"]["remaining_weight"], done["roll"]["location"]),
+                         ("SOLD", 0, None))
+        self.assertEqual(batch_qty(self.roll), 0)
 
     def test_sell_while_out_conflicts(self):
         self.out()

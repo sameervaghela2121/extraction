@@ -254,9 +254,13 @@ def replay(path: Path):
             write(name, kind, step, weight=back, used_weight=used, roll_weight_after=back, from_location=frm,
                   to_location=None if back == 0 else s["home"], **common)
         elif kind in ("RETURN_TO_VENDOR", "SELL"):
-            frm, gone = s["location"], s["remaining"]
-            s.update(remaining=0, status="RETURNED_TO_VENDOR" if kind == "RETURN_TO_VENDOR" else "SOLD", location=None)
-            write(name, kind, step, weight=gone, roll_weight_after=0, from_location=frm, **common)
+            frm = s["location"]
+            gone = step.get("weight", s["remaining"])
+            s["remaining"] = s["remaining"] - gone
+            finished = s["remaining"] <= 0
+            s["status"] = ("RETURNED_TO_VENDOR" if kind == "RETURN_TO_VENDOR" else "SOLD") if finished else "IN_STOCK"
+            s["location"] = None if finished else frm
+            write(name, kind, step, weight=gone, roll_weight_after=max(s["remaining"], 0), from_location=frm, **common)
         elif kind == "CONSUME":
             if s["status"] in ("CONSUMED", "RETURNED_TO_VENDOR", "SOLD"):
                 write(name, kind, step, weight=0, used_weight=0, roll_weight_after=0, from_location=s["location"], **common)
@@ -743,7 +747,9 @@ class TestDailyStatus(unittest.TestCase):
         self.assertEqual(sa({"movement_type": "RETURN", "weight": 0, "roll_weight_after": 0}), "CONSUMED")
         self.assertEqual(sa({"movement_type": "RETURN", "weight": 5, "roll_weight_after": 5}), "IN_STOCK")
         self.assertEqual(sa({"movement_type": "RETURN_TO_VENDOR", "weight": 5, "roll_weight_after": 0}), "RETURNED_TO_VENDOR")
+        self.assertEqual(sa({"movement_type": "RETURN_TO_VENDOR", "weight": 5, "roll_weight_after": 10}), "IN_STOCK")
         self.assertEqual(sa({"movement_type": "SELL", "weight": 5, "roll_weight_after": 0}), "SOLD")
+        self.assertEqual(sa({"movement_type": "SELL", "weight": 5, "roll_weight_after": 10}), "IN_STOCK")
         consume0 = {"movement_type": "CONSUME", "weight": 0, "roll_weight_after": 0}
         self.assertEqual(sa(consume0, "SOLD"), "SOLD")
         self.assertEqual(sa(consume0, "RETURNED_TO_VENDOR"), "RETURNED_TO_VENDOR")

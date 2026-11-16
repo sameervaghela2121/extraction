@@ -216,6 +216,27 @@ def _consume(roll, data, when):
             "weight": used, "used_weight": used, "roll_weight_after": 0, "from_location": roll.rt_location or None}
 
 
+def _piece_qty(roll, data) -> float:
+    """Kg leaving the roll. Omitted weight means the whole remainder (today's whole-roll action)."""
+    remaining = flt(roll.rt_remaining_weight)
+    if data.get("weight") is None or data.get("weight") == "":
+        return remaining
+    qty = flt(data.get("weight"))
+    if qty <= 0:
+        raise RTValidation("Weight must be greater than 0")
+    if qty > remaining:
+        raise RTValidation(f"This roll only has {kg(remaining)} kg left")
+    return qty
+
+
+def _after_piece(roll, qty: float, done_status: str) -> dict:
+    remaining = flt(roll.rt_remaining_weight)
+    left = flt(remaining - qty)
+    if left <= 0:
+        return {"rt_status": done_status, "rt_remaining_weight": 0, "rt_location": None}
+    return {"rt_status": "IN_STOCK", "rt_remaining_weight": left, "rt_location": roll.rt_location}
+
+
 def _return_to_vendor(roll, data, when):
     if roll.rt_status == "ISSUED":
         raise RTConflict("This roll is already out — record its return first")
@@ -225,12 +246,14 @@ def _return_to_vendor(roll, data, when):
         raise RTConflict("This roll has already been returned to the vendor")
     if not roll.rt_vendor:
         raise RTValidation("This roll has no vendor on record to return it to")
-    qty = flt(roll.rt_remaining_weight)
+    qty = _piece_qty(roll, data)
+    changes = _after_piece(roll, qty, "RETURNED_TO_VENDOR")
     docs = []
     if qty > 0:
         docs.append(("Purchase Receipt", purchase_return(roll.rt_purchase_receipt, roll.name, qty, _where(roll), when)))
-    return {"roll": {"rt_status": "RETURNED_TO_VENDOR", "rt_remaining_weight": 0, "rt_location": None}, "docs": docs,
-            "weight": qty, "roll_weight_after": 0, "from_location": roll.rt_location or None}
+    return {"roll": changes, "docs": docs,
+            "weight": qty, "roll_weight_after": changes["rt_remaining_weight"],
+            "from_location": roll.rt_location or None}
 
 
 def _sell(roll, data, when):
@@ -243,13 +266,15 @@ def _sell(roll, data, when):
     buyer = data.get("buyer") or DIRECT_SALE_BUYER
     if not frappe.db.exists("Customer", buyer):
         raise RTValidation("That buyer no longer exists — pick another")
-    qty = flt(roll.rt_remaining_weight)
+    qty = _piece_qty(roll, data)
+    changes = _after_piece(roll, qty, "SOLD")
     docs = []
     if qty > 0:
         docs.append(("Delivery Note", delivery_note(buyer, roll.item, roll.name, qty, _where(roll), when,
                                                     rate_per_roll=data.get("rate_per_roll"))))
-    return {"roll": {"rt_status": "SOLD", "rt_remaining_weight": 0, "rt_location": None}, "docs": docs,
-            "weight": qty, "roll_weight_after": 0, "from_location": roll.rt_location or None,
+    return {"roll": changes, "docs": docs,
+            "weight": qty, "roll_weight_after": changes["rt_remaining_weight"],
+            "from_location": roll.rt_location or None,
             "buyer": buyer, "savio_bill_no": (data.get("savio_bill_no") or "").strip() or None,
             "vehicle_no": (data.get("vehicle_no") or "").strip().upper() or None,
             "rate_per_roll": flt(data.get("rate_per_roll")) or None}

@@ -42,7 +42,8 @@ def make_vendor(code: str | None = None, papers: list[dict] | None = None, name:
             "doctype": "Supplier",
             # Suppliers are named after supplier_name, so two test vendors must never share one.
             "supplier_name": name or unique(f"Vendor {code.strip()}"),
-            "supplier_group": "All Supplier Groups",
+            # "All Supplier Groups" is a group node; ERPNext only accepts a leaf group.
+            "supplier_group": "Raw Material",
             "rt_vendor_code": code,
             "rt_papers": papers or [],
         }

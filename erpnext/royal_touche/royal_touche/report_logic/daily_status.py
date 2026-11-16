@@ -191,9 +191,9 @@ def status_after(row: dict, previous: str | None = None) -> str:
     if kind == "RETURN":
         return "CONSUMED" if row.get("roll_weight_after") == 0 else "IN_STOCK"
     if kind == "RETURN_TO_VENDOR":
-        return "RETURNED_TO_VENDOR"
+        return "RETURNED_TO_VENDOR" if row.get("roll_weight_after") == 0 else "IN_STOCK"
     if kind == "SELL":
-        return "SOLD"
+        return "SOLD" if row.get("roll_weight_after") == 0 else "IN_STOCK"
     if kind == "CONSUME":
         # A CONSUME on a finished roll is a no-op with weight 0; it must not turn a returned
         # or sold roll into a consumed one.
