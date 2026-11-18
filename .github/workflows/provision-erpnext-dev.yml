@@ -79,14 +79,11 @@ jobs:
         run: |
           gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
             erpnext/scripts/gce-dev-seed.sh "${{ env.VM_NAME }}:/tmp/gce-dev-seed.sh"
-          # Seed JSON lives in repo under docs/ or erpnext — copy docs if present
-          if [ -d docs ]; then
-            gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap --recurse \
-              docs "${{ env.VM_NAME }}:/tmp/rt-docs" || true
-          fi
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap --recurse \
+            docs "${{ env.VM_NAME }}:/tmp/rt-docs"
           gcloud compute ssh "${{ env.VM_NAME }}" \
             --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
-            --command="sudo chmod +x /tmp/gce-dev-seed.sh; sudo -u frappe ERP_DEV_HOST='${ERP_DEV_HOST}' bash /tmp/gce-dev-seed.sh"
+            --command="sudo chmod +x /tmp/gce-dev-seed.sh; sudo -u frappe ERP_DEV_HOST='${ERP_DEV_HOST}' REPO_DOCS=/tmp/rt-docs bash /tmp/gce-dev-seed.sh"
       - name: Summary
         run: |
           echo "### Dev ERPNext" >> "$GITHUB_STEP_SUMMARY"
