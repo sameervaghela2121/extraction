@@ -4,6 +4,23 @@ on:
   push:
     branches: [development]
   workflow_dispatch:
+    inputs:
+      provision_erpnext:
+        description: "Provision rt-erpnext-dev (GCE + bench + optional LE/seed)"
+        type: boolean
+        default: false
+      erp_dev_host:
+        description: "Hostname (blank = erp-dev.<ip>.sslip.io)"
+        required: false
+        default: ""
+      letsencrypt:
+        description: "Let's Encrypt during provision"
+        type: boolean
+        default: true
+      seed:
+        description: "Run dev_seed during provision"
+        type: boolean
+        default: true
 
 # Scaling/billing flags are stated explicitly on every Cloud Run deploy rather than
 # left off. gcloud run deploy only overwrites the settings it is given and
@@ -15,9 +32,69 @@ env:
   ZONE: asia-south1-a
   REPO: asia-south1-docker.pkg.dev/sameerv/extraction
   ERP_VM: rt-erpnext-dev
+  IP_NAME: rt-erpnext-dev-ip
 
 jobs:
+  provision-erpnext:
+    if: github.event_name == 'workflow_dispatch' && inputs.provision_erpnext == true
+    runs-on: ubuntu-latest
+    outputs:
+      host: ${{ steps.host.outputs.host }}
+      address: ${{ steps.ip.outputs.address }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Allocate static IP
+        id: ip
+        run: |
+          if ! gcloud compute addresses describe "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud compute addresses create "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}"
+          fi
+          IP=$(gcloud compute addresses describe "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}" --format='value(address)')
+          echo "address=$IP" >> "$GITHUB_OUTPUT"
+      - name: Resolve hostname
+        id: host
+        run: |
+          INPUT="${{ inputs.erp_dev_host }}"
+          IP="${{ steps.ip.outputs.address }}"
+          if [ -n "$INPUT" ]; then HOST="$INPUT"; else HOST="erp-dev.${IP}.sslip.io"; fi
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "ERP_DEV_HOST=$HOST"
+      - name: Provision VM + bench
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: |
+          chmod +x erpnext/scripts/gce-dev-*.sh
+          ./erpnext/scripts/gce-dev-provision.sh
+      - name: Let's Encrypt
+        if: ${{ inputs.letsencrypt == true }}
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: ./erpnext/scripts/gce-dev-provision.sh --letsencrypt
+      - name: Seed
+        if: ${{ inputs.seed == true }}
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: |
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            erpnext/scripts/gce-dev-seed.sh "${{ env.ERP_VM }}:/tmp/gce-dev-seed.sh"
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap --recurse \
+            docs "${{ env.ERP_VM }}:/tmp/rt-docs"
+          gcloud compute ssh "${{ env.ERP_VM }}" \
+            --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            --command="sudo chmod +x /tmp/gce-dev-seed.sh; sudo -u frappe ERP_DEV_HOST='${ERP_DEV_HOST}' REPO_DOCS=/tmp/rt-docs bash /tmp/gce-dev-seed.sh"
+      - name: Summary
+        run: |
+          echo "### Dev ERPNext provisioned" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Host: \`${{ steps.host.outputs.host }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- IP: \`${{ steps.ip.outputs.address }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Set repo variable ERP_DEV_HOST=\`${{ steps.host.outputs.host }}\`" >> "$GITHUB_STEP_SUMMARY"
+
   changes:
+    if: github.event_name != 'workflow_dispatch' || inputs.provision_erpnext != true
     runs-on: ubuntu-latest
     outputs:
       frontend: ${{ steps.filter.outputs.frontend || 'true' }}
