@@ -26,13 +26,13 @@ export function AdminRoute() {
  *
  *  /upload, /documents, /grn, /grn/new, /general-vouchers*, /export and /settings are
  *  commented out in router.tsx for now — restore their entries there and revert staff back
- *  to "/grn" together. Admins are absent from this list because they're allowed everywhere
- *  that isn't explicitly disabled. */
+ *  to "/grn" together. Godown supervisors and super admins land on /dashboard; plain admin
+ *  stays on /users (supervisor-only inventory nav is hidden for them). */
 const HOME_FOR_ROLE: Partial<Record<UserRole, string>> = {
   staff: "/no-access",
-  godown_supervisor: "/masters",
+  godown_supervisor: "/dashboard",
   admin: "/users",
-  super_admin: "/users",
+  super_admin: "/dashboard",
 };
 
 /** Safe even for a role with no entry above, or none at all (loading/logged-out edge). Never

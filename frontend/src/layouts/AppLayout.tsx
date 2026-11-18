@@ -14,6 +14,7 @@ import {
   ScanBarcode,
   Smartphone,
   BarChart3,
+  LayoutDashboard,
   ChevronDown,
   LogOut,
   type LucideIcon,
@@ -63,6 +64,7 @@ const NAV: NavItem[] = [
   // { to: "/general-vouchers", label: "General Vouchers", icon: Receipt, end: true },
   // { to: "/export", label: "Export", icon: Download },
   // { to: "/settings", label: "Extraction settings", icon: Settings, adminOnly: true },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, supervisorVisible: true },
   { to: "/barcodes", label: "Barcode generator", icon: ScanBarcode, supervisorVisible: true },
   // The Royal Touche masters, grouped: four entries that are always maintained together
   // read as one section, not as four peers of Barcode generator.
@@ -97,7 +99,7 @@ function leaves(item: NavItem): Array<{ to: string; label: string; icon: LucideI
 /** Table/list screens that want the full window instead of the 1200px reading width —
  *  every masters section, user management, and the barcode generator. Detail views
  *  (a document, a GRN, a voucher) are left at the narrower default. */
-const FULL_WIDTH_PATHS = /^\/(users|barcodes|masters)(\/|$)/;
+const FULL_WIDTH_PATHS = /^\/(dashboard|users|barcodes|masters)(\/|$)/;
 
 /** Table screens whose list scrolls inside its own card rather than growing the whole
  *  page — a table like this reads oddly if the browser's own scrollbar is what you reach
