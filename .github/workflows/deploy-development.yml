@@ -48,9 +48,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Enable Compute / IAP APIs
+        continue-on-error: true
         run: |
           gcloud services enable compute.googleapis.com iap.googleapis.com oslogin.googleapis.com \
-            --project="${{ env.PROJECT_ID }}"
+            --project="${{ env.PROJECT_ID }}" \
+            || echo "::warning::Enable Compute Engine API as a project owner: https://console.cloud.google.com/apis/api/compute.googleapis.com/overview?project=sameerv"
       - name: Allocate static IP
         id: ip
         run: |
