@@ -7,30 +7,28 @@ installs of `gcloud` live at `~/.local/gcloud/google-cloud-sdk` if needed.
 # 0. PATH (if using the user-local SDK)
 export PATH="$HOME/.local/gcloud/google-cloud-sdk/bin:$PATH"
 
-# 1. Auth
+# 1. Auth (use a real Terminal.app — Workspace reauth often fails in agent shells)
 gcloud auth login
 gcloud config set project sameerv
 
-# 2. Choose a public hostname you control and export it:
-export ERP_DEV_HOST=erp-dev.YOUR_DOMAIN
+# 1b. REQUIRED once: enable Compute Engine (deployer SA cannot enable APIs)
+# https://console.cloud.google.com/apis/api/compute.googleapis.com/overview?project=sameerv
+gcloud services enable compute.googleapis.com iap.googleapis.com oslogin.googleapis.com --project=sameerv
 
-# 3. From Royale-Touche-BE/:
+# 2. Prefer GitHub Actions (after API enable):
+#    Actions → "Deploy to Cloud Run (development)" → Run workflow
+#    provision_erpnext=true, letsencrypt=true, seed=true
+#    Default host: erp-dev.<static-ip>.sslip.io (no corporate DNS needed)
+#    Then set Actions variable ERP_DEV_HOST from the job summary.
+
+# 2-alt. Or provision locally:
+export ERP_DEV_HOST=erp-dev.YOUR_DOMAIN   # or erp-dev.<ip>.sslip.io after IP allocate
 ./erpnext/scripts/gce-dev-provision.sh
-# → note the printed static IP
-
-# 4. Create DNS A record: $ERP_DEV_HOST → that IP (wait for propagation)
-
-# 5. TLS:
 ./erpnext/scripts/gce-dev-provision.sh --letsencrypt
-
-# 6. Seed:
 gcloud compute ssh rt-erpnext-dev --zone=asia-south1-a --project=sameerv --tunnel-through-iap \
-  --command="sudo -u frappe ERP_DEV_HOST=$ERP_DEV_HOST bash /tmp/gce-dev-seed.sh"
+  --command="sudo -u frappe ERP_DEV_HOST=\$ERP_DEV_HOST REPO_DOCS=/path/to/docs bash /tmp/gce-dev-seed.sh"
 
-# 7. GitHub → Settings → Variables → Actions:
-#    ERP_DEV_HOST = same hostname (no https://)
-
-# 8. Tablet local.properties:
+# 3. Tablet local.properties:
 #    erp.dev.baseUrl=https://$ERP_DEV_HOST/api/
 ```
 
