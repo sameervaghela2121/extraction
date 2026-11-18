@@ -40,12 +40,11 @@ gcloud compute ssh rt-erpnext-dev --zone=asia-south1-a --project=sameerv --tunne
   `feature/macos-bootstrap/javed/20261116`  
   Compare → PR:  
   https://github.com/sameervaghela2121/extraction/compare/development...feature/macos-bootstrap/javed/20261116?expand=1
-- Local uncommitted file  
-  `.github/workflows/deploy-development.yml`  
-  adds `deploy-erpnext` (IAP SSH migrate/restart) and points  
-  `deploy-frontend` at `https://$ERP_DEV_HOST/api`.  
-  **`git push` of that file needs a PAT with `workflow` scope**, or paste/commit  
-  it via the GitHub web UI on the feature branch, then open the PR above.
+- Full workflow YAML also lives at `erpnext/ci/deploy-development.yml`
+  (see `erpnext/ci/README.md`). Paste that into
+  `.github/workflows/deploy-development.yml` via the GitHub web UI, or
+  push with a PAT that has **`workflow`** scope. It adds `deploy-erpnext`
+  and points the portal at `https://$ERP_DEV_HOST/api`.
 - Tablet Dev BASE_URL change is on GitLab branch  
   `feature/partial-roll-return-and-sell/javed/20261116`  
   (open MR into `development` from the GitLab UI).
