@@ -1,10 +1,13 @@
 # Operator checklist — Dev ERPNext provision
 
-The agent environment that added these scripts did **not** have `gcloud` or
-`ERP_DEV_HOST`. Run this once on a machine with GCP access to `sameerv`.
+Run this once on a machine with GCP access to `sameerv`. Local agent
+installs of `gcloud` live at `~/.local/gcloud/google-cloud-sdk` if needed.
 
 ```bash
-# 1. Install Google Cloud SDK if needed, then:
+# 0. PATH (if using the user-local SDK)
+export PATH="$HOME/.local/gcloud/google-cloud-sdk/bin:$PATH"
+
+# 1. Auth
 gcloud auth login
 gcloud config set project sameerv
 
@@ -31,4 +34,15 @@ gcloud compute ssh rt-erpnext-dev --zone=asia-south1-a --project=sameerv --tunne
 #    erp.dev.baseUrl=https://$ERP_DEV_HOST/api/
 ```
 
-After that, merges to `development` that touch `erpnext/**` or `frontend/**` deploy automatically.
+## Push / CI notes
+
+- Merges to `development` that touch `erpnext/**` or `frontend/**` deploy
+  automatically **after** `.github/workflows/deploy-development.yml` from
+  this cut-over is on the branch (includes `deploy-erpnext` + portal
+  `VITE_API_BASE_URL=https://$ERP_DEV_HOST/api`).
+- Updating that workflow file via `git push` requires a PAT with the
+  **`workflow`** scope (or commit the file in the GitHub web UI). Without
+  it, GitHub rejects the push of `.github/workflows/*`.
+
+After provision + DNS + `ERP_DEV_HOST` variable + workflow on `development`,
+inventory Dev portal/tablet talk only to ERPNext on GCE.
