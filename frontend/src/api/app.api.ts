@@ -1,9 +1,8 @@
-import { api } from "./client";
+import { call } from "./client";
 
 export const appApi = {
-  /** A signed, short-lived GCS URL for the current Android build — mint fresh on every
-   *  click and navigate to it directly, rather than caching one: it expires in minutes,
-   *  and the whole point of signing it per-request is that there's nothing to invalidate
-   *  when a new build overwrites the object it points at. */
-  apkDownloadUrl: () => api.get<{ url: string }>("/app/apk").then((r) => r.data.url),
+  /** Where the current Android build downloads from — asked fresh on every click rather than
+   *  cached, so a new build is picked up without reloading the page. */
+  apkDownloadUrl: () =>
+    call<{ url: string }>("royal_touche.api.portal_lots.apk_url").then((r) => r.url),
 };

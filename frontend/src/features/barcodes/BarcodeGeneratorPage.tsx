@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Printer, Search, Send, X } from "lucide-react";
+import { Search, Send, X } from "lucide-react";
 import { rollsApi } from "../../api/rolls.api";
 import { deltaCodes, rtCodes } from "../masters/rollPapers";
 import { apiErrorMessage } from "../../api/client";
@@ -7,10 +7,7 @@ import { useToast } from "../../context/ToastContext";
 import { Modal, PageHeader, Spinner } from "../../components/ui";
 import Label, { type LabelItem } from "./Label";
 import { buildSeries, seriesCode, MAX_SERIES } from "./series";
-import { buildLabelPdf, type PdfLabel } from "./pdf";
-import { buildTspl, type TsplOrientation } from "./tspl";
 import { buildPrintHtml } from "./printHtml";
-import { listPrinters, printRaw } from "./qzPrint";
 import { barcodeBatchesApi, type BarcodeSearchResult } from "../../api/barcodeBatches.api";
 import type { BarcodeBatch, MaterialRollListItem } from "../../types";
 import { BARCODE_SIZES, defaultSizeFor, findSize, type LabelKind } from "./labelSizes";
@@ -19,84 +16,12 @@ const PAGE_SIZE = 25;
 // ponytail: the roll picker is built and working, just not wanted on screen yet. Flip to
 // true to bring back the search, the "Select page" button and the roll table.
 const ROLL_PICKER_ENABLED = false;
-// ponytail: QR code generation (qr.ts, and the QR paths in pdf.ts/zpl.ts/Label.tsx) is built
+// ponytail: QR code generation (qr.ts, and the QR paths in Label.tsx/printHtml.ts) is built
 // and working, just not wanted on screen yet — flip to true to bring back the "Code type"
 // dropdown so an operator can choose QR for a new run. Everything that already prints an
 // existing QR run keeps working regardless of this flag: a batch's own saved `kind` (see
 // barcodeBatchesService) decides how it re-renders, never this setting.
 const QR_CODE_ENABLED = false;
-// ponytail: QZ Tray direct-to-printer (qzPrint.ts, the printer/resolution/copies/orientation
-// dialog below) is built and working, just not wanted on screen yet — flip to true to bring
-// the "Print directly" button back. "Print" (printBatch, printHtml.ts) replaces it as the
-// on-screen entry point: it hands the run to the browser's own print dialog instead, so
-// there's no QZ Tray/printer-driver setup required on the machine doing the printing.
-const DIRECT_PRINT_ENABLED = false;
-// ponytail: the PDF and TSPL "Print file" downloads (downloadBatch/downloadBatchTspl below)
-// are built and working, just not wanted on screen yet — flip to true to bring the "Print
-// file" and "PDF" buttons back on a run's row.
-const FILE_DOWNLOADS_ENABLED = false;
-
-/** Same barcode peeled off twice — one goes on each of two packages, so it needs to exist
- *  twice on the roll, back to back, rather than once. Only "Print directly" applies this —
- *  it's the one path with nowhere else to ask "how many copies," since it skips any print
- *  dialog and goes straight to the printer. The PDF/print-file downloads leave that choice
- *  to whatever eventually prints them (a PDF viewer's own copies setting, the printer
- *  utility's own repeat option), rather than baking a fixed copy count into the file. */
-const COPIES_PER_LABEL = 2;
-
-function duplicateForPrint(labels: LabelItem[], copies: number = COPIES_PER_LABEL): LabelItem[] {
-  return labels.flatMap((label) => Array<LabelItem>(copies).fill(label));
-}
-
-const ORIENTATIONS: TsplOrientation[] = ["N", "R", "I", "B"];
-
-interface PrinterSettings {
-  /** Exactly as QZ Tray reports it — this is a driver/queue name, not something to guess. */
-  name: string;
-  /** Dots per mm the selected printer actually is: 203dpi = 8, 300dpi = 12. Wrong here means
-   *  every measurement in the TSPL — label size, bars, margins, fonts — comes out scaled to
-   *  the wrong physical size on that printer. */
-  dpi: 203 | 300;
-  copies: "1" | "2";
-  /** How the whole label is turned before printing — see tspl.ts's TsplOrientation for what
-   *  each letter does. Needed because a roll can be mounted in the printer either way round,
-   *  and the app has no way to detect that; the operator picks whichever way makes the
-   *  physical sticker come out readable. */
-  orientation: TsplOrientation;
-}
-
-const DEFAULT_PRINTER_SETTINGS: PrinterSettings = { name: "", dpi: 203, copies: "2", orientation: "N" };
-const PRINTER_SETTINGS_STORAGE_KEY = "barcode-printer-settings";
-
-/** Remembered per browser, same reasoning as the sticker size: one computer, one printer. */
-function loadPrinterSettings(): PrinterSettings {
-  try {
-    const raw = localStorage.getItem(PRINTER_SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_PRINTER_SETTINGS;
-    const parsed = JSON.parse(raw);
-    if (
-      typeof parsed.name === "string" &&
-      (parsed.dpi === 203 || parsed.dpi === 300) &&
-      (parsed.copies === "1" || parsed.copies === "2")
-    ) {
-      // Settings saved before orientation existed have none — default those to "N" rather
-      // than reject the whole saved object.
-      const orientation = ORIENTATIONS.includes(parsed.orientation) ? parsed.orientation : "N";
-      return { ...parsed, orientation };
-    }
-  } catch {
-    // Corrupt or blocked storage — fall back to the default rather than fail the page.
-  }
-  return DEFAULT_PRINTER_SETTINGS;
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-/** Same tag qzPrint.ts logs under — filter DevTools' console on "[barcode-print]" to see
- *  the whole direct-print flow in one place, from dialog open through the QZ Tray reply. */
-const LOG = "[barcode-print]";
 
 interface LabelSizeMm {
   widthMm: number;
@@ -206,7 +131,7 @@ export default function BarcodeGeneratorPage() {
   const [deleting, setDeleting] = useState<BarcodeBatch | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
   // Barcode or QR — set once per computer/printer, not per run of codes. Drives which
-  // standard sizes are offered below, and how every download/print renders the code.
+  // standard sizes are offered below, and how every print renders the code.
   const [labelKind] = useState<LabelKind>(loadLabelKind);
   // One size remembered per kind (see loadLabelSize) — switching kind swaps in that kind's
   // own last pick rather than carrying over a size that belongs to the other one.
@@ -217,65 +142,6 @@ export default function BarcodeGeneratorPage() {
   useEffect(() => {
     localStorage.setItem(LABEL_KIND_STORAGE_KEY, labelKind);
   }, [labelKind]);
-
-  // Direct printing via QZ Tray — see qzPrint.ts. Nothing here talks to the backend.
-  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(loadPrinterSettings);
-  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
-  const [detectingPrinters, setDetectingPrinters] = useState(false);
-  const [printerError, setPrinterError] = useState<string | null>(null);
-  // The run "Print directly" was clicked for — non-null opens the dialog. Detection and
-  // settings happen inside it rather than on a permanently-visible card, since they're only
-  // ever relevant at the moment you're about to print.
-  const [printDialogBatch, setPrintDialogBatch] = useState<BarcodeBatch | null>(null);
-  const [sendingPrint, setSendingPrint] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PRINTER_SETTINGS_STORAGE_KEY, JSON.stringify(printerSettings));
-    } catch {
-      // Best effort — printing still works even if the choice isn't remembered next visit.
-    }
-  }, [printerSettings]);
-
-  // The saved printer name from last time won't be in the list until detection runs again
-  // this session — keep it selectable anyway rather than silently blanking it.
-  const printerOptions =
-    printerSettings.name && !availablePrinters.includes(printerSettings.name)
-      ? [printerSettings.name, ...availablePrinters]
-      : availablePrinters;
-
-  const detectPrinters = async () => {
-    console.log(`${LOG} detecting printers…`);
-    setDetectingPrinters(true);
-    setPrinterError(null);
-    try {
-      const found = await listPrinters();
-      setAvailablePrinters(found);
-      if (found.length === 0) {
-        console.warn(`${LOG} QZ Tray connected but reported zero printers`);
-        setPrinterError("QZ Tray is running but sees no printers — check it's installed and turned on.");
-      } else if (!found.includes(printerSettings.name)) {
-        console.log(`${LOG} auto-selecting "${found[0]}" (previous selection not in this list)`);
-        setPrinterSettings((prev) => ({ ...prev, name: found[0] }));
-      } else {
-        console.log(`${LOG} keeping existing selection "${printerSettings.name}"`);
-      }
-    } catch (err) {
-      console.error(`${LOG} detection failed`, err);
-      setPrinterError(`Couldn't reach QZ Tray — install it and make sure it's running. (${errorMessage(err)})`);
-    } finally {
-      setDetectingPrinters(false);
-    }
-  };
-
-  /** Opens the print dialog for this run and immediately starts looking for a printer, so
-   *  by the time the operator has read the dialog a printer is usually already selected. */
-  const openPrintDialog = (batch: BarcodeBatch) => {
-    console.log(`${LOG} opening print dialog for batch ${batchName(batch)} (${batch.count} barcodes)`);
-    setPrintDialogBatch(batch);
-    setPrinterError(null);
-    void detectPrinters();
-  };
 
   useEffect(() => {
     if (!ROLL_PICKER_ENABLED) {
@@ -445,7 +311,7 @@ export default function BarcodeGeneratorPage() {
           : `${count} barcode${count === 1 ? "" : "s"}: ${seriesCode(seriesInput, seriesInput.from)}` +
             (count > 1 ? ` to ${seriesCode(seriesInput, seriesInput.to)}` : "");
 
-  /** "RT260910001-RT260910050" — the run's range, for the row heading and the filename. */
+  /** "RT260910001-RT260910050" — the run's range, for the remove dialog's title. */
   const batchName = (batch: BarcodeBatch) => {
     const input = {
       prefix: batch.prefix,
@@ -562,69 +428,6 @@ export default function BarcodeGeneratorPage() {
     notify(`Generated ${result.labels.length} barcode${result.labels.length === 1 ? "" : "s"}`);
   };
 
-  /** Labels → a PDF in the browser's downloads. `name` becomes the filename, so a run
-   *  arrives as "RT260910001-RT260910050.pdf" rather than something anonymous. `kind` and
-   *  the size are the batch's own saved values, never the generator's current settings —
-   *  otherwise reprinting an old run would silently use whatever's selected right now. */
-  const downloadLabels = (
-    labels: LabelItem[],
-    name: string,
-    kind: LabelKind,
-    widthMm: number,
-    heightMm: number,
-  ) => {
-    if (labels.length === 0) return;
-    // One page per label, drawn as vectors at the configured sticker size — the page IS
-    // the sticker, so a thermal printer feeds one per label with nothing to scale or cut.
-    // Not duplicated: a downloaded file isn't the place to bake in "how many copies" — a
-    // PDF viewer's own print dialog already has a copies setting for that. Only "Print
-    // directly" (which skips any such dialog) asks for a copy count itself.
-    const pages: PdfLabel[] = labels.map((label) => ({
-      code: label.code,
-      lines: label.lines,
-    }));
-    const url = URL.createObjectURL(buildLabelPdf(pages, widthMm, heightMm, kind));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${name}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
-    notify(`${pages.length} barcode${pages.length === 1 ? "" : "s"} downloaded`);
-  };
-
-  /** Download a saved run straight from its row — no need to preview it first. */
-  const downloadBatch = (batch: BarcodeBatch) => {
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    downloadLabels(labels, batchName(batch), batch.kind, batch.widthMm, batch.heightMm);
-  };
-
-  /**
-   * The same run as printer commands rather than a document.
-   *
-   * Plain text, so it can go to the printer however the office finds easiest — dragged into
-   * the printer's utility, or copied to its share. The browser has to produce this rather
-   * than the server: the printer sits on their LAN and the backend runs in Cloud Run, so
-   * the two can never reach each other.
-   */
-  const downloadBatchTspl = (batch: BarcodeBatch) => {
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    // Not duplicated, same reasoning as the PDF path: a downloaded file shouldn't decide how
-    // many copies get printed — that's a print-time choice, not a content choice.
-    const blob = new Blob(
-      [buildTspl(labels, batch.widthMm, batch.heightMm, undefined, batch.kind)],
-      { type: "text/plain" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${batchName(batch)}.tspl`;
-    link.click();
-    URL.revokeObjectURL(url);
-    notify(`${labels.length} barcode${labels.length === 1 ? "" : "s"} ready for the printer`);
-  };
-
   /**
    * Hand a set of labels to the browser's own print dialog instead of a downloaded file.
    *
@@ -632,10 +435,10 @@ export default function BarcodeGeneratorPage() {
    * this run" (Print all) and "just this one" (a single barcode's own Print button, or a
    * global-search hit) without duplicating the iframe dance for each.
    *
-   * Rendered as plain HTML sized with `@page` (see printHtml.ts), not the PDF this page
-   * already generates — a PDF's page size gets reinterpreted by whichever PDF viewer prints
-   * it, and Chromium's built-in one has a habit of auto-rotating a label-sized page no matter
-   * what the print dialog's own orientation is set to. Printed via a hidden iframe rather
+   * Rendered as plain HTML sized with `@page` (see printHtml.ts), not a PDF — a PDF's page
+   * size gets reinterpreted by whichever PDF viewer prints it, and Chromium's built-in one
+   * has a habit of auto-rotating a label-sized page no matter what the print dialog's own
+   * orientation is set to. Printed via a hidden iframe rather
    * than a new tab: no popup blocker to fight, and it removes itself once the print dialog
    * closes instead of leaving an extra tab behind.
    */
@@ -669,67 +472,6 @@ export default function BarcodeGeneratorPage() {
     // srcdoc rather than document.write: it's the modern way to load a full HTML string into
     // an iframe, and content is already HTML-escaped in printHtml.ts either way.
     iframe.srcdoc = html;
-  };
-
-  /**
-   * The "Print" button inside the dialog opened by "Print directly".
-   *
-   * Detection already ran when the dialog opened (see openPrintDialog), so this just sends
-   * whatever printer/resolution/copies are currently set in the dialog. On failure the
-   * dialog stays open with the error shown in it, so a fixable problem (wrong printer
-   * picked, QZ Tray not started yet) can be corrected and retried without starting over.
-   *
-   * Resolves once QZ Tray accepts the job, not once the sticker is physically out of the
-   * printer — a jam or empty stock still reports success here, same caveat as any print
-   * dialog. The PDF/ZPL downloads stay available on this row as the fallback/reprint path.
-   */
-  const confirmPrint = async () => {
-    const batch = printDialogBatch;
-    if (!batch || !printerSettings.name) {
-      console.warn(`${LOG} Print clicked with nothing to print`, {
-        hasBatch: Boolean(batch),
-        printerName: printerSettings.name,
-      });
-      return;
-    }
-    const labels = labelsOf(batch);
-    if (!labels) return;
-    console.log(`${LOG} confirmed print`, {
-      batch: batchName(batch),
-      printer: printerSettings.name,
-      dpi: printerSettings.dpi,
-      copies: printerSettings.copies,
-      orientation: printerSettings.orientation,
-      kind: batch.kind,
-      stickerSizeMm: `${batch.widthMm}x${batch.heightMm}`,
-      uniqueBarcodes: labels.length,
-    });
-    setSendingPrint(true);
-    setPrinterError(null);
-    try {
-      const printLabels = duplicateForPrint(labels, Number(printerSettings.copies));
-      await printRaw(
-        printerSettings.name,
-        buildTspl(
-          printLabels,
-          batch.widthMm,
-          batch.heightMm,
-          printerSettings.dpi,
-          batch.kind,
-          printerSettings.orientation,
-        ),
-      );
-      console.log(`${LOG} print succeeded — ${printLabels.length} labels sent`);
-      notify(
-        `${printLabels.length} barcode${printLabels.length === 1 ? "" : "s"} sent to ${printerSettings.name}`,
-      );
-      setPrintDialogBatch(null);
-    } catch (err) {
-      console.error(`${LOG} print failed`, err);
-      setPrinterError(`Couldn't print — is QZ Tray running and the printer on? (${errorMessage(err)})`);
-    } finally {
-      setSendingPrint(false);
-    }
   };
 
   return (
@@ -895,33 +637,6 @@ export default function BarcodeGeneratorPage() {
             </span>
             {sheet.length > 0 && activeBatch && (
               <div className="row gap-8">
-                {FILE_DOWNLOADS_ENABLED && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => downloadBatchTspl(activeBatch)}
-                    title="Send this run to the label printer"
-                  >
-                    <Printer size={14} /> Print file
-                  </button>
-                )}
-                {FILE_DOWNLOADS_ENABLED && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => downloadBatch(activeBatch)}
-                    title="Download this run as a PDF"
-                  >
-                    <Download size={14} /> PDF
-                  </button>
-                )}
-                {DIRECT_PRINT_ENABLED && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => openPrintDialog(activeBatch)}
-                    title="Send this run straight to the printer over QZ Tray, skipping the file/dialog"
-                  >
-                    <Send size={14} /> Print directly
-                  </button>
-                )}
                 <button
                   className="btn btn-sm btn-primary"
                   onClick={() => printLabels(sheet, activeBatch.widthMm, activeBatch.heightMm, activeBatch.kind)}
@@ -1096,115 +811,6 @@ export default function BarcodeGeneratorPage() {
                 disabled={deletingNow}
               >
                 {deletingNow ? "Removing…" : "Remove barcodes"}
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      <Modal
-        isOpen={printDialogBatch !== null}
-        onClose={() => setPrintDialogBatch(null)}
-        title={printDialogBatch ? `Print ${batchName(printDialogBatch)} directly` : "Print directly"}
-        size="medium"
-      >
-        {printDialogBatch && (
-          <div style={{ display: "grid", gap: 14, padding: 16 }}>
-            <p className="faint" style={{ fontSize: 12, margin: 0 }}>
-              {detectingPrinters
-                ? "Looking for a printer via QZ Tray…"
-                : printerSettings.name
-                  ? `Found "${printerSettings.name}". Change any of these if it's not what you want.`
-                  : "No printer picked yet — install and start QZ Tray on this computer, then detect again."}
-            </p>
-            <label className="barcode-field">
-              <span>Printer</span>
-              <select
-                className="input"
-                value={printerSettings.name}
-                onChange={(e) => setPrinterSettings((prev) => ({ ...prev, name: e.target.value }))}
-              >
-                <option value="">Select a printer…</option>
-                {printerOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="barcode-fields">
-              <label className="barcode-field">
-                <span>Printer resolution</span>
-                <select
-                  className="input"
-                  value={printerSettings.dpi}
-                  onChange={(e) =>
-                    setPrinterSettings((prev) => ({
-                      ...prev,
-                      dpi: Number(e.target.value) === 300 ? 300 : 203,
-                    }))
-                  }
-                >
-                  <option value={203}>203 dpi (TH240)</option>
-                  <option value={300}>300 dpi (TH340)</option>
-                </select>
-              </label>
-              <label className="barcode-field">
-                <span>Copies per barcode</span>
-                <select
-                  className="input"
-                  value={printerSettings.copies}
-                  onChange={(e) =>
-                    setPrinterSettings((prev) => ({
-                      ...prev,
-                      copies: e.target.value === "1" ? "1" : "2",
-                    }))
-                  }
-                >
-                  <option value="1">1 (one sticker each)</option>
-                  <option value="2">2 (for two packages)</option>
-                </select>
-              </label>
-              <label className="barcode-field">
-                <span>Orientation</span>
-                <select
-                  className="input"
-                  value={printerSettings.orientation}
-                  onChange={(e) =>
-                    setPrinterSettings((prev) => ({
-                      ...prev,
-                      orientation: ORIENTATIONS.includes(e.target.value as TsplOrientation)
-                        ? (e.target.value as TsplOrientation)
-                        : "N",
-                    }))
-                  }
-                >
-                  <option value="N">Normal</option>
-                  <option value="R">Turned right</option>
-                  <option value="I">Upside down</option>
-                  <option value="B">Turned left</option>
-                </select>
-              </label>
-            </div>
-            <div className="row gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-sm" onClick={detectPrinters} disabled={detectingPrinters}>
-                {detectingPrinters ? "Looking…" : "Detect again"}
-              </button>
-              {printerError && (
-                <span style={{ color: "var(--danger)", fontSize: 12 }}>{printerError}</span>
-              )}
-            </div>
-            <div className="row gap-8" style={{ justifyContent: "flex-end" }}>
-              <button type="button" className="btn" onClick={() => setPrintDialogBatch(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={confirmPrint}
-                disabled={sendingPrint || !printerSettings.name}
-              >
-                {sendingPrint ? "Sending…" : "Print"}
               </button>
             </div>
           </div>

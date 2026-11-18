@@ -1,0 +1,183 @@
+name: Deploy to Development (ERPNext + Cloud Run)
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+# Scaling/billing flags are stated explicitly on every Cloud Run deploy rather than
+# left off. gcloud run deploy only overwrites the settings it is given and
+# inherits the rest from the previous revision.
+
+env:
+  PROJECT_ID: sameerv
+  REGION: asia-south1
+  ZONE: asia-south1-a
+  REPO: asia-south1-docker.pkg.dev/sameerv/extraction
+  ERP_VM: rt-erpnext-dev
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend || 'true' }}
+      backend: ${{ steps.filter.outputs.backend || 'true' }}
+      ai_backend: ${{ steps.filter.outputs.ai_backend || 'true' }}
+      erpnext: ${{ steps.filter.outputs.erpnext || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+            ai_backend:
+              - 'invoice-generator-backend/**'
+            erpnext:
+              - 'erpnext/**'
+
+  deploy-erpnext:
+    needs: changes
+    if: needs.changes.outputs.erpnext == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require ERP_DEV_HOST
+        run: |
+          if [ -z "${{ vars.ERP_DEV_HOST }}" ]; then
+            echo "Set repository variable ERP_DEV_HOST (public hostname of rt-erpnext-dev)" >&2
+            exit 1
+          fi
+          echo "ERP_DEV_HOST=${{ vars.ERP_DEV_HOST }}"
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy royal_touche on GCE via IAP
+        env:
+          ERP_DEV_HOST: ${{ vars.ERP_DEV_HOST }}
+        run: |
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            erpnext/scripts/gce-dev-deploy.sh "${{ env.ERP_VM }}:/tmp/gce-dev-deploy.sh"
+          gcloud compute ssh "${{ env.ERP_VM }}" \
+            --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            --command="sudo chmod +x /tmp/gce-dev-deploy.sh && sudo -u frappe ERP_DEV_HOST='${ERP_DEV_HOST}' GIT_SHA='${{ github.sha }}' BENCH_DIR=/home/frappe/frappe-bench bash /tmp/gce-dev-deploy.sh"
+      - name: Health check
+        env:
+          ERP_DEV_HOST: ${{ vars.ERP_DEV_HOST }}
+        run: |
+          curl -fsS -H "Accept: application/json" "https://${ERP_DEV_HOST}/api/method/frappe.ping"
+
+  deploy-ai-backend:
+    needs: changes
+    if: needs.changes.outputs.ai_backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/ai-backend:${{ github.sha }}"
+          docker build -t "$IMG" ./invoice-generator-backend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-ai-backend \
+            --image="${{ env.REPO }}/ai-backend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --service-account=ai-backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --allow-unauthenticated \
+            --memory=1Gi --cpu=1 --timeout=600 \
+            --min-instances=0 --max-instances=1 --cpu-throttling --cpu-boost \
+            --set-env-vars=GCS_BUCKET=sameerv-docflow-invoices \
+            --set-secrets=GEMINI_API_KEY=ai-backend-gemini-api-key:latest,MONGODB_URI=ai-backend-mongodb-uri:latest,APP_USER=ai-backend-app-user:latest,APP_PASSWORD=ai-backend-app-password:latest
+
+  deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Look up the AI backend's and frontend's current URLs
+        id: urls
+        run: |
+          AI_URL=$(gcloud run services describe docflow-ai-backend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          echo "ai_url=$AI_URL" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/backend:${{ github.sha }}"
+          docker build -t "$IMG" ./backend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-backend \
+            --image="${{ env.REPO }}/backend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --service-account=backend-runtime@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --allow-unauthenticated \
+            --memory=1Gi --cpu=1 \
+            --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost \
+            --set-env-vars=NODE_ENV=production,GCS_BUCKET=sameerv-royaltouch-rolls,MONGODB_DB_NAME=Data,MONGO_FILES_COLLECTION=Files,MONGO_INVOICE_COLLECTION=Invoice,JWT_ACCESS_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,SMTP_HOST=email-smtp.ap-south-1.amazonaws.com,SMTP_PORT=587,MAIL_FROM=docflow@thirdrocktechkno.com,INVOICE_GENERATOR_BASE_URL=${{ steps.urls.outputs.ai_url }},FRONTEND_ORIGIN=${{ steps.urls.outputs.frontend_url }} \
+            --set-secrets=MONGODB_URI=backend-mongodb-uri:latest,JWT_ACCESS_SECRET=backend-jwt-access-secret:latest,JWT_REFRESH_SECRET=backend-jwt-refresh-secret:latest,SMTP_USER=backend-smtp-user:latest,SMTP_PASSWORD=backend-smtp-password:latest,INVOICE_GENERATOR_APP_USER=backend-invoice-generator-app-user:latest,INVOICE_GENERATOR_APP_PASSWORD=backend-invoice-generator-app-password:latest
+
+  deploy-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require ERP_DEV_HOST for inventory portal
+        id: erp
+        run: |
+          if [ -z "${{ vars.ERP_DEV_HOST }}" ]; then
+            echo "Set repository variable ERP_DEV_HOST so the portal talks to ERPNext, not Node" >&2
+            exit 1
+          fi
+          API="https://${{ vars.ERP_DEV_HOST }}/api"
+          echo "api_base=$API" >> "$GITHUB_OUTPUT"
+          echo "Using VITE_API_BASE_URL=$API"
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      - name: Build and push
+        run: |
+          IMG="${{ env.REPO }}/frontend:${{ github.sha }}"
+          echo "${{ steps.erp.outputs.api_base }}" | grep -F "${{ vars.ERP_DEV_HOST }}"
+          docker build -t "$IMG" \
+            --build-arg VITE_API_BASE_URL="${{ steps.erp.outputs.api_base }}" \
+            ./frontend
+          docker push "$IMG"
+      - name: Deploy
+        run: |
+          gcloud run deploy docflow-frontend \
+            --image="${{ env.REPO }}/frontend:${{ github.sha }}" \
+            --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --memory=1Gi --cpu=1 \
+            --min-instances=0 --max-instances=1 --cpu-throttling --no-cpu-boost
+      - name: Allow Cloud Run origin on ERPNext CORS
+        env:
+          ERP_DEV_HOST: ${{ vars.ERP_DEV_HOST }}
+        run: |
+          FRONTEND_URL=$(gcloud run services describe docflow-frontend --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} --format='value(metadata.annotations["run.googleapis.com/urls"])' | jq -r '.[0]')
+          gcloud compute ssh "${{ env.ERP_VM }}" \
+            --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            --command="sudo -u frappe bash -c 'export PATH=\$HOME/.local/bin:\$PATH; cd \$HOME/frappe-bench; bench --site ${ERP_DEV_HOST} set-config allow_cors ${FRONTEND_URL}; bench --site ${ERP_DEV_HOST} clear-cache'" \
+            || echo "WARN: could not update ERP allow_cors (VM may not exist yet)"

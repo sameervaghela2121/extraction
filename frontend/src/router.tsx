@@ -21,6 +21,7 @@ import UserManagementPage from "./features/users/UserManagementPage";
 import MasterDataPage from "./features/masters/MasterDataPage";
 import BarcodeGeneratorPage from "./features/barcodes/BarcodeGeneratorPage";
 import ReportsPage from "./features/reports/ReportsPage";
+import DashboardPage from "./features/dashboard/DashboardPage";
 import DownloadAppPage from "./features/misc/DownloadAppPage";
 import NoAccessPage from "./features/misc/NoAccessPage";
 
@@ -56,6 +57,7 @@ export const router = createRouter([
           {
             element: <RoleRoute allow={["godown_supervisor"]} />,
             children: [
+              { path: "/dashboard", element: <DashboardPage /> },
               { path: "/masters", element: <Navigate to="/masters/vendors" replace /> },
               { path: "/masters/:section", element: <MasterDataPage /> },
               { path: "/barcodes", element: <BarcodeGeneratorPage /> },

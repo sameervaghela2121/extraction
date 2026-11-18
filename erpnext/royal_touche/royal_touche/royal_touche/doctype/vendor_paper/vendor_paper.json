@@ -1,0 +1,61 @@
+{
+ "doctype": "DocType",
+ "name": "Vendor Paper",
+ "module": "Royal Touche",
+ "custom": 0,
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "paper_code",
+  "rt_code",
+  "delta_code",
+  "is_common",
+  "found_in"
+ ],
+ "fields": [
+  {
+   "fieldname": "paper_code",
+   "fieldtype": "Data",
+   "label": "Paper code",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "rt_code",
+   "fieldtype": "Data",
+   "label": "RT code",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "delta_code",
+   "fieldtype": "Data",
+   "label": "Delta code",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_common",
+   "fieldtype": "Check",
+   "label": "Common",
+   "default": "0"
+  },
+  {
+   "fieldname": "found_in",
+   "fieldtype": "Data",
+   "label": "Found in"
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 0,
+ "modified": "2026-11-03 19:30:00.000000",
+ "owner": "Administrator",
+ "creation": "2026-11-03 19:30:00.000000",
+ "modified_by": "Administrator",
+ "index_web_pages_for_search": 0,
+ "states": [],
+ "links": [],
+ "actions": []
+}

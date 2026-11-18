@@ -1,0 +1,78 @@
+import json
+import tempfile
+from pathlib import Path
+
+import frappe
+from frappe.tests import IntegrationTestCase
+
+from royal_touche.setup import dev_seed
+
+VENDORS = [
+    {"vendor_code": "SEEDV-1", "name": "Seed Vendor One",
+     "papers": [{"royal_touche_code": "868", "delta_code": "d1", "supplier_code_number": "55036-29", "found_in": "1mm"},
+                {"royal_touche_code": "869", "supplier_code_number": "55036-30"}]},
+    {"vendor_code": "SEEDV-2", "name": "Seed Vendor Two", "papers": []},
+]
+LOCATIONS = [{"location_code": "SEED-RACK-1", "name": "Seed rack 1", "godown": "Seed Godown", "sort_order": 10}]
+REMARKS = [{"remark_code": "SEED-DEFECT", "label": "Seed defect", "sort_order": 1}]
+
+
+class TestDevSeed(IntegrationTestCase):
+    def setUp(self):
+        self.docs = Path(tempfile.mkdtemp())
+        for name, rows in (("vendors-seed.json", VENDORS), ("locations-seed.json", LOCATIONS), ("remarks-seed.json", REMARKS)):
+            (self.docs / name).write_text(json.dumps(rows))
+        frappe.conf.developer_mode = 1
+        self.addCleanup(setattr, frappe.conf, "developer_mode", frappe.conf.get("developer_mode"))
+
+    def load(self):
+        return dev_seed.load(str(self.docs))
+
+    def test_loads_everything_once(self):
+        first = self.load()
+        self.assertEqual((first["vendors"], first["papers"], first["locations"], first["remarks"]), (2, 2, 1, 1))
+        self.assertEqual((first["materials"], first["buyers"], first["users"]), (3, 1, 4))
+        again = self.load()
+        self.assertEqual(again, first)
+        self.assertEqual(frappe.db.count("Supplier", {"rt_vendor_code": "SEEDV-1"}), 1)
+
+    def test_papers_and_codes(self):
+        self.load()
+        vendor = frappe.get_doc("Supplier", {"rt_vendor_code": "SEEDV-1"})
+        p = vendor.rt_papers[0]
+        self.assertEqual((p.rt_code, p.delta_code, p.paper_code, p.found_in), ("868", "D1", "55036-29", "1mm"))
+        self.assertEqual(frappe.db.get_value("Warehouse", {"rt_location_code": "SEED-RACK-1"}, "rt_godown"), "Seed Godown")
+        for code in ("BASE-PAPER", "TISSUE", "BARRIER"):
+            self.assertTrue(frappe.db.exists("Item", {"rt_material_code": code}), code)
+        self.assertTrue(frappe.db.exists("Customer", "Walk-in Buyer"))
+
+    def test_one_simple_user_per_role(self):
+        from frappe.utils.password import check_password
+
+        self.load()
+        self.assertEqual(dev_seed.DEV_USERS, {
+            "operator1@gmail.com": "Godown Operator",
+            "supervisor1@gmail.com": "Godown Supervisor",
+            "admin1@gmail.com": "RT Admin",
+            "superadmin1@gmail.com": "RT Super Admin",
+        })
+        for email, role in dev_seed.DEV_USERS.items():
+            self.assertIn(role, frappe.get_roles(email))
+            check_password(email, "Admin@123")
+        self.assertEqual(frappe.db.get_value("User", "operator1@gmail.com", "user_type"), "Website User")
+        self.assertEqual(frappe.db.get_value("User", "supervisor1@gmail.com", "user_type"), "System User")
+
+    def test_refuses_without_developer_mode(self):
+        frappe.conf.developer_mode = 0
+        prev_env = frappe.conf.get("rt_environment")
+        frappe.conf.rt_environment = None
+        self.addCleanup(setattr, frappe.conf, "rt_environment", prev_env)
+        with self.assertRaisesRegex(frappe.ValidationError, "only runs on a development site"):
+            self.load()
+
+    def test_allow_gate_accepts_rt_environment_development(self):
+        frappe.conf.developer_mode = 0
+        frappe.conf.rt_environment = "development"
+        self.addCleanup(setattr, frappe.conf, "rt_environment", None)
+        self.assertTrue(dev_seed._allow_dev_seed())
+

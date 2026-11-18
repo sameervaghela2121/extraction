@@ -1,0 +1,93 @@
+name: Provision ERPNext Dev (GCE)
+
+# One-shot / re-runnable Dev VM bootstrap. Uses the same GCP_SA_KEY as deploy.
+# Default hostname is erp-dev.<static-ip>.sslip.io so DNS+LE work without a
+# corporate zone. Override via workflow_dispatch input if you have a real DNS name.
+
+on:
+  workflow_dispatch:
+    inputs:
+      erp_dev_host:
+        description: "Public hostname (blank = auto erp-dev.<ip>.sslip.io after IP allocate)"
+        required: false
+        default: ""
+      letsencrypt:
+        description: "Issue Let's Encrypt after finish-install"
+        type: boolean
+        default: true
+      seed:
+        description: "Run dev_seed after install"
+        type: boolean
+        default: true
+
+env:
+  PROJECT_ID: sameerv
+  REGION: asia-south1
+  ZONE: asia-south1-a
+  VM_NAME: rt-erpnext-dev
+  IP_NAME: rt-erpnext-dev-ip
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Allocate static IP
+        id: ip
+        run: |
+          if ! gcloud compute addresses describe "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud compute addresses create "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}"
+          fi
+          IP=$(gcloud compute addresses describe "${{ env.IP_NAME }}" --region="${{ env.REGION }}" --project="${{ env.PROJECT_ID }}" --format='value(address)')
+          echo "address=$IP" >> "$GITHUB_OUTPUT"
+          echo "Static IP: $IP"
+      - name: Resolve hostname
+        id: host
+        run: |
+          INPUT="${{ github.event.inputs.erp_dev_host }}"
+          IP="${{ steps.ip.outputs.address }}"
+          if [ -n "$INPUT" ]; then
+            HOST="$INPUT"
+          else
+            HOST="erp-dev.${IP}.sslip.io"
+          fi
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "ERP_DEV_HOST=$HOST"
+      - name: Provision VM + bench
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: |
+          chmod +x erpnext/scripts/gce-dev-provision.sh erpnext/scripts/gce-dev-finish-install.sh \
+            erpnext/scripts/gce-dev-deploy.sh erpnext/scripts/gce-dev-seed.sh
+          ./erpnext/scripts/gce-dev-provision.sh
+      - name: Let's Encrypt
+        if: ${{ github.event.inputs.letsencrypt == 'true' }}
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: |
+          ./erpnext/scripts/gce-dev-provision.sh --letsencrypt
+      - name: Seed
+        if: ${{ github.event.inputs.seed == 'true' }}
+        env:
+          ERP_DEV_HOST: ${{ steps.host.outputs.host }}
+        run: |
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            erpnext/scripts/gce-dev-seed.sh "${{ env.VM_NAME }}:/tmp/gce-dev-seed.sh"
+          gcloud compute scp --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap --recurse \
+            docs "${{ env.VM_NAME }}:/tmp/rt-docs"
+          gcloud compute ssh "${{ env.VM_NAME }}" \
+            --zone="${{ env.ZONE }}" --project="${{ env.PROJECT_ID }}" --tunnel-through-iap \
+            --command="sudo chmod +x /tmp/gce-dev-seed.sh; sudo -u frappe ERP_DEV_HOST='${ERP_DEV_HOST}' REPO_DOCS=/tmp/rt-docs bash /tmp/gce-dev-seed.sh"
+      - name: Summary
+        run: |
+          echo "### Dev ERPNext" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Host: \`${{ steps.host.outputs.host }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- IP: \`${{ steps.ip.outputs.address }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Set Actions variable **ERP_DEV_HOST**=\`${{ steps.host.outputs.host }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Ping: \`https://${{ steps.host.outputs.host }}/api/method/frappe.ping\`" >> "$GITHUB_STEP_SUMMARY"
