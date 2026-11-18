@@ -152,7 +152,20 @@ days, godown by godown.
 **Kept as it is:** when a tablet sync contains an Outward that is refused, the Return for the same
 roll waits until the Outward is fixed (you can't return a roll that never went out).
 
+## 12. Registration order (17 Nov 2026)
+
+| Question | Decision |
+|---|---|
+| What does the operator pick first when entering a roll? | The **paper code first**, then the vendor. Only vendors that stock that paper are listed; one owner is auto-selected. Adding a new paper still needs a vendor first. The server still refuses a paper that does not belong to the chosen vendor |
+
+## 13. Portal dashboard (18 Nov 2026)
+
+| Question | Decision |
+|---|---|
+| What is the portal home for supervisors? | **/dashboard** — live stock KPIs, period movement (same figures as Reports), charts and quick links. Supervisor and super admin only. Alerts stay on the Alerts page |
+
 ---
 
-**Next step:** the 245 acceptance test cases are updated to these decisions and reviewed again;
-then the tests are automated and the fixes and new features are built.
+**Catalog update (17–18 Nov 2026):** cases aligned to D-01 … D-61 (paper-first + portal
+dashboard). **Next:** the business re-reviews the catalog; then automate (✅ cases first) and
+build the remaining fixes and new features.

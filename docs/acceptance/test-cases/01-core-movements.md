@@ -1,13 +1,13 @@
 # Test cases 01: core roll movements
 
 Part of the acceptance test catalogue for
-[2026-11-04-inventory-acceptance.md](../2026-11-04-inventory-acceptance.md). That document is
-the authority for decisions, for the 🆕/🔶 marks and for invariants I-1 to I-6. Every expected
-refusal message below is copied exactly from the code
-(`erpnext/royal_touche/royal_touche/rolls.py`, `movements.py`, `dates.py`).
+[2026-11-04-inventory-acceptance.md](../2026-11-04-inventory-acceptance.md). Expected behaviour
+follows [decisions.md](../decisions.md) (D-01 … D-60). Invariants I-1 to I-6 still apply. Where
+today's code differs, the case is marked **🆕 fix** and a short `Note:` records the gap.
+Refusal messages below match the intended product wording (and today's code when already correct).
 
-**Not covered here** (they have their own sections): partial return to vendor (AC-07b 🆕), partial
-sale (AC-08b 🆕), store loss at outward (AC-09 🆕), low stock (AC-10 🆕), portal godown moves
+**Not covered here** (they have their own sections): partial return to vendor (AC-07b), partial
+sale (AC-08b), store loss at outward (AC-09), low stock (AC-10), portal godown moves
 (AC-06), portal corrections and delete (E-3, E-4, E-6), multi-day timelines (T-1 to T-6), sync
 retries and races (E-1, E-2), opening stock.
 
@@ -15,11 +15,11 @@ retries and races (E-1, E-2), opening stock.
 
 - **Setup.** The shared setup from the acceptance document: Godown A and Godown B (storage),
   Running Godown (production floor); material Base paper; vendor ARIHANT with designs
-  RT 501 / Delta 730N and RT 502; users operator (tablet), supervisor (portal), admin.
-  Extra for this section: a lot (challan) **CH-100** from ARIHANT; remark master entries
-  **MISPRINT** ("Misprint") and **COLOR-VAR** ("Colour variation"); a buyer **Kumar Traders**
-  next to the built-in **Direct Sale**. The remark labels are placeholders. Use whatever the
-  team enters.
+  RT 501 / Delta 730N and RT 502; users **operator** (tablet), **supervisor** (portal),
+  **super admin** (dev team). No admin role (D-52). Extra for this section: a lot (challan)
+  **CH-100** from ARIHANT; remark master entries **MISPRINT** ("Misprint") and **COLOR-VAR**
+  ("Colour variation"); a buyer **Kumar Traders** next to the built-in **Direct Sale**. The
+  remark labels are placeholders. Use whatever the team enters.
 - **Rolls.** Every case starts from an empty stock with only its own **Given**. Roll numbers
   (R1, R2…) and barcodes (BC001…) are local to the case. "Arrival" is the registered weight.
   "Current" is the kg on the roll now.
@@ -38,7 +38,8 @@ retries and races (E-1, E-2), opening stock.
 - **History text** is the portal's one-line description of each movement:
   `Received 1000 kg` · `Issued out 1000 kg to Running Godown` ·
   `Returned 600 kg to Godown A · 400 kg used` · `Consumed — 1000 kg used up` ·
-  `Returned to vendor ARIHANT — 500 kg` · `Sold — 800 kg` · `Corrected by 50 kg`.
+  `Returned to vendor ARIHANT — 500 kg` · `Sold — 800 kg` ·
+  `Counted 50 kg less` / `Counted 50 kg more` (D-12).
 
 ---
 
@@ -46,13 +47,15 @@ retries and races (E-1, E-2), opening stock.
 
 ### TC-IN-001 Register a roll with every field
 - **Status:** ✅ today
-- **Covers:** AC-01, I-1, I-2, I-6
+- **Covers:** AC-01, I-1, I-2, I-6, D-60
 - **Layer:** Both
-- **Given:** D1, nothing registered. Lot CH-100 exists.
+- **Given:** D1, nothing registered. Lot CH-100 exists. Design RT 501 is stocked by ARIHANT.
 - **Steps:**
-  1. Operator on tablet registers R1: barcode BC001, roll no R1, lot CH-100, vendor ARIHANT,
-     design RT 501, material Base paper, GSM 50, width 1000 mm, weight 1000 kg, godown
-     Godown A, date D1, tag, barcode, front and back photos.
+  1. Operator on tablet opens registration and picks **paper / design RT 501 first** (D-60);
+     the vendor list shows vendors that stock RT 501 and ARIHANT is selected (sole owner or
+     preselected). Then enters: barcode BC001, roll no R1, lot CH-100, material Base paper,
+     GSM 50, width 1000 mm, weight 1000 kg, godown Godown A, date D1, tag, barcode, front
+     and back photos.
   2. Operator syncs.
   3. Supervisor opens the roll and the lot on the portal.
 - **Expected:**
@@ -217,31 +220,26 @@ retries and races (E-1, E-2), opening stock.
   "Godown B is inactive — pick a different location" *(validation)*. Nothing is posted.
 
 ### TC-IN-015 A future date is refused
-- **Status:** ✅ today
-- **Covers:** AC-01, I-3
+- **Status:** 🆕 fix (D-04)
+- **Covers:** AC-01, I-3, D-04
 - **Layer:** Auto
 - **Given:** server today = D5.
 - **Steps:**
   1. Register R1, 1000 kg, Godown A, dated D6.
 - **Expected:** refused: "The date cannot be in the future" *(validation)*. Nothing is posted.
   Reports for D5 and D6 show Received 0.
-- **Note:** today the code does **not** check the registration date at all (`rolls.py`
-  `_register` stores whatever date is sent). A roll dated D6 is accepted and its Purchase
-  Receipt is dated D6, unless ERPNext itself refuses a future posting. Movements already have
-  this check (`dates.check_not_future`). Registration needs it too.
+- **Note:** today registration does not check the date (`rolls.py` `_register`).
 
 ### TC-IN-016 A date older than yesterday is refused
-- **Status:** ✅ today
-- **Covers:** AC-01
+- **Status:** 🆕 fix (D-04)
+- **Covers:** AC-01, D-04
 - **Layer:** Auto
 - **Given:** server today = D5.
 - **Steps:**
   1. Register R1, 1000 kg, dated D3.
 - **Expected:** refused: "The date must be today or yesterday" *(validation)*. Nothing is
   posted. D3 report unchanged.
-- **Note:** today the code accepts any past date at registration (no date check), so the
-  D3 report changes after the fact. The today-or-yesterday rule exists only for
-  OUT / RETURN / CONSUME / RETURN_TO_VENDOR / SELL.
+- **Note:** today registration accepts any past date.
 
 ### TC-IN-017 Yesterday's date is accepted and lands on yesterday
 - **Status:** ✅ today
@@ -254,25 +252,22 @@ retries and races (E-1, E-2), opening stock.
   Receipt posted on D4. Report D4: Received 1000, Closing 1000. Report D5: Opening 1000,
   Received 0, Closing 1000.
 
-### TC-IN-018 Optional fields left blank: barcode, godown, design
-- **Status:** ✅ today
-- **Covers:** AC-01
+### TC-IN-018 Godown is required; barcode may be blank
+- **Status:** 🆕 fix (D-56)
+- **Covers:** AC-01, D-56
 - **Layer:** Auto
-- **Given:** D1.
+- **Given:** D1. Design RT 501 / vendor ARIHANT available.
 - **Steps:**
-  1. Register R1 with lot, vendor, material, GSM, width, 1000 kg, and **no** barcode, godown
-     or design.
-- **Expected (today's behaviour, for business to confirm):** accepted. R1 In stock, 1000 kg,
-  godown empty. ERPNext receipt goes to the hidden warehouse "Unassigned - RT". Received 1000
-  in the Base paper report. In the design report it falls under a blank design.
-- **Note:** the acceptance document lists barcode, godown and design for every roll but does
-  not say they are mandatory. Today only lot, weight, GSM, width, material, vendor and roll
-  number are required. A roll with no godown later returns from the floor to Running Godown
-  (see TC-RET-010).
+  1. Register R1 with lot, paper, vendor, material, GSM, width, 1000 kg, and **no** godown
+     (barcode blank is allowed).
+  2. Register R2 the same way with godown Godown A and **no** barcode.
+- **Expected:** step 1 refused: godown is required *(validation)*; nothing posted. Step 2
+  accepted: R2 In stock, 1000 kg, Godown A, system barcode assigned if needed.
+- **Note:** today a blank godown is accepted and stock lands in "Unassigned - RT".
 
 ### TC-IN-019 Remark codes picked at registration are kept
-- **Status:** ✅ today
-- **Covers:** AC-01, AC-02, I-6
+- **Status:** 🆕 fix (D-07)
+- **Covers:** AC-01, AC-02, I-6, D-07
 - **Layer:** Both
 - **Given:** D1.
 - **Steps:**
@@ -281,10 +276,7 @@ retries and races (E-1, E-2), opening stock.
   2. Operator syncs. Supervisor opens R1.
 - **Expected:** R1 shows remark Misprint and the note "wet corner". The daily roll report D1
   for R1 shows Remarks "Misprint" and Roll note "wet corner". Kg unchanged: 1000.
-- **Note:** today `register_roll` silently drops `remark_code` and `remarks` (Node kept both).
-  The report code expects a registration remark, but the loader always passes none. Today
-  the only way to put a remark on a roll is the separate "set remark codes" call (TC-RM-001),
-  which the offline sync does not carry.
+- **Note:** today `register_roll` silently drops `remark_code` and `remarks`.
 
 ### TC-IN-020 A retried registration returns the same roll, not "already exists"
 - **Status:** ✅ today
@@ -296,6 +288,52 @@ retries and races (E-1, E-2), opening stock.
   2. Send the identical registration again with client_id `C-1` (network retry).
 - **Expected:** step 2 succeeds and returns the same roll as step 1. One roll, one Purchase
   Receipt, one `Received 1000 kg` row. Reports D1: Received 1000 (not 2000).
+
+### TC-IN-021 Paper code first, then vendor (sole owner)
+- **Status:** ✅ today
+- **Covers:** AC-01, D-60
+- **Layer:** Both
+- **Given:** D1. Design RT 501 is stocked only by ARIHANT.
+- **Steps:**
+  1. Operator opens registration with no vendor selected and opens the paper-code list.
+  2. Operator picks RT 501.
+- **Expected:** vendor ARIHANT is selected automatically. Vendor dropdown lists only vendors
+  that stock RT 501 (here: ARIHANT). Operator can finish registration as TC-IN-001.
+
+### TC-IN-022 Shared paper lists every stocking vendor
+- **Status:** ✅ today
+- **Covers:** AC-01, D-60
+- **Layer:** Both
+- **Given:** D1. The same paper (same RT + Delta) is stocked by ARIHANT and KAMDAR.
+- **Steps:**
+  1. Operator picks that paper code first.
+- **Expected:** vendor dropdown lists ARIHANT and KAMDAR (sorted by name), not unrelated
+  vendors. One of those vendors is preselected (the paper row's vendor, or first by name).
+  Picking the other stocking vendor keeps the same paper (sibling row for that vendor).
+
+### TC-IN-023 Changing to a vendor that does not stock the paper clears the paper
+- **Status:** ✅ today
+- **Covers:** AC-01, D-60, TC-IN-013
+- **Layer:** Both
+- **Given:** D1. Paper RT 501 selected with vendor ARIHANT. Vendor OTHER does not stock RT 501.
+- **Steps:**
+  1. Operator changes vendor to OTHER (e.g. via add-vendor or a vendor outside the filtered
+     list if the UI allows clearing the filter).
+- **Expected:** the selected paper is cleared. Completing registration without a paper that
+  belongs to OTHER is refused by TC-IN-013 on the server. Adding a **new** paper still
+  requires a vendor first.
+
+### TC-IN-024 A code already used as another roll's barcode or roll number is refused
+- **Status:** 🆕 fix (D-57)
+- **Covers:** AC-01, D-57
+- **Layer:** Auto
+- **Given:** D1. R1 registered with roll no `R1` and barcode `BC001`.
+- **Steps:**
+  1. Register a new roll with roll no `BC001` (equals R1's barcode), any new barcode.
+  2. Register a new roll with barcode `R1` (equals R1's roll number), any new roll no.
+  3. Register a new roll whose own barcode equals its own roll number (e.g. both `X99`).
+- **Expected:** steps 1–2 refused: a code already used on another roll as barcode **or** roll
+  number is refused *(validation)*. Nothing posted. Step 3 accepted (a roll may match itself).
 
 ---
 
@@ -352,17 +390,15 @@ retries and races (E-1, E-2), opening stock.
   MISPRINT. Nothing else changes.
 
 ### TC-RM-004 An unknown remark code on a movement is refused
-- **Status:** ✅ today
-- **Covers:** AC-02
+- **Status:** 🆕 fix (D-56)
+- **Covers:** AC-02, D-56
 - **Layer:** Auto
 - **Given:** D1. R1 In stock, 1000 kg, Godown A.
 - **Steps:**
   1. Record outward of R1 to Running Godown with remark code `NOPE`.
-- **Expected:** refused with a message naming the unknown remark. Nothing is posted. R1 stays
-  In stock in Godown A.
-- **Note:** today the code accepts it. A movement's remark code is free text (a Data field,
-  not checked against the remark master, same as Node). The outward goes through, and the
-  daily roll report prints `NOPE` as typed. No refusal message exists yet.
+- **Expected:** refused with a message naming the unknown remark (must come from the Remarks
+  list). Nothing is posted. R1 stays In stock in Godown A.
+- **Note:** today a movement's remark code is free text and is accepted.
 
 ### TC-RM-005 More than 20 remark codes on a roll is refused
 - **Status:** ✅ today
@@ -639,29 +675,28 @@ retries and races (E-1, E-2), opening stock.
 - **Status:** ✅ today
 - **Covers:** AC-07a, I-1
 - **Layer:** Auto
-- **Given:** D1: R1 1000 kg registered with no godown (stock in "Unassigned - RT"), then out
-  to Running Godown.
+- **Given:** D1: R1 was incorrectly registered with no godown before D-56 (legacy data), then
+  out to Running Godown.
 - **Steps:**
   1. D1, return R1 at 700.
-- **Expected (today's behaviour):** R1 In stock, 700, **Running Godown**. History
-  `Returned 700 kg · 300 kg used`. Material Issue 300 from Running Godown. Consumed 300.
-- **Note:** same outcome as TC-RET-009: an In-stock roll sitting on the floor. This follows
-  from TC-IN-018 (godown optional at registration).
+- **Expected:** operator is asked which storage godown to return to (same pattern as D-50 /
+  D-54). After picking Godown A: R1 In stock, 700, Godown A. Consumed 300. New registrations
+  cannot omit godown (TC-IN-018).
+- **Note:** today the return lands on Running Godown. After D-56, blank godown at registration
+  is refused; this case covers legacy rolls.
 
-### TC-RET-011 A return dated before its outward
-- **Status:** ✅ today
-- **Covers:** AC-03, I-2, T-4
+### TC-RET-011 A return dated before its outward is refused
+- **Status:** 🆕 fix (D-02)
+- **Covers:** AC-03, I-2, T-4, D-02
 - **Layer:** Auto
 - **Given:** server today = D5. R1 registered D4, 1000 kg, Godown A. Outward recorded D5
   (today).
 - **Steps:**
   1. Record the return of R1 at 800 dated D4 (yesterday).
-- **Expected (today's behaviour, for business to confirm):** accepted. R1 In stock, 800,
-  Godown A. Report D4: Received 1000, Consumed 200, Closing 800. Report D5: Consumed 0,
-  Closing 800, Out on floor 0. The ledger stays consistent (I-1).
-- **Note:** the consumption is reported on D4, the day **before** the roll went out. The rule
-  only checks "today or yesterday" and the roll's current status, not that the return comes
-  after its outward. Business to decide whether this should be refused.
+- **Expected:** refused: a movement dated before the roll's latest movement is refused
+  *(validation)*. Nothing is posted. R1 stays Out, 1000, Running Godown. Reports D4/D5
+  unchanged for consumption.
+- **Note:** today the return is accepted and consumption appears on D4.
 
 ---
 
@@ -669,19 +704,21 @@ retries and races (E-1, E-2), opening stock.
 
 ### TC-RTV-001 Return a whole roll to the vendor from stock
 - **Status:** ✅ today
-- **Covers:** AC-04, I-2, I-4
+- **Covers:** AC-04, I-2, I-4, D-17, D-18
 - **Layer:** Both
 - **Given:** D1: R2 registered 500 kg, Godown A, RT 501.
 - **Steps:**
-  1. D3, operator scans R2, chooses Return to vendor, and syncs.
+  1. D3, operator scans R2, chooses Return to vendor → **Whole roll** (D-17). Remark is left
+     blank (optional, D-18). Syncs (scale photo required on tablet for the piece / whole).
 - **Expected:**
   - R2: **Returned to vendor**, current 0, no godown.
-  - History row `Returned to vendor ARIHANT — 500 kg`, dated D3.
+  - History row `Returned to vendor ARIHANT — 500 kg`, dated D3 (no remark required).
   - ERPNext: a submitted **Purchase Return** (return Purchase Receipt against R2's receipt),
     −500 kg from Godown A, dated D3.
   - Reports D3: Returned to vendor 500, Closing 0. D1: Received 500, Closing 500.
   - Daily roll report D3: Last movement "Returned to vendor", Final status
     "Returned to vendor", Final weight 0.
+- **Note:** D-18 changes today's rule where a whole-roll return required a remark.
 
 ### TC-RTV-002 Return to vendor after part of the roll was used
 - **Status:** ✅ today
@@ -738,23 +775,21 @@ retries and races (E-1, E-2), opening stock.
 ## Sale, whole roll (AC-05)
 
 ### TC-SELL-001 Sell a whole roll to Direct Sale with bill and vehicle numbers
-- **Status:** ✅ today
-- **Covers:** AC-05, I-2, I-4
+- **Status:** 🆕 fix (D-57)
+- **Covers:** AC-05, I-2, I-4, D-16, D-17, D-57
 - **Layer:** Both
 - **Given:** D1: R3 registered 800 kg, Godown A, RT 502.
 - **Steps:**
-  1. D5, operator chooses Sell for R3 with **no buyer picked**, Savio bill no ` SB-123 `,
-     vehicle no ` mh12 ab 1234 `, and syncs.
+  1. D5, operator chooses Sell → **Whole roll** for R3 with **no buyer picked**, Savio bill no
+     ` SB-123 `, vehicle no ` mh12 ab 1234 `, and syncs (bill/vehicle optional, D-16).
 - **Expected:**
   - R3: **Sold**, current 0, no godown.
   - History row `Sold — 800 kg`, buyer Direct Sale, Savio bill no `SB-123`, vehicle no
     `MH12 AB 1234` (trimmed, upper-cased).
   - ERPNext: a submitted **Delivery Note** to customer Direct Sale, 800 kg, batch R3, from
-    Godown A, dated D5.
+    Godown A, dated D5, with bill no and vehicle no copied onto the Delivery Note (D-57).
   - Reports D5 (Base paper and RT 502): Sold 800, Closing 0.
-- **Note:** today the bill no and vehicle no are kept on the roll's sale movement (portal history),
-  **not** on the ERPNext Delivery Note. The acceptance document says "Delivery Note … bill no
-  and vehicle no kept". Confirm whether the movement record is enough.
+- **Note:** today bill/vehicle are on the movement only, not the Delivery Note.
 
 ### TC-SELL-002 Sell to a named buyer
 - **Status:** ✅ today
@@ -858,54 +893,56 @@ retries and races (E-1, E-2), opening stock.
   Issue 1000 from **Running Godown**. Reports D2: Consumed 1000, Closing 0, Out on floor 0.
 
 ### TC-CON-003 Consume a roll that is already finished
-- **Status:** ✅ today
-- **Covers:** I-4
+- **Status:** 🆕 fix (D-56)
+- **Covers:** I-4, D-56
 - **Layer:** Auto
 - **Given:** D1: R1 Consumed, R2 Returned to vendor, R3 Sold.
 - **Steps:**
   1. Record Consume for R1, then R2, then R3.
-- **Expected (today's behaviour, for business to confirm):** each is **accepted** as a no-op.
-  The roll is unchanged and **no** ERPNext document is created, but a history row `Consumed`
-  (0 kg) is added. Reports unchanged.
-- **Note:** a sold or returned roll gains a "Consumed" row in its history, which a reviewer may
-  read as a second finish. Decide whether this should be refused instead.
+- **Expected:** each refused (finished roll). Nothing posted — no new history row, no ERPNext
+  document. Rolls unchanged. Reports unchanged.
+- **Note:** today each is accepted as a no-op that still adds a `Consumed` history row.
 
 ---
 
 ## Physical count adjustment (E-5)
 
 ### TC-ADJ-001 Count lower than the roll
-- **Status:** ✅ today
-- **Covers:** E-5, I-1, I-2
+- **Status:** 🆕 fix (D-05, D-12)
+- **Covers:** E-5, I-1, I-2, D-05, D-12
 - **Layer:** Auto
 - **Given:** D1: R1 1000 kg, Godown A.
 - **Steps:**
   1. D2, supervisor records an adjustment for R1: counted 950 kg, remarks "physical count".
-- **Expected:** R1 In stock, 950, Godown A. History `Corrected by 50 kg` with remarks
-  "physical count". ERPNext: Material Issue 50 from Godown A. Reports D2: Adjusted −50,
+- **Expected:** R1 In stock, 950, Godown A. History `Counted 50 kg less` (D-12) with remarks
+  "physical count". Shortfall is **Store loss** 50 with an alert (D-05), not Consumed.
+  ERPNext: write-off / Material Issue 50 from Godown A. Reports D2: Store loss 50, Adjusted 0,
   Consumed 0, Closing 950.
+- **Note:** today history says `Corrected by 50 kg` and the shortfall sits under Adjusted.
 
 ### TC-ADJ-002 Count higher than the roll (up to arrival)
-- **Status:** ✅ today
-- **Covers:** E-5, I-2
+- **Status:** 🆕 fix (D-12)
+- **Covers:** E-5, I-2, D-12
 - **Layer:** Auto
 - **Given:** D1: R1 arrival 1000. D2: out, returned at 600 (In stock, Godown A).
 - **Steps:**
   1. D3, adjustment: counted 650, remarks "recount".
-- **Expected:** R1 In stock, 650. History `Corrected by 50 kg`. ERPNext: Material Receipt 50
+- **Expected:** R1 In stock, 650. History `Counted 50 kg more`. ERPNext: Material Receipt 50
   into Godown A. Reports D3: Adjusted +50, Closing 650.
-- **Note:** the history text is the same for up and down ("Corrected by 50 kg"), so the row does
-  not show the direction. The report sign (+/−) does.
+- **Note:** today history says `Corrected by 50 kg` with no direction.
 
-### TC-ADJ-003 Count to 0 finishes the roll
-- **Status:** ✅ today
-- **Covers:** E-5, I-4
+### TC-ADJ-003 Count to 0 is store loss, not consume
+- **Status:** 🆕 fix (D-05)
+- **Covers:** E-5, I-4, D-05
 - **Layer:** Auto
 - **Given:** D1: R1 1000 kg, Godown A.
 - **Steps:**
   1. D2, adjustment: counted 0, remarks "not found in godown".
-- **Expected:** R1 **Consumed**, 0, no godown. History `Corrected by 1000 kg`. Material Issue
-  1000 from Godown A. Reports D2: **Adjusted −1000** (not Consumed), Closing 0.
+- **Expected:** R1 finished at 0, no godown (or status per store-loss finish rule). History
+  records a count shortfall / store loss of 1000 kg. Reports D2: **Store loss 1000**,
+  Consumed 0, Closing 0. An alert is raised for supervisor review. A fully used roll that was
+  returned at 0 kg or Consumed stays under Consumed (not this path).
+- **Note:** today this path finishes as Consumed / Adjusted −1000.
 
 ### TC-ADJ-004 Count above the arrival weight is refused
 - **Status:** ✅ today
@@ -944,20 +981,18 @@ retries and races (E-1, E-2), opening stock.
   the floor.
 
 ### TC-ADJ-007 Negative count, and backdating
-- **Status:** ✅ today
-- **Covers:** E-5, I-3
+- **Status:** 🆕 fix (D-04)
+- **Covers:** E-5, I-3, D-04
 - **Layer:** Auto
 - **Given:** server today = D10. R1 registered D1, 1000 kg, Godown A.
 - **Steps:**
   1. Adjustment: counted −10, remarks "typo".
   2. Adjustment dated D2: counted 900, remarks "old count".
   3. Adjustment dated D11: counted 900, remarks "x".
-- **Expected:** step 1 is refused and nothing is posted (I-3). Step 3: "The date cannot be in
-  the future". Step 2: business to decide whether a count may be dated 8 days back.
-- **Note:** today a negative count has **no** rule of its own (the portal correction refuses it,
-  the movement API does not), so only ERPNext's negative-stock check can stop it. Adjustments
-  (and inward top-ups) accept **any** past date, unlike other movements (today or yesterday),
-  so step 2 is accepted today and changes the D2 report.
+- **Expected:** step 1 refused (I-3 / negative weight). Step 2 refused: "The date must be today
+  or yesterday" (D-04; opening-stock load is the only exception). Step 3: "The date cannot be
+  in the future". Nothing posted for any step.
+- **Note:** today step 2 is accepted with any past date.
 
 ---
 
@@ -971,9 +1006,9 @@ unintended. These cells have their own case below.
 |---|---|---|---|---|---|---|---|
 | **In stock** (1000, Godown A) | → Out, Running Godown (Material Transfer) | "This roll is not currently out, so it cannot be returned" | → Returned to vendor, 0 (Purchase Return) | → Sold, 0 (Delivery Note) | → Consumed, 0 (Material Issue) | → counted kg, 0 ≤ kg ≤ 1000; 0 → Consumed | → + kg up to 1000 (Material Receipt) |
 | **Out** (1000, Running Godown) | "This roll is already out — record its return first" | → In stock (or Consumed at 0), back to its godown | "This roll is already out — record its return first" | "This roll is out on production — receive it back before selling it" | → Consumed, 0 (Material Issue from floor) | → stays Out at counted kg; 0 → Consumed | → stays Out, + kg up to 1000 |
-| **Consumed** (0) | "This roll is empty, there is nothing to take out" | "This roll is not currently out, so it cannot be returned" | "This roll is already consumed — there is nothing left to return" | "This roll is already consumed — there is nothing left to sell" | no-op: `Consumed` row, nothing posted | ⚠ accepted: stays Consumed holding the kg | ⚠ accepted: back to In stock, no godown |
-| **Returned to vendor** (0) | "This roll is empty, there is nothing to take out" | "This roll is not currently out, so it cannot be returned" | "This roll has already been returned to the vendor" | "This roll has already been returned to the vendor" | no-op: `Consumed` row, nothing posted | ⚠ accepted: stays Returned to vendor holding the kg | ⚠ accepted: back to In stock, no godown |
-| **Sold** (0) | "This roll has already been sold" | "This roll has already been sold" | "This roll has already been sold" | "This roll has already been sold" | no-op: `Consumed` row, nothing posted | "This roll has already been sold" | ⚠ accepted: back to In stock, no godown |
+| **Consumed** (0) | "This roll is empty, there is nothing to take out" | "This roll is not currently out, so it cannot be returned" | "This roll is already consumed — there is nothing left to return" | "This roll is already consumed — there is nothing left to sell" | refused (D-56) | refused (D-56 / I-4) | refused (D-56 / I-4) |
+| **Returned to vendor** (0) | "This roll is empty, there is nothing to take out" | "This roll is not currently out, so it cannot be returned" | "This roll has already been returned to the vendor" | "This roll has already been returned to the vendor" | refused (D-56) | refused (D-56 / I-4) | refused (D-56 / I-4) |
+| **Sold** (0) | "This roll has already been sold" | "This roll has already been sold" | "This roll has already been sold" | "This roll has already been sold" | refused (D-56) | "This roll has already been sold" | refused (D-56 / I-4) |
 
 Limits that apply in every allowed cell: top-up above arrival → "This roll only ever held 1000 kg —
 cannot add more than that". Top-up of 0 → "weight is required for IN". Adjust above arrival →
@@ -994,57 +1029,52 @@ cannot add more than that". Top-up of 0 → "weight is required for IN". Adjust 
   TC-STATE-003 and TC-STATE-004.
 
 ### TC-STATE-002 Inward top-up on a roll in stock
-- **Status:** ✅ today
-- **Covers:** E-5, I-1, I-2
+- **Status:** 🆕 fix (D-12)
+- **Covers:** E-5, I-1, I-2, D-12
 - **Layer:** Auto
-- **Given:** D1: R1 arrival 1000. D2: adjusted to 900 (Godown A).
+- **Given:** D1: R1 arrival 1000. D2: adjusted / counted to 900 (Godown A).
 - **Steps:**
   1. D3, record an inward (IN) of 100 kg on R1.
   2. D3, record an inward of 1 kg on R1.
   3. D3, record an inward of 0 kg on R1.
-- **Expected:** step 1: R1 In stock, 1000, Godown A. History `Received 100 kg`. ERPNext: Stock
-  Entry Material Receipt 100 into Godown A. Reports D3: **Received 100**, Closing 1000.
-  Step 2: "This roll only ever held 1000 kg — cannot add more than that". Step 3:
-  "weight is required for IN" *(validation)*. Nothing is posted for steps 2–3.
-- **Note:** a top-up counts as **Received** in the reports, the same column as a new roll.
-  A reviewer may expect it under Adjusted.
+- **Expected:** step 1: R1 In stock, 1000, Godown A. History reflects the top-up. ERPNext:
+  Stock Entry Material Receipt 100 into Godown A. Reports D3: **Adjusted +100** (not Received),
+  Closing 1000 (D-12). Step 2: "This roll only ever held 1000 kg — cannot add more than that".
+  Step 3: "weight is required for IN" *(validation)*. Nothing is posted for steps 2–3.
+- **Note:** today a top-up counts as Received.
 
 ### TC-STATE-003 Adjusting a finished roll is refused
-- **Status:** ✅ today
-- **Covers:** E-5, I-4
+- **Status:** 🆕 fix (D-56)
+- **Covers:** E-5, I-4, D-56
 - **Layer:** Auto
 - **Given:** D1: R1 Consumed (returned at 0). R2 Returned to vendor.
 - **Steps:**
   1. Adjustment on R1: counted 100, remarks "found it".
   2. Adjustment on R2: counted 100, remarks "found it".
-- **Expected:** both refused (I-4: a finished roll holds 0 kg), with the wording the portal
-  correction already uses: "This roll is finished, so its remaining weight can no longer be
-  corrected". Nothing is posted.
-- **Note:** today both are **accepted**. R1 stays "Consumed" but holds 100 kg (Material Receipt
-  of 100 into the hidden "Unassigned - RT" warehouse), and the same for R2. This breaks I-4.
-  The portal correction screen refuses this, but the movement API and the tablet's sync do not.
+- **Expected:** both refused (I-4): "This roll is finished, so its remaining weight can no
+  longer be corrected" (or equivalent). Nothing is posted.
+- **Note:** today the movement API / tablet sync accept and put kg back on the finished roll.
 
 ### TC-STATE-004 Inward top-up of a finished roll
-- **Status:** ✅ today
-- **Covers:** I-4
+- **Status:** 🆕 fix (D-56)
+- **Covers:** I-4, D-56
 - **Layer:** Auto
 - **Given:** D1: R1 Consumed, R2 Returned to vendor, R3 Sold (each arrived at 1000).
 - **Steps:**
   1. Record an inward of 100 kg on R1, R2 and R3.
 - **Expected:** refused (a finished roll stays finished, I-4. A roll back from a customer or
-  vendor should be registered as a new roll). Nothing is posted.
-- **Note:** today all three are **accepted**. Each roll goes back to **In stock** with 100 kg and
-  **no godown** (stock lands in "Unassigned - RT"), and the report shows Received 100. For R3
-  this happens even though every other action on a sold roll is refused with "This roll has
-  already been sold".
+  vendor is registered as a new roll). Nothing is posted.
+- **Note:** today all three are accepted and return to In stock with no godown.
 
-### TC-STATE-005 A sold roll refuses every action except consume and top-up
-- **Status:** ✅ today
-- **Covers:** AC-05, I-4
+### TC-STATE-005 A sold roll refuses every action
+- **Status:** 🆕 fix (D-56)
+- **Covers:** AC-05, I-4, D-56
 - **Layer:** Auto
 - **Given:** D1: R3 Sold.
 - **Steps:**
-  1. Attempt outward, return (0), return to vendor, sell and adjust (counted 0, remarks "x").
-- **Expected:** each refused: "This roll has already been sold" *(conflict)*. Nothing is posted.
+  1. Attempt outward, return (0), return to vendor, sell, consume, adjust (counted 0, remarks
+     "x"), and inward top-up.
+- **Expected:** each refused: "This roll has already been sold" *(conflict)* (or finished-roll
+  wording for consume / top-up). Nothing is posted.
   The check comes before any other rule, so even a return of 0 gets this message rather than
   "not currently out".

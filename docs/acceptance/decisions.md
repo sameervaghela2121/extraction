@@ -182,7 +182,29 @@ Each line says what was decided and which cases change.
   a line to the roll's history (a count difference or store loss)." Only that sentence changes.
   Case: TC-COR-006 (🆕 fix).
 
+## 10. Registration order (2026-11-17)
+
+- **D-60 Paper-first registration:** on the tablet the operator picks the **paper code first**,
+  then the vendor. The vendor list shows only vendors that stock that paper. If one vendor owns
+  the paper, that vendor is selected automatically; if several do, the paper's own vendor (or the
+  first by name) is preselected. Choosing a vendor that does not stock the selected paper clears
+  the paper. Adding a new paper still requires a vendor first. Server rule unchanged: the paper
+  must belong to the chosen vendor (TC-IN-013). Cases: TC-IN-001, TC-IN-021, TC-IN-022, TC-IN-023.
+
+## 11. Portal dashboard (2026-11-18)
+
+- **D-61 Portal home dashboard:** after login, **supervisor** and **super admin** land on
+  **/dashboard** (inventory operations home). It shows live KPIs (rolls, on-hand kg, out on floor,
+  masters, moved today), a Daily/Weekly/Monthly period strip whose movement totals match
+  Reports → Consumption for the same from–to, charts (movement mix, roll status, 7-day activity,
+  top materials on hand), top consumed / out-on-floor tables, and quick links. Figures reuse the
+  same report helpers as Reports (I-2 / I-6). Operators cannot open it; plain admin (retired, D-52)
+  cannot either. Alerts stay on the separate Alerts page (not widgets on the dashboard).
+  Cases: TC-DASH-001…006.
+
 ---
 
-**Review complete (2026-11-05):** all open questions answered (D-01 … D-59). Next: update the
-245 test cases to these decisions, then the business re-reviews the catalog.
+**Review complete (2026-11-05):** all open questions answered (D-01 … D-59).
+**Catalog update (2026-11-17):** test cases aligned to D-01 … D-60 (includes paper-first).
+**Catalog update (2026-11-18):** portal dashboard cases added (D-61). Next: the business
+re-reviews the catalog, then automate (✅ cases first).

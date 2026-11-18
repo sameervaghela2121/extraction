@@ -1,12 +1,12 @@
 # Test cases 03: multi-day timelines, date rules, offline sync and reports
 
 Part of the acceptance test catalogue for
-[2026-11-04-inventory-acceptance.md](../2026-11-04-inventory-acceptance.md). That document is
-the authority for decisions, for the 🆕/🔶 marks and for invariants I-1 to I-6. Refusal messages
-are copied exactly from the code (`erpnext/royal_touche/royal_touche/dates.py`, `movements.py`,
-`sync.py`, `api/portal_reports.py`). Report column names are copied from
-`report_logic/consumption.py`, `report_logic/daily_status.py` and the portal pages in
-`frontend/src/features/reports/`.
+[2026-11-04-inventory-acceptance.md](../2026-11-04-inventory-acceptance.md). Expected behaviour
+follows [decisions.md](../decisions.md) (**D-01 … D-12**, **D-58**; full log through D-60).
+Invariants I-1 to I-6 still apply. Where today's code differs, the case is marked **🆕 fix**.
+Refusal messages below match the intended product wording (and today's code when already correct).
+Report column names follow `report_logic/consumption.py`, `report_logic/daily_status.py` and the
+portal pages in `frontend/src/features/reports/`.
 
 **Not covered here** (they have their own sections): each movement on its own (01), partial
 return to vendor / partial sale / store loss / low stock / alerts / godown move (02), opening
@@ -19,7 +19,8 @@ sync and reports.
   Running Godown (production floor); material **Base paper** (material code `BASE-PAPER`);
   vendor **ARIHANT** with designs **RT 501 / Delta 730N** (RT code `RT 501`, Delta code `730N`)
   and **RT 502** (RT code `RT 502`, no Delta code); buyer **Direct Sale**; lot (challan)
-  **CH-100** from ARIHANT; users operator (tablet), supervisor (portal), admin.
+  **CH-100** from ARIHANT; users **operator** (tablet), **supervisor** (portal),
+  **super admin** (dev team). No admin role (D-52).
 - **Rolls.** Every case starts from an empty stock with only its own **Given**. Roll numbers are
   chosen so they don't collide with the golden dataset (R1–R13): timelines use R13–R26, date
   cases R40–R49, sync cases R50–R59 and R70–R77, report cases R60–R69.
@@ -42,12 +43,14 @@ sync and reports.
   | RtV | Returned to vendor | Returned to vendor (kg) |
   | Sold | Sold | Sold (kg) |
   | Adj | Adjusted | Adjusted (kg) (signed: − is down) |
+  | Loss | Store loss | Store loss (kg) (D-11; after Adjusted on screen and CSV) |
   | Close | Closing | Closing (kg) |
   | Floor | Out on floor | Out on floor at close (kg) |
 
-  **Store loss** (AC-09, 🆕) is 0 in every case here and left out of the tables. When it is built
-  it joins the equation (TC-RPT-021).
-- **Every per-day table is checked with I-2:** Open + Recv − Cons − RtV − Sold + Adj = Close.
+  **Store loss** is 0 unless the case names a figure. Where the column is not built yet, tables
+  omit Loss but the equation still applies (TC-RPT-021).
+- **Every per-day table is checked with I-2:** Open + Recv − Cons − RtV − Sold + Adj − Store
+  loss = Close.
   Next day's Open = this day's Close. Floor is part of Close, never more than it.
 - **Checked after every day in every timeline, not repeated below:**
   - I-1: ERPNext batch balance **as of the end of that day** = the roll's kg in the roll's
@@ -59,7 +62,8 @@ sync and reports.
 - **History text** is the portal's one-line description of each movement:
   `Received 1000 kg` · `Issued out 1000 kg to Running Godown` ·
   `Returned 600 kg to Godown A · 400 kg used` · `Consumed — 1000 kg used up` ·
-  `Returned to vendor ARIHANT — 500 kg` · `Sold — 800 kg` · `Corrected by 10 kg`.
+  `Returned to vendor ARIHANT — 500 kg` · `Sold — 800 kg` ·
+  `Counted 50 kg less` / `Counted 50 kg more` (D-12).
 - **Status** describes the behaviour. The **controlled-clock timeline harness** in "How we
   test" layer 1 does not exist yet: today's automated report tests replay fixed September and
   October fixtures (`tests/test_reports.py`). So every TC-TL case also needs that harness to be
@@ -193,8 +197,8 @@ sync and reports.
   Close = 1000, D5 Close = 700, and R11 ends Sold · 0.
 
 ### TC-TL-004 Backdated entry: outward recorded the next day (T-4)
-- **Status:** ✅ today
-- **Covers:** T-4 · I-1–I-6
+- **Status:** 🆕 fix (D-06)
+- **Covers:** T-4, D-06 · I-1–I-6
 - **Layer:** Auto
 - **Given:** R15, RT 501, 1000 kg in Godown A, received D1. Nothing else in stock.
 - **Steps:**
@@ -219,12 +223,12 @@ sync and reports.
   - Daily roll report D7: R15, Last movement "Outward", Final status "Out", Final weight 1000,
     Last location Running Godown. D8: "No rolls moved on that date".
   - Weekly D1–D7: Open 0, Recv 1000, Close 1000, Floor 1000.
-- **Note:** "Last movement recorded at" on the D7 row shows **D8 10:00**. It is the time the
-  server wrote the row, not the movement's date. That is correct but may surprise readers.
+  - Daily roll report D7: **Last movement recorded at** = **D8 10:00** (when the operator saved
+    on the tablet, D-06), not only the movement date D7.
 
 ### TC-TL-005 Offline overnight: return saved in the evening, synced next morning (T-5)
-- **Status:** ✅ today
-- **Covers:** T-5, E-1 · I-1–I-6
+- **Status:** 🆕 fix (D-06)
+- **Covers:** T-5, E-1, D-06 · I-1–I-6
 - **Layer:** Auto
 - **Given:** R16, RT 502, 1000 kg received D1 in Godown A, issued out to Running Godown D8.
 - **Steps:**
@@ -250,9 +254,9 @@ sync and reports.
     No second ERPNext document. The Sync Log has two entries.
   - Daily roll report D9: R16 Inward, In stock, Final weight 750, Weight used 250. D10:
     "No rolls moved on that date".
-- **Note:** "Last movement recorded at" on the D9 row shows D10 08:15 (when the server got it),
-  not 19:30 (when the operator saved it on the tablet). 🔶 Team to say which time the report
-  should show.
+  - Daily roll report D9: **Last movement recorded at** = **D9 19:30** (operator save time,
+    D-06), not D10 08:15 when the server applied the sync.
+- **Note:** today the report shows D10 08:15.
 
 ### TC-TL-006 Late sync with an earlier date, refused (T-6)
 - **Status:** ✅ today
@@ -327,8 +331,8 @@ sync and reports.
     Godown.
 
 ### TC-TL-009 Out at the end of one month, back weeks later in the next
-- **Status:** 🔶 value to confirm (the month that gets the consumption)
-- **Covers:** AC-03, T-2 · I-1–I-6
+- **Status:** ✅ today (D-01)
+- **Covers:** AC-03, T-2, D-01 · I-1–I-6
 - **Layer:** Auto
 - **Given:** R20, RT 501. Real dates: Tue 1 Sep 2026 to Wed 7 Oct 2026.
 - **Steps:**
@@ -356,10 +360,8 @@ sync and reports.
   - The week with no movement still shows a row (it has stock).
   - Roll detail CSV for September: no lines, so the "Roll detail CSV" button is disabled. For
     October: one line dated 2026-10-07, Consumed (kg) 350.
-- **Note:** consumption is counted on the **return day** (as in Node, AC-03 "team to confirm").
-  So September shows 1000 kg out on the floor and 0 consumed, and all 350 kg lands in October,
-  even if the paper was used in September. 🔶 Team to confirm this is acceptable for month-end
-  reporting.
+- **Note:** consumption is counted on the **return day** (D-01, as in Node). September shows
+  1000 kg out on the floor and 0 consumed; all 350 kg lands in October.
 
 ### TC-TL-010 Return, inward and sale of one design on the same day (design = sum of rolls)
 - **Status:** ✅ today
@@ -394,11 +396,11 @@ sync and reports.
   - Daily roll report D5: 3 rows, sorted R21, R22, R23. "3 rolls moved".
 
 ### TC-TL-011 Financial year end: 31 March to 1 April
-- **Status:** ✅ today (reports); 🔶 value to confirm (a financial-year view)
-- **Covers:** T-2 · I-1–I-5
+- **Status:** ✅ today (movement dates); 🆕 fix (D-09, D-10)
+- **Covers:** T-2, D-09, D-10 · I-1–I-5
 - **Layer:** Auto
-- **Given:** R24, RT 502. Real dates: Mon 30 Mar 2026 to Thu 2 Apr 2026. ERPNext Fiscal Years
-  2025-2026 and 2026-2027 exist.
+- **Given:** R24, RT 502. Real dates: Mon 30 Mar 2026 to Thu 2 Apr 2026. The system has
+  auto-created ERPNext Fiscal Years 2025-2026 and 2026-2027 (D-10).
 - **Steps:**
   1. 30 Mar Operator registers R24: 1000 kg, Godown A.
   2. 31 Mar Operator issues R24 out to Running Godown.
@@ -422,11 +424,35 @@ sync and reports.
   | FY 2026-27 (API, 2026-04-01 to 2027-03-31) | 1000 | 0 | 300 | 0 | 700 | 0 | 0 | 0 |
 
   - ERPNext: the 1 Apr and 2 Apr documents post into Fiscal Year 2026-2027 without error.
-- **Note:** the portal offers only Daily, Weekly and Monthly. A financial-year figure is only
-  available through the API with a custom range. 🔶 Team to say if a yearly (April–March) view
-  is wanted. The app does not create ERPNext Fiscal Years. ERPNext's daily scheduler creates
-  the next one 3 days before year end, **only if the scheduler is running**. Without it, every
-  movement on 1 April fails. Add "next Fiscal Year exists" to the March checklist.
+  - The same FY figures are available on the portal with **Custom range** 2026-04-01 to
+    2027-03-31 (TC-RPT-022, D-09).
+  - Ahead of year end the system auto-creates the next fiscal year (March and at install) and
+    raises an alert: success or failure (TC-ALERT-010, TC-ALERT-011, D-10).
+- **Note:** today the portal has only Daily, Weekly and Monthly; fiscal years are not
+  auto-created by the app and FY range is API-only.
+
+### TC-ALERT-010 Financial year created — success alert (D-10)
+- **Status:** 🆕
+- **Covers:** D-10
+- **Layer:** Auto
+- **Given:** late March, ERPNext is reachable. FY 2026-27 not yet present.
+- **Steps:**
+  1. The scheduled (or install-time) job creates FY 2026-27.
+  2. Supervisor, super admin open Alerts.
+- **Expected:** an alert whose text includes **FY 2026-27 created** (or equivalent). Open until
+  reviewed. After creation, a movement dated 1 Apr 2026 posts without fiscal-year error
+  (TC-TL-011 step 3).
+
+### TC-ALERT-011 Financial year creation failed — warning alert (D-10)
+- **Status:** 🆕
+- **Covers:** D-10
+- **Layer:** Auto
+- **Given:** late March; ERPNext rejects or is unreachable when creating the next year.
+- **Steps:**
+  1. The create-FY job runs and fails.
+  2. Supervisor opens Alerts before 1 April.
+- **Expected:** an open alert: **FY 2026-27 could not be created — movements on 1 April will
+  fail** (or equivalent). The team can fix ERPNext before operators work on 1 April.
 
 ### TC-TL-012 A week that spans two months
 - **Status:** ✅ today
@@ -540,23 +566,24 @@ today = 4 Nov, yesterday = 3 Nov, two days ago = 2 Nov, tomorrow = 5 Nov.
   - Step 1 passes because "today" is the **saved-on** day (3 Nov), not the sync day.
 
 ### TC-DATE-006 An old offline queue, or a tablet whose clock is behind
-- **Status:** 🔶 value to confirm (an upper limit on how old a queued movement may be)
-- **Covers:** T-5, AC-01 · I-2
+- **Status:** 🆕 fix (D-03)
+- **Covers:** T-5, AC-01, D-03 · I-2
 - **Layer:** Auto
-- **Given:** R46, RT 501, 1000 kg out on Running Godown since 1 Oct.
+- **Given:** R46, RT 501, 1000 kg out on Running Godown since 1 Oct. Server now = 4 Nov 10:00.
 - **Steps:**
-  1. Tablet saved a return of R46 at 700 kg on **27 Oct** (date 27 Oct, saved-on 27 Oct)
+  1. Tablet saved a return of R46 at 700 kg on **1 Nov** (date 1 Nov, saved-on 1 Nov)
      and stayed offline until now (4 Nov 10:00). It syncs.
-  2. Variant: the tablet's clock is 8 days slow. The operator returns R46 "today" on 4 Nov.
-     The tablet sends date 27 Oct, saved-on 27 Oct.
-- **Expected (doc's rule, to confirm):** a movement older than the agreed limit (proposed:
-  saved-on more than **7 days** before the server's today) is refused with a clear message
-  (proposed wording: "This entry was saved more than 7 days ago — check the tablet's date and
-  enter it again"). Nothing is posted.
-- **Note:** today both steps are **accepted**: 27 Oct gets Cons 300 and every report from
-  27 Oct onwards changes, 8 days after the fact. The server cannot tell an old queue from a
-  slow clock, because both send the same saved-on time. The rule only checks the date against
-  the saved-on day the tablet reports.
+  2. Tablet saved a return at 700 kg on **27 Oct** (date 27 Oct, saved-on 27 Oct) and syncs
+     on 4 Nov (more than 2 days old).
+  3. Variant: the tablet's clock is wrong. On 4 Nov the operator returns R46 "today"; the
+     tablet sends date 27 Oct, saved-on 27 Oct.
+- **Expected:**
+  - Step 1: `ok` (saved-on 1 Nov is within 2 days of server 4 Nov).
+  - Steps 2–3: refused: entry saved on the tablet **more than 2 days** before it reaches the
+    server — the operator must re-enter (clear message, *(400 validation)*). Nothing is posted.
+    R46 stays Out · 1000 · Running Godown; reports unchanged.
+- **Note:** today steps 2–3 are **accepted** and rewrite old days. The server cannot distinguish
+  an old queue from a slow clock; both send the same saved-on time.
 
 ### TC-DATE-007 Movements just before and just after midnight IST land on their own days
 - **Status:** ✅ today
@@ -608,8 +635,8 @@ today = 4 Nov, yesterday = 3 Nov, two days ago = 2 Nov, tomorrow = 5 Nov.
   not at 11:00.
 
 ### TC-DATE-009 Inward (roll registration) follows the same date rule
-- **Status:** 🆕 to build
-- **Covers:** AC-01 · I-2
+- **Status:** 🆕 fix (D-04)
+- **Covers:** AC-01, D-04 · I-2
 - **Layer:** Auto
 - **Given:** server now 4 Nov 10:00.
 - **Steps:**
@@ -623,16 +650,16 @@ today = 4 Nov, yesterday = 3 Nov, two days ago = 2 Nov, tomorrow = 5 Nov.
   accepted and becomes the Received day in the reports.
 
 ### TC-DATE-010 A movement dated before the roll was received
-- **Status:** 🔶 value to confirm (refusal wording)
-- **Covers:** AC-01, T-4 · I-2, I-3, I-6
+- **Status:** 🆕 fix (D-02)
+- **Covers:** AC-01, T-4, D-02 · I-2, I-3, I-6
 - **Layer:** Auto
 - **Given:** server now 4 Nov 10:00. R45b, RT 501, registered **4 Nov 09:00**, 1000 kg, Godown A.
 - **Steps:**
   1. Operator sells R45b to Direct Sale and picks **yesterday** (3 Nov).
   2. Variant: Operator issues R45b out to Running Godown dated 3 Nov.
-- **Expected (doc: I-3 no negative stock on any date):** refused (proposed wording: "This roll
-  was received on 4 Nov — a movement can't be dated before that") *(400 validation)*. Nothing
-  posted.
+- **Expected:** both refused: a movement dated before the roll was received is refused (e.g.
+  "This roll was received on 4 Nov — a movement can't be dated before that") *(400 validation)*.
+  Nothing posted (I-3 unchanged).
 - **Note:** today both are **accepted** (the date rule only looks at today/yesterday):
   - Step 1: report 3 Nov shows **Sold 1000, Closing −1000** (negative, I-3 broken). 4 Nov
     shows Open −1000, Recv 1000, Close 0. The daily roll report for 3 Nov lists R45b as Sold
@@ -643,17 +670,16 @@ today = 4 Nov, yesterday = 3 Nov, two days ago = 2 Nov, tomorrow = 5 Nov.
     as of 3 Nov and the reports for 3 Nov disagree.
 
 ### TC-DATE-011 Physical count (ADJUSTMENT) date
-- **Status:** 🔶 value to confirm
-- **Covers:** E-5 · I-2
+- **Status:** 🆕 fix (D-04)
+- **Covers:** E-5, D-04 · I-2
 - **Layer:** Auto
 - **Given:** R43, in stock, 1000 kg, Godown A, received 1 Oct. Server now 4 Nov.
 - **Steps:**
   1. Physical count on R43 to 990 kg, dated **10 Oct**, remarks "count".
-- **Expected (proposed):** the same today-or-yesterday rule as other movements: "The date must
-  be today or yesterday" *(400 validation)*.
-- **Note:** today an ADJUSTMENT (and adding weight back, IN) is only checked against the
-  future. Step 1 is accepted, and the 10 Oct report changes (Adj −10). Portal corrections are
-  always dated "now", so this only matters for the API.
+- **Expected:** refused: "The date must be today or yesterday" *(400 validation)* (D-04).
+  Nothing posted.
+- **Note:** today step 1 is accepted and the 10 Oct report changes (Adj −10). Portal corrections
+  are always dated "now", so this only matters for the API.
 
 ---
 
@@ -757,18 +783,18 @@ commits on its own: a failure undoes that item only. Later items on the same rol
   - The two requests queue on the roll (row lock). Neither fails with a server error.
 
 ### TC-SYNC-005 Late sync dated earlier than a movement already posted
-- **Status:** 🔶 value to confirm (refuse, or accept and repost the ledger)
-- **Covers:** T-4, T-6, E-2 · I-1, I-2, I-6
+- **Status:** 🆕 fix (D-02)
+- **Covers:** T-4, T-6, E-2, D-02 · I-1, I-2, I-6
 - **Layer:** Auto
 - **Given:** R58, RT 501, 1000 kg, received D1 in Godown A. Today = D5.
 - **Steps:**
   1. D5 08:00 Tablet B issues R58 out to Running Godown (dated D5 08:00).
   2. D5 08:30 On tablet A, the operator returns R58 at 700 kg and by mistake picks
      **yesterday (D4)**. Synced at once.
-- **Expected (doc: "the ledger stays in date order"; T-6: a late entry that no longer fits is
-  refused):** step 2 is refused because it is dated before the roll's latest movement
-  (proposed wording: "This roll already has a movement on D5 08:00 — a later entry can't be
-  dated before it") *(409 conflict)*. Nothing posted. R58 stays Out · 1000 · Running Godown.
+- **Expected:** step 2 refused (D-02): dated before the roll's latest movement (e.g. "This roll
+  already has a movement on D5 08:00 — a later entry can't be dated before it")
+  *(409 conflict)*. Nothing posted. R58 stays Out · 1000 · Running Godown. Reports and daily
+  roll report stay consistent with roll state (I-1, I-6).
 - **Note:** today step 2 is **accepted** (the roll is out, and D4 is "yesterday"):
   - ERPNext does not post it on D4. `stock_docs.ledger_time` puts it 1 second after the roll's
     newest document (D5 08:00:01), so ERPNext's ledger is in **entry** order. The reports use
@@ -781,8 +807,8 @@ commits on its own: a failure undoes that item only. Later items on the same rol
   - When the late entry no longer fits the roll's state (TC-TL-006) it is refused today.
 
 ### TC-SYNC-006 A batch where one item fails: the others still post
-- **Status:** ✅ today
-- **Covers:** E-1, E-2 · I-1, I-2
+- **Status:** ✅ today (D-58)
+- **Covers:** E-1, E-2, D-58 · I-1, I-2
 - **Layer:** Auto
 - **Given:** R70 (1000 kg, Godown A, in stock), R71 (800 kg, Godown A, in stock), R72 (600 kg,
   Godown B, in stock), all RT 502.
@@ -837,7 +863,7 @@ commits on its own: a failure undoes that item only. Later items on the same rol
   2. Supervisor corrects R75's current kg 600 → 580.
   3. Supervisor moves R76 from Godown A to Godown B (location edit).
   4. Supervisor deletes R77.
-  5. Admin disables location "Godown B rack 3", adds remark code "WET", adds buyer
+  5. Super admin disables location "Godown B rack 3", adds remark code "WET", adds buyer
      "Kumar Traders".
   6. Tablet pulls each kind after its checkpoint, within 5 seconds of step 5, then again 10
      seconds later.
@@ -874,10 +900,11 @@ commits on its own: a failure undoes that item only. Later items on the same rol
 ### What each report and column means
 
 **Consumption report** (Reports → Consumption). Period: **Daily** ("Date"), **Weekly**
-("Any day in the week", Monday to Sunday) or **Monthly** ("Any day in the month", calendar
-month). The date picker stops at today. Grouping: **By material** or **By design**. Figures in
-kg. It counts every movement dated in the period, in IST days. Rows whose figures are all 0 are
-left out. A deleted roll, and its movements, are never counted.
+("Any day in the week", Monday to Sunday), **Monthly** ("Any day in the month", calendar
+month) or **Custom range** (from–to, D-09). The date picker stops at today. Grouping: **By
+material** or **By design**. Figures in kg. It counts every movement dated in the period, in
+IST days. Rows whose figures are all 0 are left out. A deleted roll, and its movements, are
+never counted (current month only; D-08).
 
 | Column (screen / CSV) | Meaning |
 |---|---|
@@ -888,8 +915,9 @@ left out. A deleted roll, and its movements, are never counted.
 | Consumed / Consumed (kg) | weight used: out weight − returned weight, counted **on the return day**; a roll returned at 0 or marked consumed counts all it held |
 | Returned to vendor / Returned to vendor (kg) | kg sent back to the vendor |
 | Sold / Sold (kg) | kg sold |
-| Adjusted / Adjusted (kg) | signed change from a physical count or a portal correction of a moved roll's kg |
-| Closing / Closing (kg) | Opening + Received − Consumed − Returned to vendor − Sold + Adjusted; includes what is out on the floor |
+| Adjusted / Adjusted (kg) | signed change from a physical count that finds **more**, or a portal correction of a moved roll's kg (D-12: inward top-up on an existing roll is here, not Received) |
+| Store loss / Store loss (kg) | variance when a count finds **less** (including 0) or at outward weighing (AC-09, D-05); column after Adjusted (D-11) |
+| Closing / Closing (kg) | Opening + Received − Consumed − Returned to vendor − Sold + Adjusted − Store loss; includes what is out on the floor |
 | Out on floor / Out on floor at close (kg) | the part of Closing on rolls that are out at the end of the period |
 
 Downloads: **Summary CSV** (the table, with a Total line) and **Roll detail CSV** (one line per
@@ -965,15 +993,16 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   1. Read D1: Recv.
   2. D2 Supervisor adds 50 kg back to R60 (IN, 600 → 650).
   3. D2 Supervisor tries to add 400 kg back to R60 (650 + 400 > 1000).
-- **Expected:** D1 Recv 700 (R63 only; RPT-SET's D0 rolls are D0's Received). D2 Recv 50,
-  Close 1740. Step 3 refused: "This roll only ever held 1000 kg — cannot add more than that"
-  *(400 validation)*.
+- **Expected:** D1 Recv 700 (R63 only; RPT-SET's D0 rolls are D0's Received). D2 **Adjusted**
+  +50 (inward top-up on R60, D-12), Close 1740, Recv 0. Step 3 refused: "This roll only ever
+  held 1000 kg — cannot add more than that" *(400 validation)*.
+- **Note:** today D2 shows Recv 50 instead of Adjusted +50.
 - **Note:** opening-stock rolls loaded at go-live must show as Opening, not Received (OS-3, 🆕,
   section 04).
 
 ### TC-RPT-003 Consumed
-- **Status:** 🔶 value to confirm (counted on the return day, per AC-03)
-- **Covers:** AC-03, AC-07a · I-2, I-4
+- **Status:** ✅ today (D-01)
+- **Covers:** AC-03, AC-07a, D-01 · I-2, I-4
 - **Layer:** Auto
 - **Given:** RPT-SET. Plus R65 (RT 501, 500 kg, out since D0) and R66 (RT 501, 300 kg, in stock
   in Godown B).
@@ -1013,9 +1042,9 @@ day, as it stood after its last movement that day. The screen shows only "N roll
 - **Expected:** D1 Sold = 800 + 250 = 1050. R6 In stock 750.
 - **Note:** today step 2 sells all 1000, so Sold = 1800.
 
-### TC-RPT-006 Adjusted
-- **Status:** ✅ today
-- **Covers:** E-3, E-4, E-5 · I-2, I-4
+### TC-RPT-006 Adjusted and store loss from counts
+- **Status:** 🆕 fix (D-05, D-12)
+- **Covers:** E-3, E-4, E-5, D-05, D-12 · I-2, I-4
 - **Layer:** Auto
 - **Given:** R67 (RT 502, 1000 kg, received D1, Godown A, out D2, returned D3 at 700).
   R68 (RT 502, 300 kg, Godown A, received D1). R69 (RT 502, 1000 kg, Godown A, received D1,
@@ -1024,27 +1053,29 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   1. D4 Operator physical count on R67 = 690 (remarks "count").
   2. D5 Physical count on R67 = 700.
   3. D6 Supervisor corrects R67's current kg 700 → 650 on the portal.
-  4. D6 Physical count on R68 = 0.
+  4. D6 Physical count on R68 = 0, remarks "not found".
   5. D6 Supervisor corrects R69's weight 1000 → 950 on the portal (unmoved roll).
 - **Expected:** every day read after step 5:
 
-  | Day | Open | Recv | Cons | RtV | Sold | Adj | Close | Floor |
-  |---|---|---|---|---|---|---|---|---|
-  | D1 | 0 | **2250** | 0 | 0 | 0 | 0 | 2250 | 0 |
-  | D2 | 2250 | 0 | 0 | 0 | 0 | 0 | 2250 | 1000 |
-  | D3 | 2250 | 0 | 300 | 0 | 0 | 0 | 1950 | 0 |
-  | D4 | 1950 | 0 | 0 | 0 | 0 | −10 | 1940 | 0 |
-  | D5 | 1940 | 0 | 0 | 0 | 0 | +10 | 1950 | 0 |
-  | D6 | 1950 | 0 | 0 | 0 | 0 | −350 | 1600 | 0 |
+  | Day | Open | Recv | Cons | RtV | Sold | Adj | Loss | Close | Floor |
+  |---|---|---|---|---|---|---|---|---|---|
+  | D1 | 0 | **2250** | 0 | 0 | 0 | 0 | 0 | 2250 | 0 |
+  | D2 | 2250 | 0 | 0 | 0 | 0 | 0 | 0 | 2250 | 1000 |
+  | D3 | 2250 | 0 | 300 | 0 | 0 | 0 | 0 | 1950 | 0 |
+  | D4 | 1950 | 0 | 0 | 0 | 0 | −10 | 0 | 1940 | 0 |
+  | D5 | 1940 | 0 | 0 | 0 | 0 | +10 | 0 | 1950 | 0 |
+  | D6 | 1950 | 0 | 0 | 0 | 0 | −50 | **300** | 1600 | 0 |
 
-  - D6 Adj −350 = R67 −50 (`Corrected by 50 kg`, "Corrected on the portal") + R68 −300.
-  - R68 ends **Consumed · 0 · no godown**, but its 300 kg shows as **Adjusted**, not Consumed.
+  - D4/D5: history on R67 `Counted 10 kg less` / `Counted 10 kg more` (D-12). Portal step 3
+    still `Corrected by 50 kg`.
+  - D6 Adj −50 = R67 portal correction only. **Store loss 300** = R68 count shortfall (D-05);
+    Consumed stays 0. An alert is raised for supervisor review.
+  - R68 ends finished at 0 kg, no godown; not under Consumed (that path is return at 0 or
+    Consume only).
   - R69's correction adds no history row and no Adjusted figure. It **rewrites D1**: Received
     was 2300 before step 5, 2250 after.
-  - D6 Close 1600 = R67 650 + R69 950.
-- **Note:** a physical count to 0 finishes the roll as "Consumed" but reports the kg under
-  Adjusted. 🔶 Team to confirm. A reviewer may expect it under Consumed (or a separate
-  "written off").
+  - D6 Close 1600 = R67 650 + R69 950. I-2 uses Adj and Store loss as above.
+- **Note:** today R68's 300 kg sits under Adjusted and history says `Corrected by …`.
 
 ### TC-RPT-007 Out on floor at close
 - **Status:** ✅ today
@@ -1124,14 +1155,15 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   1. Harness: for every day from the first movement to 7 days after the last, read the daily
      report by material and by design.
 - **Expected:** for every row and the Total line:
-  - Opening + Received − Consumed − Returned to vendor − Sold + Adjusted = Closing (to 0.001 kg).
+  - Opening + Received − Consumed − Returned to vendor − Sold + Adjusted − Store loss = Closing
+    (to 0.001 kg).
   - Opening = the day before's Closing.
   - Closing ≥ 0 and 0 ≤ Out on floor ≤ Closing (I-3).
   - Total = the sum of the rows. Design totals = material totals.
   - Closing per design = the sum of the live rolls' kg of that design at end of day (from the
     daily roll state), and = ERPNext's batch balances as of that day.
-- **Note:** fails today on the data of TC-DATE-010 and TC-SYNC-005 (accepted out-of-order
-  dates). The equation still holds there, but I-3 and the ERPNext comparison fail.
+- **Note:** fails today on the data of TC-DATE-010 and TC-SYNC-005 until D-02 refusals are
+  built; I-3 and the ERPNext comparison fail there today.
 
 ### TC-RPT-012 Summary CSV
 - **Status:** ✅ today
@@ -1179,10 +1211,11 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   - Step 2: the button is disabled (Consumed total is 0).
 
 ### TC-RPT-014 Daily roll status report and its CSV
-- **Status:** ✅ today
-- **Covers:** AC-02, I-6
+- **Status:** 🆕 fix (D-07)
+- **Covers:** AC-02, I-6, D-07
 - **Layer:** Both
-- **Given:** RPT-SET. Roll R60 has remark MISPRINT ("Misprint") picked on the roll.
+- **Given:** RPT-SET. Roll R60 has remark MISPRINT ("Misprint") and roll note **"Hold for QC"**
+  from registration (D-07).
 - **Steps:**
   1. Supervisor opens Reports → Daily roll status, date D1.
   2. Clicks **Download CSV**.
@@ -1193,8 +1226,9 @@ day, as it stood after its last movement that day. The screen shows only "N roll
     Vendor ARIHANT · RT code RT 501 · Delta code 730N · Material code BASE-PAPER · Material Base
     paper · Received date D0 · Unit kg · Weight on arrival 1000 · Final weight 600 · Final status
     In stock · Last movement Inward · Weight moved 600 · Weight used 400 · Last location Godown A
-    · Remarks Misprint · Movement note edge torn · Movements that day 2 · Last movement
-    recorded at D1 17:00 · Recorded by the operator's full name.
+    · Remarks Misprint · Movement note edge torn · **Roll note Hold for QC** · Movements that
+    day 2 · Last movement recorded at D1 17:00 (operator save time, D-06) · Recorded by the
+    operator's full name.
   - Other rows:
 
     | Roll | Last movement | Final status | Final weight | Weight moved | Weight used | Last location | Movements that day |
@@ -1204,9 +1238,9 @@ day, as it stood after its last movement that day. The screen shows only "N roll
     | R63 | Adjusted | In stock | 690 | 10 | | Godown A | 2 |
     | R64 | Outward | Out | 400 | 400 | | Running Godown | 1 |
 
-  - R63's Movement note is "Physical count". Its Received date is D1.
-- **Note:** **Roll note** is always blank today: the ERPNext report does not read a roll note
-  (`reports.load` sets it to none). 🔶 Team to say if the column should be dropped or filled.
+  - R63's Movement note is "Physical count". Its Received date is D1. Every row's **Roll note**
+    shows that roll's registration note (blank when none).
+- **Note:** today the **Roll note** column is always blank.
 
 ### TC-RPT-015 An empty day (stock, no movements)
 - **Status:** ✅ today
@@ -1239,8 +1273,8 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   - A material or design whose rolls all finished before the period shows no row either.
 
 ### TC-RPT-017 A deleted roll disappears from past reports
-- **Status:** ✅ today
-- **Covers:** E-6 · I-1, I-2, I-6
+- **Status:** ✅ today (current month); 🆕 fix (D-08)
+- **Covers:** E-6, D-08 · I-1, I-2, I-6
 - **Layer:** Auto
 - **Given:** R65d, RT 501, received D1 500 kg Godown A, out D2, returned D3 at 300 kg.
   RPT-SET's R60 also exists (RT 501, 1000 kg received D1 for this case).
@@ -1261,8 +1295,13 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   - ERPNext: all of R65d's documents cancelled, newest first; batch balance 0;
     `ledger_mismatches()` empty.
   - Same as TC-DEL-002 (section 04), checked here across every report.
-- **Note:** deletion **rewrites the past**: a report printed or signed for D1–D3 no longer
-  matches. 🔶 Team to accept, or to keep deleted rolls in closed periods.
+- **Variant (D-08, closed month):** R65d's movements all fall in **October** (closed). Today
+  is **5 November**. Supervisor deletes R65d on 5 Nov.
+- **Expected (variant):** refused — the roll has movements in a **closed (previous) month**;
+  nothing is cancelled and reports for October stay unchanged. Delete remains allowed within the
+  **current** month (steps 1–3 above).
+- **Note:** deletion in the current month **rewrites the past** within that month. D-08 blocks
+  changing signed closed months.
 
 ### TC-RPT-018 Report period boundaries and refusals
 - **Status:** ✅ today
@@ -1322,42 +1361,40 @@ day, as it stood after its last movement that day. The screen shows only "N roll
   summary's Consumed. Example TC-TL-001 D20: history `Returned 400 kg to Godown A · 600 kg
   used`; daily roll report Final weight 400, Weight used 600, Godown A; detail CSV Consumed
   600, Left on roll 400; summary Consumed 600.
-- **Note:** fails today in TC-SYNC-005 and TC-DATE-010 (accepted out-of-order dates).
+- **Note:** fails today in TC-SYNC-005 and TC-DATE-010 until D-02 refusals are built.
 
 ### TC-RPT-021 Store loss column in the consumption report
-- **Status:** 🆕 to build
-- **Covers:** AC-09 · I-2
+- **Status:** 🆕 to build (D-11)
+- **Covers:** AC-09, D-11 · I-2
 - **Layer:** Auto
 - **Given:** R7, RT 501, 100 kg received D1 in Godown A (golden dataset).
 - **Steps:**
   1. D5 Operator issues R7 out; the scale shows 80 kg.
-- **Expected:** a **Store loss** column (screen "Store loss", CSV "Store loss (kg)",
-  🔶 placed after Adjusted) shows 20 on D5 for Base paper and RT 501. D5: Open 100, Store loss
-  20, Close 80, Floor 80. The equation becomes Open + Recv − Cons − RtV − Sold ± Adj −
-  Store loss = Close, in every check of this section.
+- **Expected:** a **Store loss** column (screen "Store loss", CSV "Store loss (kg)") appears
+  **after Adjusted** and before Closing (D-11): Opening · Received · Consumed · Returned to
+  vendor · Sold · Adjusted · Store loss · Closing · Out on floor. It shows 20 on D5 for Base
+  paper and RT 501. D5: Open 100, Store loss 20, Close 80, Floor 80. Summary and by-design
+  CSV headers use the same order. I-2: Open + Recv − Cons − RtV − Sold + Adj − Store loss =
+  Close.
 - **Note:** today there is no Store loss column, and the outward weight is only written into
   the note. Details in section 02.
 
----
-
-## Open questions for the business
-
-1. **Consumption on the return day** (TC-TL-009, TC-RPT-003): paper used in September but
-   returned in October counts as October consumption. Accept, or ask the operator for the use
-   date?
-2. **A physical count to 0** (TC-RPT-006) finishes the roll as Consumed but reports the kg as
-   Adjusted. Which column should it land in?
-3. **Out-of-order dates** (TC-SYNC-005, TC-DATE-010): a movement dated before the roll's
-   arrival or before its latest movement is accepted today. That gives negative closings on the
-   earlier day and a daily roll report that contradicts the roll. Refuse (proposed), or accept
-   and repost ERPNext in date order?
-4. **Old offline queues and slow tablet clocks** (TC-DATE-006): accept any saved-on day
-   (today), or refuse entries saved more than N days ago (proposed 7)?
-5. **Physical count dates** (TC-DATE-011): today any past date. Apply today-or-yesterday?
-6. **"Last movement recorded at"** (TC-TL-004/005): show when the server got it (today) or when
-   the operator saved it on the tablet?
-7. **Roll note column** (TC-RPT-014) is always blank. Drop or fill?
-8. **Deleted rolls rewrite past reports** (TC-RPT-017). Acceptable for closed or signed periods?
-9. **Financial-year view** (TC-TL-011): is an April–March report wanted on the portal? And who
-   checks each March that ERPNext's next Fiscal Year exists?
-10. **Store loss column placement** (TC-RPT-021): after Adjusted (proposed)?
+### TC-RPT-022 Custom from–to range on the portal (D-09)
+- **Status:** 🆕 fix
+- **Covers:** D-09, I-5
+- **Layer:** Both
+- **Given:** TC-TL-011 data (R24, 30 Mar–2 Apr 2026) or RPT-SET extended across D0–D6.
+- **Steps:**
+  1. Supervisor opens Reports → Consumption, chooses **Custom range**, from **2026-04-01** to
+     **2027-03-31** (financial year), By material.
+  2. Downloads Summary CSV and Roll detail CSV for the same range.
+  3. Picks from = to = D1 on RPT-SET (one day).
+  4. API: from after to → refused (same rules as TC-RPT-018).
+- **Expected:**
+  - FY range figures match TC-TL-011's FY 2026-27 API row (Open 1000, Cons 300, Sold 700,
+    Close 0). The page shows the range **2026-04-01 to 2027-03-31**.
+  - CSV file names include the from and to dates; column order matches TC-RPT-021 (including
+    Store loss when built).
+  - One-day custom range = that day's daily figures (I-5).
+  - No separate "Financial year" button — any period works (week, quarter, April–March).
+- **Note:** today custom range is API-only; the portal has Daily, Weekly and Monthly only.

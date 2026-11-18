@@ -39,8 +39,11 @@ Status: ✅ works today · 🆕 to build (decided 2026-11-04) · 🔶 proposal, 
 
 ## AC-01 Enter a roll (inward) ✅
 
-**Steps:** on the tablet, register roll R1: barcode, roll no, lot (challan), vendor, design,
-material, 1000 kg, Godown A, front/back photos. Sync.
+**Order (D-60):** pick the **paper / design first**, then the vendor (vendors that stock that
+paper only). Adding a brand-new paper still needs a vendor first.
+
+**Steps:** on the tablet, register roll R1: barcode, roll no, lot (challan), design (paper),
+vendor, material, 1000 kg, Godown A, front/back photos. Sync.
 
 **Expected**
 - Roll: In stock, arrival 1000, current 1000, Godown A.
@@ -184,9 +187,17 @@ count — team to confirm). RT 501 minimum = 1500 kg.
 - The alert **closes by itself** when in store ≥ minimum (e.g. a new inward of 600 on D6).
 - Designs without a minimum never alert.
 
+## Portal dashboard ✅ (D-61)
+
+Supervisor and super admin home after login: **/dashboard**. Live KPIs (rolls, on-hand kg, out
+on floor, lots/vendors/locations/materials, moved today), Daily/Weekly/Monthly period movement
+totals that match Reports → Consumption for the same dates, charts (movement mix, roll status,
+7-day activity, top materials), top consumed / out-on-floor tables, and quick links. Operators
+cannot open it. Alerts are **not** on this page — see Alerts below.
+
 ## Alerts page 🆕 (shared by AC-09 and AC-10)
 
-- Portal page "Alerts" for supervisor, admin and super admin. A badge in the menu shows the open count.
+- Portal page "Alerts" for supervisor and super admin. A badge in the menu shows the open count.
 - Columns: type (Store loss / Low stock), roll or design, figures, date, status.
 - Filters: open / reviewed, type, date range.
 - Low-stock alerts close themselves. Store-loss alerts stay open until someone marks them reviewed.

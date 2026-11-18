@@ -15,5 +15,5 @@ Decisions taken on 2026-11-05 (after the pause described in `session-summary-202
 
 **Action for the business:** share a sample stock-take sheet and photos of old roll labels.
 
-**Next step:** update the 245 test cases to these decisions; the business re-reviews the
-catalog; then automate (✅ cases first, then failing tests for each fix and new feature).
+**Next step (done 2026-11-17):** the catalog was updated to D-01 … D-60 — see
+`session-summary-2026-11-17.md`. Business re-review, then automate.
