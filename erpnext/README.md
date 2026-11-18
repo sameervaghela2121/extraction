@@ -3,6 +3,9 @@
 The ERPNext backend for the Royale Touche roll inventory: ERPNext plus our Frappe app
 `royal_touche` (in `royal_touche/`). Design: `docs/superpowers/specs/2026-11-03-erpnext-backend-design.md`.
 
+**Dev GCE hosting + CI:** see [README-dev-hosting.md](README-dev-hosting.md) and
+`scripts/gce-dev-provision.sh` / `gce-dev-deploy.sh`.
+
 No Docker. Everything runs as your own user:
 
 | Piece | Where | Port |

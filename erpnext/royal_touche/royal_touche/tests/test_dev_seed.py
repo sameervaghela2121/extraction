@@ -64,5 +64,15 @@ class TestDevSeed(IntegrationTestCase):
 
     def test_refuses_without_developer_mode(self):
         frappe.conf.developer_mode = 0
+        prev_env = frappe.conf.get("rt_environment")
+        frappe.conf.rt_environment = None
+        self.addCleanup(setattr, frappe.conf, "rt_environment", prev_env)
         with self.assertRaisesRegex(frappe.ValidationError, "only runs on a development site"):
             self.load()
+
+    def test_allow_gate_accepts_rt_environment_development(self):
+        frappe.conf.developer_mode = 0
+        frappe.conf.rt_environment = "development"
+        self.addCleanup(setattr, frappe.conf, "rt_environment", None)
+        self.assertTrue(dev_seed._allow_dev_seed())
+

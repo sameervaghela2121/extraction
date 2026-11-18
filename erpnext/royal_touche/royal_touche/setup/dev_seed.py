@@ -24,9 +24,17 @@ DEV_USERS = {
 DEV_PASSWORD = "Admin@123"
 
 
+def _allow_dev_seed() -> bool:
+    """Local sites use developer_mode; GCE Dev uses rt_environment=development."""
+    return bool(frappe.conf.get("developer_mode")) or frappe.conf.get("rt_environment") == "development"
+
+
 def load(repo_docs: str) -> dict:
-    if not frappe.conf.get("developer_mode"):
-        frappe.throw("The dev seed only runs on a development site (developer_mode is off)")
+    if not _allow_dev_seed():
+        frappe.throw(
+            "The dev seed only runs on a development site "
+            "(developer_mode or rt_environment=development)"
+        )
     docs = Path(repo_docs)
     vendors = json.loads((docs / "vendors-seed.json").read_text())
     locations = json.loads((docs / "locations-seed.json").read_text())
