@@ -11,9 +11,21 @@ export PATH="$HOME/.local/gcloud/google-cloud-sdk/bin:$PATH"
 gcloud auth login
 gcloud config set project sameerv
 
-# 1b. REQUIRED once: enable Compute Engine (deployer SA cannot enable APIs)
+# 1b. REQUIRED once: enable Compute Engine
 # https://console.cloud.google.com/apis/api/compute.googleapis.com/overview?project=sameerv
 gcloud services enable compute.googleapis.com iap.googleapis.com oslogin.googleapis.com --project=sameerv
+
+# 1c. REQUIRED once: give Actions deployer permission to create the VM
+# (Cloud Run deployer alone cannot allocate IPs / create GCE instances)
+gcloud projects add-iam-policy-binding sameerv \
+  --member="serviceAccount:deployer@sameerv.iam.gserviceaccount.com" \
+  --role="roles/compute.admin"
+gcloud projects add-iam-policy-binding sameerv \
+  --member="serviceAccount:deployer@sameerv.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding sameerv \
+  --member="serviceAccount:deployer@sameerv.iam.gserviceaccount.com" \
+  --role="roles/iap.tunnelResourceAccessor"
 
 # 2. Prefer GitHub Actions (after API enable):
 #    Actions → "Deploy to Cloud Run (development)" → Run workflow
