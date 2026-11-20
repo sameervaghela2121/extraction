@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import type { DashboardStockRow } from "../../../api/dashboard.api";
 import { ChartTooltipFrame } from "./ChartTooltip";
-import { axisKg, count, kg } from "../format";
+import { axisKg, countLabel, kgLabel } from "../format";
 
 export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
   const data = rows.map((r) => ({
@@ -25,7 +25,7 @@ export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
     <div className="card dashboard-panel">
       <div className="dashboard-panel-head">
         <h2 className="dashboard-panel-title">Top materials on hand</h2>
-        <p className="muted dashboard-panel-sub">In-stock kg right now</p>
+        <p className="muted dashboard-panel-sub">In-stock weight right now · kilograms (kg)</p>
       </div>
       {data.length === 0 ? (
         <p className="muted dashboard-empty">No in-stock materials.</p>
@@ -69,12 +69,12 @@ export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
                       rows={[
                         {
                           label: "On hand",
-                          value: `${kg(Number(row.kg ?? 0))} kg`,
+                          value: kgLabel(Number(row.kg ?? 0)),
                           color: "#006e2f",
                         },
                         {
                           label: "Rolls",
-                          value: count(Number(row.rolls ?? 0)),
+                          value: countLabel(Number(row.rolls ?? 0), "rolls"),
                         },
                       ]}
                     />
@@ -95,7 +95,7 @@ export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
                   position="right"
                   formatter={(value) => {
                     const n = typeof value === "number" ? value : Number(value);
-                    return Number.isFinite(n) ? kg(n) : "";
+                    return Number.isFinite(n) ? kgLabel(n) : "";
                   }}
                   className="dashboard-bar-label"
                 />

@@ -1,5 +1,5 @@
 import type { DashboardKpis } from "../../../api/dashboard.api";
-import { count, kg } from "../format";
+import { countLabel, kgLabel } from "../format";
 
 const CARDS: Array<{
   key: string;
@@ -12,46 +12,57 @@ const CARDS: Array<{
   {
     key: "rolls_total",
     label: "Live rolls",
-    format: (k) => count(k.rolls_total),
+    format: (k) => countLabel(k.rolls_total, "rolls"),
+    hint: "In the register now",
     tone: "brand",
     emphasize: true,
   },
   {
     key: "on_hand_kg",
     label: "On hand",
-    format: (k) => `${kg(k.on_hand_kg)} kg`,
-    hint: "In stock",
+    format: (k) => kgLabel(k.on_hand_kg),
+    hint: "In-stock weight",
     tone: "success",
     emphasize: true,
   },
   {
     key: "out_on_floor_kg",
     label: "Out on floor",
-    format: (k) => `${kg(k.out_on_floor_kg)} kg`,
-    hint: "Issued",
+    format: (k) => kgLabel(k.out_on_floor_kg),
+    hint: "Issued weight",
     tone: "warning",
     emphasize: true,
   },
   {
     key: "moved_today",
     label: "Moved today",
-    format: (k) => count(k.moved_today),
-    hint: "Rolls",
+    format: (k) => countLabel(k.moved_today, "rolls"),
+    hint: "Touched today",
     tone: "info",
     emphasize: true,
   },
-  { key: "lots_total", label: "Lots", format: (k) => count(k.lots_total), tone: "neutral" },
-  { key: "vendors_total", label: "Vendors", format: (k) => count(k.vendors_total), tone: "neutral" },
+  {
+    key: "lots_total",
+    label: "Lots",
+    format: (k) => countLabel(k.lots_total, "lots"),
+    tone: "neutral",
+  },
+  {
+    key: "vendors_total",
+    label: "Vendors",
+    format: (k) => countLabel(k.vendors_total, "vendors"),
+    tone: "neutral",
+  },
   {
     key: "locations_total",
     label: "Locations",
-    format: (k) => count(k.locations_total),
+    format: (k) => countLabel(k.locations_total, "locations"),
     tone: "neutral",
   },
   {
     key: "materials_total",
     label: "Materials",
-    format: (k) => count(k.materials_total),
+    format: (k) => countLabel(k.materials_total, "materials"),
     tone: "neutral",
   },
 ];
@@ -61,7 +72,7 @@ export default function KpiStrip({ kpis }: { kpis: DashboardKpis }) {
     <div className="dashboard-kpi-grid">
       {CARDS.map((card) => {
         const value = card.format(kpis);
-        const long = value.replace(/\s/g, "").length >= 10;
+        const long = value.replace(/\s/g, "").length >= 12;
         return (
           <div
             key={card.key}
@@ -75,10 +86,7 @@ export default function KpiStrip({ kpis }: { kpis: DashboardKpis }) {
               .join(" ")}
           >
             <div className="dashboard-kpi-label">{card.label}</div>
-            <div
-              className={`dashboard-kpi-value${long ? " is-compact" : ""}`}
-              title={value}
-            >
+            <div className={`dashboard-kpi-value${long ? " is-compact" : ""}`} title={value}>
               {value}
             </div>
             {card.hint && <div className="dashboard-kpi-hint">{card.hint}</div>}

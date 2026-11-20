@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { DashboardTopRow } from "../../../api/dashboard.api";
-import { kg } from "../format";
+import { kgLabel } from "../format";
 
 function TopTable({ title, rows, empty }: { title: string; rows: DashboardTopRow[]; empty: string }) {
   return (
@@ -18,7 +18,7 @@ function TopTable({ title, rows, empty }: { title: string; rows: DashboardTopRow
           <thead>
             <tr>
               <th>Material</th>
-              <th style={{ textAlign: "right" }}>kg</th>
+              <th style={{ textAlign: "right" }}>Weight (kg)</th>
             </tr>
           </thead>
           <tbody>
@@ -32,7 +32,7 @@ function TopTable({ title, rows, empty }: { title: string; rows: DashboardTopRow
                     </div>
                   )}
                 </td>
-                <td className="dashboard-table-kg">{kg(row.kg)}</td>
+                <td className="dashboard-table-kg">{kgLabel(row.kg)}</td>
               </tr>
             ))}
           </tbody>
@@ -51,7 +51,11 @@ export default function TopTables({
 }) {
   return (
     <>
-      <TopTable title="Top consumed" rows={topConsumed} empty="No consumption in this period." />
+      <TopTable
+        title="Top consumed"
+        rows={topConsumed}
+        empty="No consumption in this period."
+      />
       <TopTable
         title="Highest floor exposure"
         rows={topOutOnFloor}

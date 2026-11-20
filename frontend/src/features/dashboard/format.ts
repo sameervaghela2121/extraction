@@ -11,6 +11,9 @@ export const kg = (value: number) => {
   });
 };
 
+/** Number + unit for people reading the dashboard (e.g. "86,358 kg"). */
+export const kgLabel = (value: number) => `${kg(value)} kg`;
+
 /** Compact axis ticks so five- and six-digit kg stay readable. */
 export const axisKg = (value: number) => {
   const n = Number(value) || 0;
@@ -22,6 +25,9 @@ export const axisKg = (value: number) => {
 };
 
 export const count = (value: number) => value.toLocaleString("en-IN");
+
+/** Count with a plain unit word (e.g. "118 rolls"). */
+export const countLabel = (value: number, unit: string) => `${count(value)} ${unit}`;
 
 export const pct = (value: number, total: number) => {
   if (!total) return "0%";
