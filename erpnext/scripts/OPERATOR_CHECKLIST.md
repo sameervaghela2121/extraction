@@ -61,3 +61,19 @@ gcloud compute ssh rt-erpnext-dev --zone=asia-south1-a --project=sameerv --tunne
 
 After provision + DNS + `ERP_DEV_HOST` variable + workflow on `development`,
 inventory Dev portal/tablet talk only to ERPNext on GCE.
+
+## Live Dev status (2026-11-18)
+
+| Item | Value |
+|---|---|
+| VM | `rt-erpnext-dev` / `34.100.188.35` |
+| Host | `erp-dev.34.100.188.35.sslip.io` |
+| GitHub var | `ERP_DEV_HOST` set |
+| HTTPS / ping | OK (`frappe.ping` → pong) |
+| Seed | vendors 74, materials 3, locations 6, users 4 |
+| Serve | systemd `frappe-bench-serve` → nginx → `:8000` |
+| Login smoke | `operator1@gmail.com` (seeded operator password) OK |
+
+Deployer IAM used for provision: `roles/compute.admin`,
+`roles/iap.tunnelResourceAccessor`, `roles/iam.serviceAccountUser` (+ SA Admin
+when creating `erpnext-dev-runtime`).

@@ -34,11 +34,16 @@ elif [[ -d "$BENCH_DIR/apps/extraction/.git" ]]; then
   # Monorepo clone layout: apps/extraction is the BE repo; royal_touche is a symlink.
   git -C "$BENCH_DIR/apps/extraction" fetch --prune origin
   git -C "$BENCH_DIR/apps/extraction" checkout --force "$GIT_SHA"
+elif [[ -d /home/frappe/src/extraction/.git ]]; then
+  # Provision layout: clone under ~/src/extraction; apps/royal_touche → that tree.
+  git -C /home/frappe/src/extraction fetch --prune origin
+  git -C /home/frappe/src/extraction checkout --force "$GIT_SHA"
 else
   echo "No git remote for royal_touche; skipping checkout (files must already be current)" >&2
 fi
 
 cd "$BENCH_DIR"
+export PATH="${HOME}/.local/bin:${PATH}"
 echo "== Migrating site $ERP_DEV_HOST =="
 bench --site "$ERP_DEV_HOST" migrate
 
@@ -46,10 +51,12 @@ echo "== Clearing cache =="
 bench --site "$ERP_DEV_HOST" clear-cache
 
 echo "== Restarting =="
-if command -v supervisorctl >/dev/null 2>&1; then
+if systemctl is-enabled frappe-bench-serve.service >/dev/null 2>&1; then
+  sudo systemctl restart frappe-bench-serve.service
+elif command -v supervisorctl >/dev/null 2>&1; then
   sudo supervisorctl restart all || bench restart
 else
-  bench restart
+  bench restart || true
 fi
 
 echo "== Health check =="

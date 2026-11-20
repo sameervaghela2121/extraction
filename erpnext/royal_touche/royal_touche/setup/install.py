@@ -24,7 +24,12 @@ def ensure_setup():
 
     ensure_permissions()
     _ensure_stock_settings()
+    _ensure_uom_kg()
+    _ensure_contact_billing_field()
     _ensure_company()
+    _ensure_stock_entry_types()
+    _ensure_selling_defaults()
+    _ensure_fiscal_year()
     _ensure_unassigned_warehouse()
     _ensure_delta_indexes()
     _ensure_unique_barcode_runs()
@@ -32,15 +37,56 @@ def ensure_setup():
     _ensure_direct_sale_buyer()
 
 
+def _ensure_uom_kg():
+    """Rolls are weighed in Kg. ERPNext's setup wizard normally seeds UOMs; a GCE site
+    created without the wizard has an empty UOM table, and Batch insert then fails with
+    'Could not find Batch UOM: Kg'."""
+    if frappe.db.exists("UOM", "Kg"):
+        return
+    frappe.get_doc({"doctype": "UOM", "uom_name": "Kg", "enabled": 1}).insert(ignore_permissions=True)
+
+
+def _ensure_contact_billing_field():
+    """ERPNext 16.60 party lookup orders Contact by is_billing_contact. Some Frappe 16.60
+    builds ship Contact without that column; Purchase Receipt validate then 1054s and roll
+    sync fails after Batch insert. Add a Check custom field so the column exists."""
+    if frappe.db.has_column("Contact", "is_billing_contact"):
+        return
+    if not frappe.db.exists("Custom Field", "Contact-is_billing_contact"):
+        frappe.get_doc({
+            "doctype": "Custom Field",
+            "dt": "Contact",
+            "fieldname": "is_billing_contact",
+            "label": "Is Billing Contact",
+            "fieldtype": "Check",
+            "insert_after": "is_primary_contact",
+        }).insert(ignore_permissions=True)
+    if not frappe.db.has_column("Contact", "is_billing_contact"):
+        frappe.db.add_column("Contact", "is_billing_contact", "Int")
+
+
 def _ensure_direct_sale_buyer():
+    # SELL looks up Customer by exact name "Direct Sale". Autoname series would create
+    # CUST-YYYY-NNNN and leave SELL failing with "That buyer no longer exists".
     if frappe.db.exists("Customer", DIRECT_SALE_BUYER):
+        return
+    existing = frappe.db.get_value("Customer", {"customer_name": DIRECT_SALE_BUYER}, "name")
+    if existing:
+        frappe.rename_doc("Customer", existing, DIRECT_SALE_BUYER, force=True)
         return
     group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
     territory = frappe.db.get_value("Territory", {"is_group": 0}, "name") or "All Territories"
     if not group:
         return  # the setup wizard has not created customer groups yet; the next migrate will
-    frappe.get_doc({"doctype": "Customer", "customer_name": DIRECT_SALE_BUYER, "customer_group": group,
-                    "territory": territory}).insert(ignore_permissions=True)
+    doc = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": DIRECT_SALE_BUYER,
+        "customer_group": group,
+        "territory": territory,
+    })
+    doc.insert(ignore_permissions=True)
+    if doc.name != DIRECT_SALE_BUYER:
+        frappe.rename_doc("Customer", doc.name, DIRECT_SALE_BUYER, force=True)
 
 
 def _ensure_app_client():
@@ -119,6 +165,112 @@ def _ensure_company():
     # later needs no switch-over (spec §6).
     if not frappe.db.get_value("Company", COMPANY, "enable_perpetual_inventory"):
         frappe.db.set_value("Company", COMPANY, "enable_perpetual_inventory", 1)
+    # CONSUME / Material Issue needs a Difference Account. Wizard-less sites leave
+    # stock_adjustment_account blank and tablet sync then fails mid-movement.
+    if not frappe.db.get_value("Company", COMPANY, "stock_adjustment_account"):
+        account = frappe.db.get_value(
+            "Account",
+            {"company": COMPANY, "account_type": "Stock Adjustment", "is_group": 0},
+            "name",
+        )
+        if not account:
+            account = frappe.db.get_value(
+                "Account",
+                {"company": COMPANY, "account_name": "Stock Adjustment", "is_group": 0},
+                "name",
+            )
+        if account:
+            frappe.db.set_value("Company", COMPANY, "stock_adjustment_account", account)
+    # RETURN_TO_VENDOR (purchase return) and stock valuation need these leaf accounts.
+    _set_company_account_if_empty("stock_received_but_not_billed", "Stock Received But Not Billed")
+    _set_company_account_if_empty("default_inventory_account", "Stock In Hand", account_type="Stock")
+    _set_company_account_if_empty("default_expense_account", "Cost of Goods Sold", account_type="Cost of Goods Sold")
+
+
+def _set_company_account_if_empty(field: str, account_name: str, account_type: str | None = None) -> None:
+    if frappe.db.get_value("Company", COMPANY, field):
+        return
+    filters = {"company": COMPANY, "is_group": 0}
+    if account_type:
+        filters["account_type"] = account_type
+    else:
+        filters["account_name"] = account_name
+    account = frappe.db.get_value("Account", filters, "name")
+    if not account:
+        account = frappe.db.get_value(
+            "Account", {"company": COMPANY, "account_name": account_name, "is_group": 0}, "name"
+        )
+    if account:
+        frappe.db.set_value("Company", COMPANY, field, account)
+
+
+def _ensure_stock_entry_types():
+    """ERPNext stock docs reference these by name. A site created without the full
+    stock setup has none, so CONSUME / Issue fails with 'Could not find Stock Entry Type'."""
+    for name, purpose in (
+        ("Material Issue", "Material Issue"),
+        ("Material Receipt", "Material Receipt"),
+        ("Material Transfer", "Material Transfer"),
+    ):
+        if frappe.db.exists("Stock Entry Type", name):
+            continue
+        frappe.get_doc({"doctype": "Stock Entry Type", "name": name, "purpose": purpose}).insert(
+            ignore_permissions=True
+        )
+
+
+def _ensure_selling_defaults():
+    """SELL posts a Delivery Note; wizard-less sites have no selling price list, so DN
+    validation fails on selling_price_list / currency / conversion rate."""
+    if not frappe.db.exists("Price List", "Standard Selling"):
+        frappe.get_doc({
+            "doctype": "Price List",
+            "price_list_name": "Standard Selling",
+            "selling": 1,
+            "buying": 0,
+            "currency": frappe.db.get_value("Company", COMPANY, "default_currency") or "INR",
+            "enabled": 1,
+        }).insert(ignore_permissions=True)
+    settings = frappe.get_single("Selling Settings")
+    if settings.selling_price_list != "Standard Selling":
+        settings.selling_price_list = "Standard Selling"
+        settings.save(ignore_permissions=True)
+
+
+def _ensure_fiscal_year():
+    """Purchase Receipt / stock docs require an active Fiscal Year covering posting_date.
+    Wizard-less GCE sites have none; roll sync then fails after Batch insert."""
+    from frappe.utils import getdate, nowdate
+
+    today = getdate(nowdate())
+    year_start = today.replace(month=1, day=1)
+    year_end = today.replace(month=12, day=31)
+    name = f"{year_start.year}"
+    if frappe.db.exists("Fiscal Year", name):
+        # Ensure company is linked when the FY already exists from a partial setup.
+        fy = frappe.get_doc("Fiscal Year", name)
+        if COMPANY and not any(c.company == COMPANY for c in (fy.companies or [])):
+            if frappe.db.exists("Company", COMPANY):
+                fy.append("companies", {"company": COMPANY})
+                fy.save(ignore_permissions=True)
+        return
+    if not frappe.db.exists("Company", COMPANY):
+        return
+    # Avoid overlapping with any existing FY that already covers today.
+    if frappe.db.sql(
+        """select name from `tabFiscal Year`
+           where %s between year_start_date and year_end_date limit 1""",
+        today,
+    ):
+        return
+    fy = frappe.get_doc({
+        "doctype": "Fiscal Year",
+        "year": name,
+        "year_start_date": year_start,
+        "year_end_date": year_end,
+        "companies": [{"company": COMPANY}],
+    })
+    fy.insert(ignore_permissions=True)
 
 
 def _ensure_unassigned_warehouse():
