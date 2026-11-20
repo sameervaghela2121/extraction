@@ -2,13 +2,15 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { DashboardStockRow } from "../../../api/dashboard.api";
-import { count, kg } from "../format";
+import { ChartTooltipFrame } from "./ChartTooltip";
+import { axisKg, count, kg } from "../format";
 
 export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
   const data = rows.map((r) => ({
@@ -17,6 +19,7 @@ export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
     kg: r.on_hand_kg,
     rolls: r.rolls_in_stock,
   }));
+  const maxKg = Math.max(...data.map((d) => d.kg), 1);
 
   return (
     <div className="card dashboard-panel">
@@ -28,28 +31,75 @@ export default function StockChart({ rows }: { rows: DashboardStockRow[] }) {
         <p className="muted dashboard-empty">No in-stock materials.</p>
       ) : (
         <div className="dashboard-chart">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={data} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart
+              data={data}
+              layout="vertical"
+              margin={{ top: 4, right: 64, left: 8, bottom: 0 }}
+              barCategoryGap="22%"
+            >
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
-              <XAxis type="number" tick={{ fontSize: 12, fill: "var(--text-muted)" }} />
+              <XAxis
+                type="number"
+                domain={[0, Math.ceil(maxKg * 1.1)]}
+                tickFormatter={axisKg}
+                tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                axisLine={{ stroke: "var(--border)" }}
+                tickLine={false}
+              />
               <YAxis
                 type="category"
                 dataKey="name"
                 width={120}
                 tick={{ fontSize: 12, fill: "var(--text-muted)" }}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
-                labelFormatter={(_, payload) => {
-                  const row = payload?.[0]?.payload as { fullName?: string } | undefined;
-                  return row?.fullName ?? "";
+                cursor={{ fill: "var(--brand-soft)", opacity: 0.55 }}
+                content={({ active, payload }) => {
+                  const row = payload?.[0]?.payload as
+                    | { fullName?: string; kg?: number; rolls?: number }
+                    | undefined;
+                  if (!row) return null;
+                  return (
+                    <ChartTooltipFrame
+                      active={active}
+                      title={row.fullName}
+                      rows={[
+                        {
+                          label: "On hand",
+                          value: `${kg(Number(row.kg ?? 0))} kg`,
+                          color: "#006e2f",
+                        },
+                        {
+                          label: "Rolls",
+                          value: count(Number(row.rolls ?? 0)),
+                        },
+                      ]}
+                    />
+                  );
                 }}
-                formatter={(value, _name, item) => {
-                  const rolls = Number((item?.payload as { rolls?: number } | undefined)?.rolls ?? 0);
-                  return [`${kg(Number(value ?? 0))} kg · ${count(rolls)} rolls`, "On hand"];
-                }}
-                contentStyle={{ borderRadius: 8, borderColor: "var(--border)" }}
               />
-              <Bar dataKey="kg" fill="#006e2f" radius={[0, 4, 4, 0]} maxBarSize={18} />
+              <Bar
+                dataKey="kg"
+                fill="#006e2f"
+                radius={[0, 6, 6, 0]}
+                maxBarSize={data.length === 1 ? 36 : 22}
+                background={{ fill: "var(--surface-2)", radius: 6 }}
+                isAnimationActive
+                animationDuration={550}
+              >
+                <LabelList
+                  dataKey="kg"
+                  position="right"
+                  formatter={(value) => {
+                    const n = typeof value === "number" ? value : Number(value);
+                    return Number.isFinite(n) ? kg(n) : "";
+                  }}
+                  className="dashboard-bar-label"
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

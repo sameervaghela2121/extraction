@@ -56,7 +56,8 @@ export default function DashboardPage() {
         <div className="dashboard-toolbar-copy">
           <h1 className="dashboard-title">Dashboard</h1>
           <p className="muted dashboard-subtitle">
-            Live stock and period movement across the godown portal
+            Live stock · period movement · godown operations
+            {from && to ? ` · ${from === to ? from : `${from} → ${to}`}` : ""}
           </p>
         </div>
         <div className="dashboard-toolbar-controls">

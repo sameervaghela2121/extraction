@@ -3,13 +3,15 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { ConsumptionFigures } from "../../../api/reports.api";
-import { kg, MOVEMENT_COLORS } from "../format";
+import { ChartTooltipFrame } from "./ChartTooltip";
+import { axisKg, kg, MOVEMENT_COLORS } from "../format";
 
 const KEYS: Array<{ key: keyof ConsumptionFigures; label: string }> = [
   { key: "received", label: "Received" },
@@ -23,8 +25,10 @@ export default function MovementChart({ totals }: { totals: ConsumptionFigures }
   const data = KEYS.map(({ key, label }) => ({
     name: label,
     kg: totals[key],
+    fill: MOVEMENT_COLORS[label] ?? "var(--brand)",
   }));
   const hasData = data.some((d) => d.kg !== 0);
+  const maxAbs = Math.max(...data.map((d) => Math.abs(d.kg)), 1);
 
   return (
     <div className="card dashboard-panel">
@@ -37,31 +41,75 @@ export default function MovementChart({ totals }: { totals: ConsumptionFigures }
         </div>
       </div>
       <div className="dashboard-chart">
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart
+            data={data}
+            layout="vertical"
+            margin={{ top: 4, right: 56, left: 8, bottom: 0 }}
+            barCategoryGap="18%"
+          >
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
             <XAxis
               type="number"
-              domain={[0, hasData ? "auto" : 1]}
-              tick={{ fontSize: 12, fill: "var(--text-muted)" }}
+              domain={hasData ? [0, Math.ceil(maxAbs * 1.08)] : [0, 1]}
+              tickFormatter={axisKg}
+              tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+              axisLine={{ stroke: "var(--border)" }}
+              tickLine={false}
             />
             <YAxis
               type="category"
               dataKey="name"
               width={128}
               tick={{ fontSize: 12, fill: "var(--text-muted)" }}
+              axisLine={false}
+              tickLine={false}
             />
             <Tooltip
-              formatter={(value) => [`${kg(Number(value ?? 0))} kg`, ""]}
-              contentStyle={{ borderRadius: 8, borderColor: "var(--border)" }}
+              cursor={{ fill: "var(--brand-soft)", opacity: 0.55 }}
+              content={({ active, payload }) => {
+                const row = payload?.[0]?.payload as
+                  | { name?: string; kg?: number; fill?: string }
+                  | undefined;
+                if (!row) return null;
+                return (
+                  <ChartTooltipFrame
+                    active={active}
+                    title={row.name}
+                    rows={[
+                      {
+                        label: "Total",
+                        value: `${kg(Number(row.kg ?? 0))} kg`,
+                        color: row.fill,
+                      },
+                    ]}
+                  />
+                );
+              }}
             />
-            <Bar dataKey="kg" radius={[0, 4, 4, 0]} maxBarSize={22} background={{ fill: "var(--surface-2)" }}>
+            <Bar
+              dataKey="kg"
+              radius={[0, 6, 6, 0]}
+              maxBarSize={24}
+              background={{ fill: "var(--surface-2)", radius: 6 }}
+              isAnimationActive
+              animationDuration={550}
+            >
               {data.map((row) => (
                 <Cell
                   key={row.name}
-                  fill={hasData ? (MOVEMENT_COLORS[row.name] ?? "var(--brand)") : "var(--rt-outline-variant)"}
+                  fill={hasData ? row.fill : "var(--rt-outline-variant)"}
                 />
               ))}
+              <LabelList
+                dataKey="kg"
+                position="right"
+                formatter={(value) => {
+                  const n = typeof value === "number" ? value : Number(value);
+                  return !Number.isFinite(n) || n === 0 ? "" : kg(n);
+                }}
+                className="dashboard-bar-label"
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

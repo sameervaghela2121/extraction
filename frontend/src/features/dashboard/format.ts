@@ -2,14 +2,40 @@
 
 export const iso = (date: Date) => date.toLocaleDateString("en-CA");
 
-export const kg = (value: number) =>
-  value.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+/** Whole kilograms use grouping (82,700); fractional keep up to 3 dp. */
+export const kg = (value: number) => {
+  const whole = Number.isFinite(value) && Math.abs(value - Math.round(value)) < 1e-9;
+  return value.toLocaleString("en-IN", {
+    maximumFractionDigits: whole ? 0 : 3,
+    minimumFractionDigits: 0,
+  });
+};
+
+/** Compact axis ticks so five- and six-digit kg stay readable. */
+export const axisKg = (value: number) => {
+  const n = Number(value) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 100_000) {
+    return `${(n / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 })}k`;
+  }
+  return Math.round(n).toLocaleString("en-IN");
+};
 
 export const count = (value: number) => value.toLocaleString("en-IN");
+
+export const pct = (value: number, total: number) => {
+  if (!total) return "0%";
+  return `${Math.round((100 * value) / total)}%`;
+};
 
 export const shortDate = (yyyyMmDd: string) => {
   const d = new Date(`${yyyyMmDd}T12:00:00`);
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+};
+
+export const weekdayShort = (yyyyMmDd: string) => {
+  const d = new Date(`${yyyyMmDd}T12:00:00`);
+  return d.toLocaleDateString("en-IN", { weekday: "short" });
 };
 
 export type Period = "day" | "week" | "month";

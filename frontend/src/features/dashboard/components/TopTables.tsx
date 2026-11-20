@@ -32,7 +32,7 @@ function TopTable({ title, rows, empty }: { title: string; rows: DashboardTopRow
                     </div>
                   )}
                 </td>
-                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{kg(row.kg)}</td>
+                <td className="dashboard-table-kg">{kg(row.kg)}</td>
               </tr>
             ))}
           </tbody>
