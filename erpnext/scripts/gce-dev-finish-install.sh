@@ -59,9 +59,51 @@ cp -f "$HOME/src/extraction/erpnext/scripts/gce-dev-seed.sh" "$HOME/bin/" 2>/dev
 chmod +x "$HOME/bin/"*.sh 2>/dev/null || true
 EOF
 
-if [[ ! -f /etc/supervisor/conf.d/frappe-bench.conf ]]; then
-  sudo -u frappe -H env PATH="/home/frappe/.local/bin:$PATH" bash -c \
-    'cd "$HOME/frappe-bench" && sudo /home/frappe/.local/bin/bench setup production frappe' || true
+# Prefer a simple systemd unit over full `bench setup production` (fail2ban/ansible
+# often fail on a fresh Ubuntu image; nginx already terminates TLS and proxies :8000).
+if [[ ! -f /etc/systemd/system/frappe-bench-serve.service ]]; then
+  cat >/etc/systemd/system/frappe-bench-serve.service <<'UNIT'
+[Unit]
+Description=Frappe bench serve (Dev ERPNext)
+After=network.target mariadb.service redis-server.service
+Wants=mariadb.service redis-server.service
+
+[Service]
+Type=simple
+User=frappe
+Group=frappe
+WorkingDirectory=/home/frappe/frappe-bench
+Environment=HOME=/home/frappe
+Environment=PATH=/home/frappe/.local/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/frappe/.local/bin/bench serve --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now frappe-bench-serve.service
+fi
+
+# nginx site → 127.0.0.1:8000 if not already configured by letsencrypt/certbot
+if [[ ! -f /etc/nginx/sites-enabled/erpnext-dev ]]; then
+  cat >/etc/nginx/sites-available/erpnext-dev <<NGX
+server {
+  listen 80;
+  server_name ${ERP_DEV_HOST};
+  client_max_body_size 50m;
+  location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+}
+NGX
+  ln -sfn /etc/nginx/sites-available/erpnext-dev /etc/nginx/sites-enabled/erpnext-dev
+  rm -f /etc/nginx/sites-enabled/default
+  nginx -t && systemctl reload nginx
 fi
 
 echo "finish-install complete for $ERP_DEV_HOST"

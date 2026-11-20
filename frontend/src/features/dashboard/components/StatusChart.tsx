@@ -1,5 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { count, STATUS_COLORS, STATUS_LABELS } from "../format";
+import { ChartTooltipFrame } from "./ChartTooltip";
+import { count, pct, STATUS_COLORS, STATUS_LABELS } from "../format";
 
 const ORDER = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR", "SOLD"];
 
@@ -8,6 +9,7 @@ export default function StatusChart({ byStatus }: { byStatus: Record<string, num
     status,
     name: STATUS_LABELS[status] ?? status,
     value: byStatus[status] ?? 0,
+    color: STATUS_COLORS[status] ?? "#737685",
   }));
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
@@ -22,35 +24,66 @@ export default function StatusChart({ byStatus }: { byStatus: Record<string, num
       ) : (
         <div className="dashboard-status-layout">
           <div className="dashboard-chart dashboard-chart-pie">
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={data}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={68}
-                  outerRadius={100}
-                  paddingAngle={2}
-                >
-                  {data.map((row) => (
-                    <Cell key={row.status} fill={STATUS_COLORS[row.status] ?? "#737685"} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value, name) => [`${count(Number(value ?? 0))} rolls`, String(name ?? "")]}
-                  contentStyle={{ borderRadius: 8, borderColor: "var(--border)" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="dashboard-pie-wrap">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={data}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={72}
+                    outerRadius={104}
+                    paddingAngle={2.5}
+                    stroke="var(--surface)"
+                    strokeWidth={2}
+                    isAnimationActive
+                    animationDuration={600}
+                  >
+                    {data.map((row) => (
+                      <Cell key={row.status} fill={row.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      const row = payload?.[0]?.payload as
+                        | { name?: string; value?: number; color?: string }
+                        | undefined;
+                      if (!row) return null;
+                      return (
+                        <ChartTooltipFrame
+                          active={active}
+                          title={row.name}
+                          rows={[
+                            {
+                              label: "Rolls",
+                              value: count(Number(row.value ?? 0)),
+                              color: row.color,
+                            },
+                            {
+                              label: "Share",
+                              value: pct(Number(row.value ?? 0), total),
+                            },
+                          ]}
+                        />
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="dashboard-pie-center" aria-hidden>
+                <strong>{count(total)}</strong>
+                <span>rolls</span>
+              </div>
+            </div>
           </div>
           <ul className="dashboard-legend">
             {data.map((row) => (
               <li key={row.status}>
-                <span
-                  className="dashboard-legend-swatch"
-                  style={{ background: STATUS_COLORS[row.status] ?? "#737685" }}
-                />
-                <span>{row.name}</span>
+                <span className="dashboard-legend-swatch" style={{ background: row.color }} />
+                <span className="dashboard-legend-copy">
+                  <span>{row.name}</span>
+                  <span className="dashboard-legend-pct">{pct(row.value, total)}</span>
+                </span>
                 <strong>{count(row.value)}</strong>
               </li>
             ))}

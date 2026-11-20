@@ -11,6 +11,7 @@ portal or tablet Dev builds.
 | Runtime SA | `erpnext-dev-runtime@sameerv.iam.gserviceaccount.com` |
 | Photos bucket | `sameerv-royaltouch-rolls` |
 | Site / URL | `https://$ERP_DEV_HOST` (GitHub Actions variable) |
+| Live Dev (2026-11-18) | `https://erp-dev.34.100.188.35.sslip.io` (seeded; systemd `frappe-bench-serve`) |
 
 ## One-time provision
 

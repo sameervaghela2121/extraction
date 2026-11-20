@@ -26,7 +26,9 @@ fi
 REPO_DOCS="${REPO_DOCS:?Could not find docs/ with vendors-seed.json; set REPO_DOCS}"
 
 cd "$BENCH_DIR"
-echo "== Seeding $ERP_DEV_HOST from $REPO_DOCS =="
+export PATH="${HOME}/.local/bin:${PATH}"
+echo "== ensure_setup + seed $ERP_DEV_HOST from $REPO_DOCS =="
+bench --site "$ERP_DEV_HOST" execute royal_touche.setup.install.ensure_setup
 bench --site "$ERP_DEV_HOST" execute royal_touche.setup.dev_seed.load \
   --kwargs "{\"repo_docs\": \"$REPO_DOCS\"}"
 

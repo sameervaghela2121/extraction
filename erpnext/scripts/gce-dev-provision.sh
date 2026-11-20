@@ -78,21 +78,40 @@ MARKER=/var/lib/rt-erpnext-provisioned
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y git curl nginx redis-server mariadb-server \
-  python3-dev python3-venv python3-pip python3-setuptools \
+  python3-dev python3-venv python3-pip python3-setuptools pipx \
   libffi-dev libssl-dev libmariadb-dev pkg-config \
   build-essential cron wv wkhtmltopdf software-properties-common
-if ! command -v node >/dev/null; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+# Frappe v16 needs Node ≥24
+if ! command -v node >/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 24 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
   apt-get install -y nodejs
 fi
 npm install -g yarn
 id -u frappe >/dev/null 2>&1 || useradd -m -s /bin/bash frappe
 echo "frappe ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/frappe
 chmod 440 /etc/sudoers.d/frappe
-su - frappe -c 'curl -fsSL https://astral.sh/uv/install.sh | sh' || true
-su - frappe -c 'pip3 install --user frappe-bench' || true
-su - frappe -c 'export PATH="$HOME/.local/bin:$PATH"; cd $HOME; [[ -d frappe-bench ]] || bench init --frappe-branch version-16 --python python3 frappe-bench'
+# MariaDB: allow password auth for site DB users (unix_socket root alone breaks bench new-site)
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('root'); FLUSH PRIVILEGES;" 2>/dev/null \
+  || mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; FLUSH PRIVILEGES;" 2>/dev/null || true
+# Frappe v16 wants a modern CPython (3.14 via uv); system python3 may be too old/new for bench
+su - frappe -c 'curl -fsSL https://astral.sh/uv/install.sh | sh'
+su - frappe -c 'export PATH="$HOME/.local/bin:$PATH"; uv python install 3.14; uv python find 3.14 > /tmp/rt-python'
+RT_PYTHON=$(cat /tmp/rt-python 2>/dev/null || echo python3)
+# PEP 668: install bench with pipx, not pip --user
+su - frappe -c 'export PATH="$HOME/.local/bin:$PATH"; pipx ensurepath; pipx install frappe-bench || pipx upgrade frappe-bench'
+su - frappe -c "export PATH=\"\$HOME/.local/bin:\$PATH\"; cd \$HOME; [[ -d frappe-bench ]] || bench init --frappe-branch version-16 --python '$RT_PYTHON' frappe-bench"
 su - frappe -c 'export PATH="$HOME/.local/bin:$PATH"; cd $HOME/frappe-bench; bench get-app --branch version-16 erpnext || true'
+# Point redis queues at system redis (6379) if bench left defaults pointing at missing 11000
+su - frappe -c 'python3 - <<"PY"
+import json, pathlib
+p = pathlib.Path.home() / "frappe-bench/sites/common_site_config.json"
+if p.exists():
+    c = json.loads(p.read_text())
+    c.setdefault("redis_cache", "redis://127.0.0.1:6379")
+    c.setdefault("redis_queue", "redis://127.0.0.1:6379")
+    c.setdefault("redis_socketio", "redis://127.0.0.1:6379")
+    p.write_text(json.dumps(c, indent=1))
+PY'
 touch "$MARKER"
 EOS
 
