@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import type { DashboardActivityDay } from "../../../api/dashboard.api";
 import { ChartTooltipFrame } from "./ChartTooltip";
-import { count, shortDate, weekdayShort } from "../format";
+import { countLabel, shortDate, weekdayShort } from "../format";
 
 export default function ActivityChart({ days }: { days: DashboardActivityDay[] }) {
   const data = days.map((d) => ({
@@ -28,7 +28,7 @@ export default function ActivityChart({ days }: { days: DashboardActivityDay[] }
           <h2 className="dashboard-panel-title">7-day activity</h2>
           <p className="muted dashboard-panel-sub">
             {hasData
-              ? `${count(total)} rolls moved · peak ${count(peak)} / day`
+              ? `${countLabel(total, "rolls")} moved · peak ${countLabel(peak, "rolls")} in a day`
               : "Quiet week — no roll movements recorded yet"}
           </p>
         </div>
@@ -72,7 +72,7 @@ export default function ActivityChart({ days }: { days: DashboardActivityDay[] }
                     rows={[
                       {
                         label: "Rolls moved",
-                        value: count(Number(row.count ?? 0)),
+                        value: countLabel(Number(row.count ?? 0), "rolls"),
                         color: "#003d9b",
                       },
                     ]}

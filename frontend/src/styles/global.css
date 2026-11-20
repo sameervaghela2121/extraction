@@ -966,10 +966,15 @@ textarea {
 .dashboard-period-cell--brand { border-top-color: var(--brand); }
 .dashboard-period-cell--success { border-top-color: var(--rt-secondary); }
 .dashboard-period-cell--warning { border-top-color: #b45309; }
+.dashboard-period-cell--danger { border-top-color: #ba1a1a; }
+
+.dashboard-period-cell.is-negative {
+  background: color-mix(in srgb, #ba1a1a 6%, var(--surface-2));
+}
 
 .dashboard-period-value {
   margin-top: 6px;
-  font-size: clamp(15px, 1.15vw, 18px);
+  font-size: clamp(14px, 1.1vw, 17px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--headline);
@@ -980,7 +985,18 @@ textarea {
 }
 
 .dashboard-period-value.is-compact {
-  font-size: clamp(13px, 1vw, 15px);
+  font-size: clamp(12px, 0.95vw, 14px);
+}
+
+.dashboard-period-value.is-negative {
+  color: #ba1a1a;
+}
+
+.dashboard-period-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.3;
 }
 
 .dashboard > .dashboard-body > .dashboard-panel {

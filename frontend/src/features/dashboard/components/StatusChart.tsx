@@ -1,6 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartTooltipFrame } from "./ChartTooltip";
-import { count, pct, STATUS_COLORS, STATUS_LABELS } from "../format";
+import { count, countLabel, pct, STATUS_COLORS, STATUS_LABELS } from "../format";
 
 const ORDER = ["IN_STOCK", "ISSUED", "CONSUMED", "RETURNED_TO_VENDOR", "SOLD"];
 
@@ -17,7 +17,7 @@ export default function StatusChart({ byStatus }: { byStatus: Record<string, num
     <div className="card dashboard-panel">
       <div className="dashboard-panel-head">
         <h2 className="dashboard-panel-title">Roll status</h2>
-        <p className="muted dashboard-panel-sub">{count(total)} live rolls</p>
+        <p className="muted dashboard-panel-sub">{countLabel(total, "live rolls")}</p>
       </div>
       {total === 0 ? (
         <p className="muted dashboard-empty">No rolls in the register yet.</p>
